@@ -1,0 +1,35 @@
+{
+  "token":"token",
+  "session":"session",
+  "sessionInfo":{
+    "serverType":"serverType",
+    "serverId":"serverId",
+    "region":"region"
+  },
+  "events":[
+    {
+      "thread":"TId",
+      "sev":3,
+      "ts":"0",
+      "attrs":{
+        "meh":1,
+        "message":"test"
+      }
+    }
+  ],
+  "threads":[
+    {
+      "id":"TId",
+      "name":"TName"
+    }
+  ],
+  "logs":[
+    {
+      "id":"LId",
+      "attrs":{
+        "LAttr1":"LVal1",
+        "LAttr2":"LVal2"
+      }
+    }
+  ]
+}
