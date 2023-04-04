@@ -14,73 +14,33 @@ The DataSet API supports following API calls:
 ## Examples
 
 ```go
-package main
+// create logger
+logger := zap.Must(zap.NewDevelopment())
+// read configuration from env variables
+cfg, err := config.New(config.FromEnv())
+if err != nil { panic(err) }
 
-import (
-    "fmt"
-    "net/http"
-    "time"
+// build client
+cl, err := client.NewClient(cfg, &http.Client{}, logger)
+if err != nil { panic(err) }
 
-    "github.com/scalyr/dataset-go/pkg/api/add_events"
-    "github.com/scalyr/dataset-go/pkg/client"
-    "github.com/scalyr/dataset-go/pkg/config"
-    "go.uber.org/zap"
-)
+// send all buffers when we want to finish
+defer cl.SendAllAddEventsBuffers()
 
-func main() {
-    // read configuration from env variables
-    cfg, err := config.New(config.FromEnv())
-    if err != nil { panic(err) }
-
-    // build client
-    cl, err := client.NewClient(
-		cfg,
-		&http.Client{},
-        zap.Must(zap.NewDevelopment()),
-    )
-    if err != nil { panic(err) }
-
-    // send all buffers when we want to finish
-    defer cl.SendAllAddEventsBuffers()
-
-	// build event
-    event := &add_events.Event{
-        Thread: "T",
-        Log:    "L",
-        Sev:    3,
-        Ts:     fmt.Sprintf("%d", time.Now().Nanosecond()),
-        Attrs: map[string]interface{}{
-            "message": "dataset-go library - test message",
-            "attribute": 42,
-        },
-    }
-
-	// build thread
-    thread := &add_events.Thread{Id: "T", Name: "thread-1"}
-
-	// build log
-	log := &add_events.Log{
-        Id: "L",
-        Attrs: map[string]interface{}{
-            "attr 1": "value 1",
-        },
-    }
-
-	// build bundle
-    eventBundle := &add_events.EventBundle{
-        Event:  event,
-        Thread: thread,
-        Log:    log,
-    }
-
-	// send it
-    err = cl.AddEvents([]*add_events.EventBundle{eventBundle})
-	if err != nil { panic(err) }
-}
+// send bundles
+err = cl.AddEvents(makeBundles())
+if err != nil { panic(err) }
 ```
 
+Full example can be found in [examples/readme/](examples/readme/main.go)
 
-Examples are located in the [examples](examples) folder. You can check [simple client](examples/client/main.go)
+### All examples:
+
+Examples are located in the [examples](examples) folder.
+* [simple client](examples/client/main.go) - simple client
+* [readme](examples/readme/main.go) - full example from readme
+
+
 ## Release Notes and Changelog
 
 For release notes please see [RELEASE_NOTES.md](RELEASE_NOTES.md) document and for changelog,
@@ -88,6 +48,10 @@ see [CHANGELOG.md](CHANGELOG.md) document.
 
 ## Developing
 
+### Install Dev Tools
+
+Run following script - [install-dev-tools.sh](scripts/install-dev-tools.sh) - to install
+tools needed by `pre-commit`.
 
 ### Pre-Commit Hooks
 
