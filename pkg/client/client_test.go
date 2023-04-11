@@ -105,7 +105,7 @@ func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
 
 	payload1, err := buffer1.Payload()
 	assert.Nil(err)
-	params1 := add_events.AddEventsRequestParams{}
+	params1 := add_events.AddEventsRequest{}
 	err = json.Unmarshal(payload1, &params1)
 	assert.Nil(err)
 
@@ -126,7 +126,7 @@ func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
 
 	payload2, err := buffer2.Payload()
 	assert.Nil(err)
-	params2 := add_events.AddEventsRequestParams{}
+	params2 := add_events.AddEventsRequest{}
 	err = json.Unmarshal(payload2, &params2)
 	assert.Nil(err)
 
@@ -137,5 +137,4 @@ func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
 	assert.Not((params1.Events)[0], (params2.Events)[0])
 	assert.Cmp((params1.Events)[0].Ts, "1")
 	assert.Cmp((params2.Events)[0].Ts, "2")
-
 }

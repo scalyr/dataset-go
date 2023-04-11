@@ -66,7 +66,7 @@ type SessionInfo struct {
 }
 
 type AddEventsRequestParams struct {
-	Token       string       `json:"token,omitempty"`
+	// Token       string       `json:"token,omitempty"`
 	Session     string       `json:"session,omitempty"`
 	SessionInfo *SessionInfo `json:"sessionInfo,omitempty"`
 	Events      []*Event     `json:"events,omitempty"`
@@ -89,7 +89,6 @@ func (response *AddEventsResponse) SetResponseObj(resp *http.Response) {
 }
 
 func TrimAttrs(attrs map[string]interface{}, remaining int) map[string]interface{} {
-
 	keys := make([]string, 0, len(attrs))
 	lengths := make(map[string]int)
 
@@ -161,16 +160,15 @@ func TrimAttrs(attrs map[string]interface{}, remaining int) map[string]interface
 						zap.Int("remaining", remaining),
 					)
 					*/
-				} else {
-					/* TODO: IMP - Log this info
+				} /* else {
+					// TODO: IMP - Log this info
 					add_events.Logger.Error(
 						"Event attribute too long - skipping",
 						zap.String("key", key),
 						zap.Int("originalLen", lengths[key]),
 						zap.Int("remaining", remaining),
 					)
-					*/
-				}
+				} */
 			}
 		}
 	}

@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/api/request"
+
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 
 	"github.com/google/uuid"
@@ -28,8 +30,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const ShouldSentBufferSize = 5 * 1024 * 1024
-const LimitBufferSize = 5*1024*1024 + 960*1024
+const (
+	ShouldSentBufferSize = 5 * 1024 * 1024
+	LimitBufferSize      = 5*1024*1024 + 960*1024
+)
 
 const (
 	Ready = /*Status*/ iota
@@ -74,10 +78,7 @@ type Buffer struct {
 }
 
 func NewEmptyBuffer(session string, token string) *Buffer {
-	id, err := uuid.NewRandom()
-	if err != nil {
-		//return nil, fmt.Errorf(err, "buffer: it was not possible to generate UUID")
-	}
+	id, _ := uuid.NewRandom()
 
 	return &Buffer{Id: id, Session: session, Token: token, Status: Ready, Attempt: 0}
 }
@@ -141,7 +142,6 @@ func (buffer *Buffer) Reset() {
 }
 
 func (buffer *Buffer) AddBundle(bundle *add_events.EventBundle) (AddStatus, error) {
-
 	// append thread
 	addT, errT := buffer.addThread(bundle.Thread)
 	if errT != nil {
@@ -316,7 +316,7 @@ func (buffer *Buffer) ShouldSendSize() bool {
 }
 
 func (buffer *Buffer) ShouldSendAge(delay time.Duration) bool {
-	return buffer.countEvents > 0 && time.Now().Sub(buffer.bufferSent) > delay
+	return buffer.countEvents > 0 && time.Since(buffer.bufferSent) > delay
 }
 
 func (buffer *Buffer) BufferLengths() int {
@@ -346,13 +346,17 @@ func (buffer *Buffer) Payload() ([]byte, error) {
 		logs = append(logs, l)
 	}
 
-	reqObject := add_events.AddEventsRequestParams{
-		Token:       buffer.Token,
-		Session:     buffer.Session,
-		SessionInfo: buffer.sessionInfo,
-		Events:      buffer.events,
-		Threads:     threads,
-		Logs:        logs,
+	reqObject := add_events.AddEventsRequest{
+		AuthParams: request.AuthParams{
+			Token: buffer.Token,
+		},
+		AddEventsRequestParams: add_events.AddEventsRequestParams{
+			Session:     buffer.Session,
+			SessionInfo: buffer.sessionInfo,
+			Events:      buffer.events,
+			Threads:     threads,
+			Logs:        logs,
+		},
 	}
 
 	payload, err := json.Marshal(reqObject)
@@ -374,7 +378,7 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 		zap.Int("events", buffer.countEvents),
 		zap.Int("bufferLength", buffer.BufferLengths()),
 		zap.Float64("bufferRatio", float64(buffer.BufferLengths())/ShouldSentBufferSize),
-		zap.Int64("sinceLastMs", time.Now().Sub(buffer.bufferSent).Milliseconds()),
+		zap.Int64("sinceLastMs", time.Since(buffer.bufferSent).Milliseconds()),
 	}
 	res = append(res, fields...)
 	return res

@@ -36,8 +36,10 @@ import (
 	_ "net/http/pprof"
 )
 
-const HttpErrorCannotConnect = 600
-const HttpErrorHasErrorMessage = 499
+const (
+	HttpErrorCannotConnect   = 600
+	HttpErrorHasErrorMessage = 499
+)
 
 func IsRetryableStatus(status uint16) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
@@ -57,7 +59,7 @@ type DataSetClient struct {
 }
 
 func (client *DataSetClient) Buffer(key string, info *add_events.SessionInfo) (*buffer.Buffer, error) {
-	var session = fmt.Sprintf("%s-%s", client.Id, key)
+	session := fmt.Sprintf("%s-%s", client.Id, key)
 	// get buf so we can start using it
 	buf, loaded := client.buffer.LoadOrStore(
 		session,

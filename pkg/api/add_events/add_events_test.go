@@ -55,6 +55,7 @@ func (s *SuiteAddEvents) TestTrimAttrsTrimLongest(assert, require *td.T) {
 
 	assert.Cmp(TrimAttrs(attrs, 44), expected)
 }
+
 func (s *SuiteAddEvents) TestTrimAttrsSkipLongest(assert, require *td.T) {
 	attrs := map[string]interface{}{
 		"foo": "aaaaaa",
@@ -84,6 +85,7 @@ func (s *SuiteAddEvents) TestTrimAttrsSkipLongestAndTrim(assert, require *td.T) 
 
 	assert.Cmp(TrimAttrs(attrs, 26), expected)
 }
+
 func (s *SuiteAddEvents) TestTrimAttrsSkipLongestAndTrimFully(assert, require *td.T) {
 	attrs := map[string]interface{}{
 		"foo": "aaaaaa",
@@ -98,6 +100,7 @@ func (s *SuiteAddEvents) TestTrimAttrsSkipLongestAndTrimFully(assert, require *t
 
 	assert.Cmp(TrimAttrs(attrs, 24), expected)
 }
+
 func (s *SuiteAddEvents) TestTrimAttrsSkipAll(assert, require *td.T) {
 	attrs := map[string]interface{}{
 		"foo": "aaaaaa",
