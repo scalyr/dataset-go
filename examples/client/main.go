@@ -27,9 +27,11 @@ import (
 	"go.uber.org/zap"
 )
 
-const BundleCount = 10000
-const BatchSize = 100
-const BatchDelay = time.Second
+const (
+	BundleCount = 10000
+	BatchSize   = 100
+	BatchDelay  = time.Second
+)
 
 func main() {
 	// read configuration from env variables

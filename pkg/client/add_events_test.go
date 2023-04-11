@@ -123,7 +123,7 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
-	eventBundle1 := &add_events.EventBundle{event1, &add_events.Thread{Id: "5", Name: "fred"}, nil}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
@@ -142,7 +142,7 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	attempt := 0
 	wasSuccessful := false
-	var now, expectedTime = time.Now(), time.Now()
+	now, expectedTime := time.Now(), time.Now()
 	retryAfter := RetryBase * 3
 	httpmock.RegisterResponder(
 		"POST",
@@ -184,7 +184,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
-	eventBundle1 := &add_events.EventBundle{event1, &add_events.Thread{Id: "5", Name: "fred"}, nil}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err1 := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
@@ -201,7 +201,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 
 	// send second request to make sure that nothing is blocked
 	event2 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
-	eventBundle2 := &add_events.EventBundle{event2, &add_events.Thread{Id: "5", Name: "fred"}, nil}
+	eventBundle2 := &add_events.EventBundle{Event: event2, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err2 := sc.AddEvents([]*add_events.EventBundle{eventBundle2})
 	sc.SendAllAddEventsBuffers()
 
@@ -216,13 +216,12 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	assert.CmpNoError(err2)
 	info2 := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info2, map[string]int{"POST https://example.com/api/addEvents": 3})
-
 }
 
 func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 	attempt := 0
 	wasSuccessful := false
-	var now, expectedTime = time.Now(), time.Now()
+	now, expectedTime := time.Now(), time.Now()
 	retryAfter := RetryBase * 3
 	httpmock.RegisterResponder(
 		"POST",
@@ -264,7 +263,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
-	eventBundle1 := &add_events.EventBundle{event1, &add_events.Thread{Id: "5", Name: "fred"}, nil}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
@@ -354,7 +353,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
-	eventBundle1 := &add_events.EventBundle{event1, &add_events.Thread{Id: "5", Name: "fred"}, nil}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
@@ -438,7 +437,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
-	eventBundle1 := &add_events.EventBundle{event1, &add_events.Thread{Id: "5", Name: "fred"}, nil}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 

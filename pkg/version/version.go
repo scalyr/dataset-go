@@ -16,5 +16,7 @@
 
 package version
 
-const Version = "0.0.1"
-const ReleasedDate = "2023-04-01"
+const (
+	Version      = "0.0.1"
+	ReleasedDate = "2023-04-01"
+)

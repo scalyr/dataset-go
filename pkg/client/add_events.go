@@ -51,7 +51,6 @@ func (client *DataSetClient) DangerousNaiveAddEvents(events []*add_events.Event,
 		"POST",
 		client.Config.Endpoint+"/api/addEvents",
 	).WithWriteLog(client.Config.Tokens).JsonRequest(apiRequest).HttpRequest()
-
 	if err != nil {
 		return nil, fmt.Errorf("cannot create request: %w", err)
 	}
@@ -138,7 +137,6 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 	httpRequest, err := request.NewRequest(
 		"POST", client.Config.Endpoint+"/api/addEvents",
 	).WithWriteLog(client.Config.Tokens).RawRequest(payload).HttpRequest()
-
 	if err != nil {
 		return nil, fmt.Errorf("cannot create request: %w", err)
 	}
@@ -163,7 +161,12 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 		return fmt.Errorf("unable to send request: %w", err)
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			client.Logger.Error("Error when closing:", zap.Error(err))
+		}
+	}()
+
 	// foo
 	client.Logger.Debug("Received response",
 		zap.Int("statusCode", resp.StatusCode),

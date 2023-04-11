@@ -46,28 +46,27 @@ func loadJson(name string) string {
 }
 
 func (s *SuiteBuffer) TestEmptyPayloadShouldFail(assert, require *td.T) {
-
 	buffer, err := NewBuffer("id", nil, "token")
 	assert.Nil(err)
 	_, err = buffer.Payload()
 	assert.CmpError(err, "there is no event")
 }
-func (s *SuiteBuffer) TestEmptyTokenShouldFail(assert, require *td.T) {
 
+func (s *SuiteBuffer) TestEmptyTokenShouldFail(assert, require *td.T) {
 	buffer, err := NewBuffer("id", nil, "")
 	assert.Nil(err)
 	_, err = buffer.Payload()
 	assert.CmpError(err, "token is missing")
 }
-func (s *SuiteBuffer) TestEmptySessionShouldFail(assert, require *td.T) {
 
+func (s *SuiteBuffer) TestEmptySessionShouldFail(assert, require *td.T) {
 	buffer, err := NewBuffer("", nil, "token")
 	assert.Nil(err)
 	_, err = buffer.Payload()
 	assert.CmpError(err, "session is missing")
 }
-func (s *SuiteBuffer) TestPayloadFull(assert, require *td.T) {
 
+func (s *SuiteBuffer) TestPayloadFull(assert, require *td.T) {
 	sessionInfo := &add_events.SessionInfo{
 		ServerId:   "serverId",
 		ServerType: "serverType",
@@ -110,7 +109,7 @@ func (s *SuiteBuffer) TestPayloadFull(assert, require *td.T) {
 	payload, err := buffer.Payload()
 	assert.Nil(err)
 
-	params := add_events.AddEventsRequestParams{}
+	params := add_events.AddEventsRequest{}
 	err = json.Unmarshal(payload, &params)
 	assert.Nil(err)
 	assert.Cmp(params.Session, session)
@@ -129,8 +128,8 @@ func (s *SuiteBuffer) TestPayloadFull(assert, require *td.T) {
 	}
 	assert.Cmp(payload, []byte(expected))
 }
-func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
 
+func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
 	sessionInfo := &add_events.SessionInfo{
 		ServerId:   "serverId\",\"sI\":\"I",
 		ServerType: "serverType\",\"sT\":\"T",
@@ -150,7 +149,8 @@ func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
 			Attrs: map[string]interface{}{
 				"LAttr1\",\"i\":\"i": "LVal1\",\"i\":\"i",
 				"LAttr2\",\"i\":\"i": "LVal2\",\"i\":\"i",
-			}},
+			},
+		},
 		Thread: &add_events.Thread{Id: "TId\",\"i\":\"i", Name: "TName\",\"i\":\"i"},
 		Event: &add_events.Event{
 			Thread: "TId\",\"i\":\"i",
@@ -175,7 +175,7 @@ func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
 	payload, err := buffer.Payload()
 	assert.Nil(err)
 
-	params := add_events.AddEventsRequestParams{}
+	params := add_events.AddEventsRequest{}
 	err = json.Unmarshal(payload, &params)
 	assert.Nil(err)
 	assert.Cmp(params.Session, session)
