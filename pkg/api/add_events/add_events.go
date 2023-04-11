@@ -66,7 +66,6 @@ type SessionInfo struct {
 }
 
 type AddEventsRequestParams struct {
-	// Token       string       `json:"token,omitempty"`
 	Session     string       `json:"session,omitempty"`
 	SessionInfo *SessionInfo `json:"sessionInfo,omitempty"`
 	Events      []*Event     `json:"events,omitempty"`
