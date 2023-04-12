@@ -51,8 +51,8 @@ type DataSetClient struct {
 	Client           *http.Client
 	SessionInfo      *add_events.SessionInfo
 	buffer           sync.Map
-	buffersEnqueued  atomic.Int64
-	buffersProcessed atomic.Int64
+	buffersEnqueued  atomic.Uint64
+	buffersProcessed atomic.Uint64
 	PubSub           *pubsub.PubSub
 	workers          sync.WaitGroup
 	LastHttpStatus   atomic.Uint32
@@ -107,8 +107,8 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 			client.Logger.Debug("Received buffer from channel",
 				zap.String("session", session),
 				zap.Int("index", i),
-				zap.Int64("buffersEnqueued", client.buffersEnqueued.Load()),
-				zap.Int64("buffersProcessed", client.buffersProcessed.Load()),
+				zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
+				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 			)
 			buf, ok := msg.(*buffer.Buffer)
 			client.workers.Add(1)
@@ -296,16 +296,18 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		return nil, fmt.Errorf("it was not possible to generate UUID: %w", err)
 	}
 	dataClient := &DataSetClient{
-		Id:             id,
-		Config:         cfg,
-		Client:         client,
-		PubSub:         pubsub.New(0),
-		workers:        sync.WaitGroup{},
-		LastHttpStatus: atomic.Uint32{},
-		retryAfter:     time.Now(),
-		retryAfterMu:   sync.RWMutex{},
-		lastErrorMu:    sync.RWMutex{},
-		Logger:         logger,
+		Id:               id,
+		Config:           cfg,
+		Client:           client,
+		buffersEnqueued:  atomic.Uint64{},
+		buffersProcessed: atomic.Uint64{},
+		PubSub:           pubsub.New(0),
+		workers:          sync.WaitGroup{},
+		LastHttpStatus:   atomic.Uint32{},
+		retryAfter:       time.Now(),
+		retryAfterMu:     sync.RWMutex{},
+		lastErrorMu:      sync.RWMutex{},
+		Logger:           logger,
 	}
 
 	if cfg.MaxBufferDelay > 0 {

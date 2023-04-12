@@ -204,6 +204,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	sc.SendAllAddEventsBuffers()
 
 	assert.True(wasSuccessful.Load())
+	wasSuccessful.Store(false)
 	assert.CmpNoError(err2)
 	assert.CmpNoError(sc.LastError())
 	info2 := httpmock.GetCallCountInfo()
@@ -282,6 +283,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 	attempt.Store(0)
 	wasSuccessful := atomic.Bool{}
 	wasSuccessful.Store(false)
+
 	httpmock.RegisterResponder(
 		"POST",
 		"https://example.com/api/addEvents",

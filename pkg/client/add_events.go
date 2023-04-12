@@ -188,8 +188,8 @@ func (client *DataSetClient) SendAllAddEventsBuffers() {
 	for client.buffersEnqueued.Load() > client.buffersProcessed.Load() {
 		client.Logger.Info(
 			"Not all buffers has been processed",
-			zap.Int64("buffersEnqueued", client.buffersEnqueued.Load()),
-			zap.Int64("buffersProcessed", client.buffersProcessed.Load()),
+			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
+			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 		)
 		time.Sleep(client.Config.RetryBase)
 		client.workers.Wait()
