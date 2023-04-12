@@ -32,32 +32,9 @@ import (
 	"go.uber.org/zap"
 )
 
-/**
+/*
 Wrapper around: https://app.scalyr.com/help/api#addEvents
-
 */
-
-func (client *DataSetClient) DangerousNaiveAddEvents(events []*add_events.Event, threads []*add_events.Thread, session string, sessionInfo *add_events.SessionInfo) (*add_events.AddEventsResponse, error) {
-	apiResponse := &add_events.AddEventsResponse{}
-	apiRequest := &add_events.AddEventsRequest{
-		AddEventsRequestParams: add_events.AddEventsRequestParams{
-			Session:     session,
-			SessionInfo: sessionInfo,
-			Events:      events,
-			Threads:     threads,
-		},
-	}
-	httpRequest, err := request.NewRequest(
-		"POST",
-		client.Config.Endpoint+"/api/addEvents",
-	).WithWriteLog(client.Config.Tokens).JsonRequest(apiRequest).HttpRequest()
-	if err != nil {
-		return nil, fmt.Errorf("cannot create request: %w", err)
-	}
-
-	err = client.apiCall(httpRequest, apiResponse)
-	return apiResponse, err
-}
 
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
 	errR := client.shouldRejectNextBatch()
