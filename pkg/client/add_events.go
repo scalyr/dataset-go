@@ -100,7 +100,7 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 
 	payload, err := buf.Payload()
 	if err != nil {
-		client.Logger.Error("Cannot create payload", buf.ZapStats(zap.Error(err))...)
+		client.Logger.Warn("Cannot create payload", buf.ZapStats(zap.Error(err))...)
 		return nil, fmt.Errorf("cannot create payload: %w", err)
 	}
 	client.Logger.Debug("Created payload",

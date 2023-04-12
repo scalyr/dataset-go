@@ -110,6 +110,10 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 				for client.RetryAfter().After(time.Now()) {
 					client.sleep(client.RetryAfter(), buf)
 				}
+				if !buf.HasEvents() {
+					client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
+					continue
+				}
 				response, err := client.SendAddEventsBuffer(buf)
 				client.SetLastError(err)
 				lastHttpStatus := uint32(0)
@@ -145,7 +149,7 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 				)
 
 				if IsRetryableStatus(lastHttpStatus) {
-					// check whether header is specified and get it's value
+					// check whether header is specified and get its value
 					retryAfter, specified := client.getRetryAfter(
 						response.ResponseObj,
 						time.Duration(

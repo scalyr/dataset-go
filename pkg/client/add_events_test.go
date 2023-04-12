@@ -205,6 +205,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 		}
 	}
 	assert.CmpNoError(err1)
+	assert.CmpNoError(sc.LastError())
 	info1 := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info1, map[string]int{"POST https://example.com/api/addEvents": 2})
 
@@ -223,11 +224,11 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 		}
 	}
 	assert.CmpNoError(err2)
+	assert.CmpNoError(sc.LastError())
 	info2 := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info2, map[string]int{"POST https://example.com/api/addEvents": 3})
 }
 
-/*
 func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 	attempt := atomic.Int32{}
 	attempt.Store(0)
@@ -291,10 +292,10 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 		}
 	}
 	assert.CmpNoError(err)
+	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 2})
 }
-*/
 
 func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 	originalAttrs := make(map[string]interface{})
@@ -384,6 +385,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 		}
 	}
 	assert.CmpNoError(err)
+	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 1})
 }
@@ -470,6 +472,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 		}
 	}
 	assert.CmpNoError(err)
+	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 1})
 }
