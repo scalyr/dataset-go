@@ -41,7 +41,7 @@ const (
 	HttpErrorHasErrorMessage = 499
 )
 
-func IsRetryableStatus(status uint16) bool {
+func IsRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
@@ -52,9 +52,11 @@ type DataSetClient struct {
 	SessionInfo    *add_events.SessionInfo
 	buffer         sync.Map
 	PubSub         *pubsub.PubSub
-	LastHttpStatus uint16
-	LastError      error
-	RetryAfter     time.Time
+	LastHttpStatus atomic.Uint32
+	lastError      error
+	lastErrorMu    sync.RWMutex
+	retryAfter     time.Time
+	retryAfterMu   sync.RWMutex
 	Logger         *zap.Logger
 }
 
@@ -105,20 +107,24 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 			)
 			buf, ok := msg.(*buffer.Buffer)
 			if ok {
-				for client.RetryAfter.After(time.Now()) {
-					client.sleep(client.RetryAfter, buf)
+				for client.RetryAfter().After(time.Now()) {
+					client.sleep(client.RetryAfter(), buf)
+				}
+				if !buf.HasEvents() {
+					client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
+					continue
 				}
 				response, err := client.SendAddEventsBuffer(buf)
-				client.LastError = err
-				lastHttpStatus := uint16(0)
+				client.SetLastError(err)
+				lastHttpStatus := uint32(0)
 				if err != nil {
 					client.Logger.Error("unable to send addEvents buffers", zap.Error(err))
 					if strings.Contains(err.Error(), "Unable to send request") {
 						lastHttpStatus = HttpErrorCannotConnect
-						client.LastHttpStatus = lastHttpStatus
+						client.LastHttpStatus.Store(lastHttpStatus)
 					} else {
 						lastHttpStatus = HttpErrorHasErrorMessage
-						client.LastHttpStatus = lastHttpStatus
+						client.LastHttpStatus.Store(lastHttpStatus)
 						continue
 					}
 				}
@@ -129,8 +135,8 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 						zap.String("httpStatus", response.ResponseObj.Status),
 						zap.Int("httpCode", response.ResponseObj.StatusCode),
 					)
-					lastHttpStatus = uint16(response.ResponseObj.StatusCode)
-					client.LastHttpStatus = lastHttpStatus
+					lastHttpStatus = uint32(response.ResponseObj.StatusCode)
+					client.LastHttpStatus.Store(lastHttpStatus)
 				}
 
 				zaps = append(
@@ -143,7 +149,7 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 				)
 
 				if IsRetryableStatus(lastHttpStatus) {
-					// check whether header is specified and get it's value
+					// check whether header is specified and get its value
 					retryAfter, specified := client.getRetryAfter(
 						response.ResponseObj,
 						time.Duration(
@@ -155,7 +161,7 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 						// retry after is specified, we should update
 						// client state, so we do not send more requests
 
-						client.RetryAfter = retryAfter
+						client.SetRetryAfter(retryAfter)
 					}
 
 					client.sleep(retryAfter, buf)
@@ -229,8 +235,8 @@ func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) *buffer.Buffer {
 }
 
 func (client *DataSetClient) shouldRejectNextBatch() error {
-	if IsRetryableStatus(client.LastHttpStatus) {
-		err := client.LastError
+	if IsRetryableStatus(client.LastHttpStatus.Load()) {
+		err := client.LastError()
 		if err != nil {
 			return fmt.Errorf("rejecting - Last HTTP request contains an error: %w", err)
 		} else {
@@ -238,8 +244,8 @@ func (client *DataSetClient) shouldRejectNextBatch() error {
 		}
 	}
 
-	if client.RetryAfter.After(time.Now()) {
-		return fmt.Errorf("rejecting - should retry after %s", client.RetryAfter.Format(time.RFC1123))
+	if client.RetryAfter().After(time.Now()) {
+		return fmt.Errorf("rejecting - should retry after %s", client.RetryAfter().Format(time.RFC1123))
 	}
 
 	return nil
@@ -280,8 +286,10 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		Config:         cfg,
 		Client:         client,
 		PubSub:         pubsub.New(0),
-		LastHttpStatus: 0,
-		RetryAfter:     time.Now(),
+		LastHttpStatus: atomic.Uint32{},
+		retryAfter:     time.Now(),
+		retryAfterMu:   sync.RWMutex{},
+		lastErrorMu:    sync.RWMutex{},
 		Logger:         logger,
 	}
 
@@ -352,4 +360,28 @@ func (client *DataSetClient) sleep(retryAfter time.Time, buffer *buffer.Buffer) 
 		zap.String("bufferSession", buffer.Session),
 	)
 	time.Sleep(sleepFor)
+}
+
+func (client *DataSetClient) LastError() error {
+	client.lastErrorMu.RLock()
+	defer client.lastErrorMu.RUnlock()
+	return client.lastError
+}
+
+func (client *DataSetClient) SetLastError(err error) {
+	client.lastErrorMu.Lock()
+	defer client.lastErrorMu.Unlock()
+	client.lastError = err
+}
+
+func (client *DataSetClient) RetryAfter() time.Time {
+	client.retryAfterMu.RLock()
+	defer client.retryAfterMu.RUnlock()
+	return client.retryAfter
+}
+
+func (client *DataSetClient) SetRetryAfter(t time.Time) {
+	client.retryAfterMu.Lock()
+	defer client.retryAfterMu.Unlock()
+	client.retryAfter = t
 }

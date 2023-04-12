@@ -12,12 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# build options are from https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/Makefile.Common
+# to make out library compatible with open telemetry
+GO_BUILD_TAGS=""
+GOTEST_OPT?= -race -timeout 300s -parallel 4 --tags=$(GO_BUILD_TAGS)
+GOTEST_INTEGRATION_OPT?= -race -timeout 360s -parallel 4
+GOTEST_OPT_WITH_COVERAGE = $(GOTEST_OPT) -coverprofile=coverage.txt -covermode=atomic
+GOTEST_OPT_WITH_INTEGRATION=$(GOTEST_INTEGRATION_OPT) -tags=integration,$(GO_BUILD_TAGS) -run=Integration -coverprofile=integration-coverage.txt -covermode=atomic
+GOCMD?= go
+GOTEST=$(GOCMD) test
+
+.DEFAULT_GOAL := pre-commit-run
+
+.PHONY: pre-commit-install
+pre-commit-install:
+	pre-commit install
+	./scripts/install-dev-tools.sh
+
+.PHONY: pre-commit-run
+pre-commit-run:
+	pre-commit run -a
+
 build:
 	echo "Done"
 
+.PHONY: test
 test:
-	go test ./...
+	$(GOTEST) $(GOTEST_OPT) ./...
 
+.PHONY: coverage
 coverage:
-	go test ./... -coverprofile coverage.out -covermode count
-	go tool cover -func coverage.out
+	$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE) ./...
+	$(GOCMD) tool cover -html=coverage.txt -o coverage.html

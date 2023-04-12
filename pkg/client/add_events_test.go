@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -83,27 +84,29 @@ func extract(req *http.Request) (add_events.AddEventsRequest, error) {
 }
 
 func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
-	attempt := 0
-	wasSuccesful := false
+	attempt := atomic.Int32{}
+	attempt.Store(0)
+	wasSuccessful := atomic.Bool{}
+	wasSuccessful.Store(false)
 	const succeedInAttempt = 3
 	httpmock.RegisterResponder(
 		"POST",
 		"https://example.com/api/addEvents",
 		func(req *http.Request) (*http.Response, error) {
-			attempt += 1
+			attempt.Add(1)
 			cer, err := extract(req)
 
 			assert.CmpNoError(err, "Error reading request: %v", err)
 			assert.Cmp("b", cer.SessionInfo.ServerType)
 			assert.Cmp("a", cer.SessionInfo.ServerId)
 
-			if attempt < succeedInAttempt {
+			if attempt.Load() < succeedInAttempt {
 				return httpmock.NewJsonResponse(530, map[string]interface{}{
 					"status":       "error",
 					"bytesCharged": 42,
 				})
 			} else {
-				wasSuccesful = true
+				wasSuccessful.Store(true)
 				return httpmock.NewJsonResponse(200, map[string]interface{}{
 					"status":       "success",
 					"bytesCharged": 42,
@@ -128,7 +131,7 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 	sc.SendAllAddEventsBuffers()
 
 	for i := 0; i < succeedInAttempt*succeedInAttempt; i++ {
-		if !wasSuccesful {
+		if !wasSuccessful.Load() {
 			time.Sleep(RetryBase)
 		} else {
 			break
@@ -140,31 +143,37 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 }
 
 func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
-	attempt := 0
-	wasSuccessful := false
-	now, expectedTime := time.Now(), time.Now()
-	retryAfter := RetryBase * 3
+	attempt := atomic.Int32{}
+	attempt.Store(0)
+	wasSuccessful := atomic.Bool{}
+	wasSuccessful.Store(false)
+	now := atomic.Int64{}
+	now.Store(time.Now().UnixNano())
+	expectedTime := atomic.Int64{}
+	expectedTime.Store(time.Now().UnixNano())
+
+	retryAfter := (RetryBase * 3).Nanoseconds()
 	httpmock.RegisterResponder(
 		"POST",
 		"https://example.com/api/addEvents",
 		func(req *http.Request) (*http.Response, error) {
-			if attempt == 0 {
-				now = time.Now().Truncate(time.Second)
-				expectedTime = now.Add(retryAfter)
+			if attempt.Load() == 0 {
+				now.Store(time.Now().Truncate(time.Second).UnixNano())
+				expectedTime.Store(now.Load() + retryAfter)
 			} else {
-				assert.Gt(time.Now(), expectedTime, "start: %s, after: %s, expected: %s", now.Format(time.RFC1123), retryAfter, expectedTime.Format(time.RFC1123))
+				assert.Gt(time.Now().UnixNano(), expectedTime.Load(), "start: %s, after: %s, expected: %s", time.Unix(0, now.Load()).Format(time.RFC1123), retryAfter, time.Unix(0, expectedTime.Load()).Format(time.RFC1123))
 			}
-			attempt += 1
+			attempt.Add(1)
 
-			if attempt < 2 {
+			if attempt.Load() < 2 {
 				resp, errr := httpmock.NewJsonResponse(429, map[string]interface{}{
 					"status":       "error",
 					"bytesCharged": 42,
 				})
-				resp.Header.Set("Retry-After", fmt.Sprintf("%d", int(retryAfter.Seconds())))
+				resp.Header.Set("Retry-After", fmt.Sprintf("%d", int(time.Duration(retryAfter).Seconds())))
 				return resp, errr
 			} else {
-				wasSuccessful = true
+				wasSuccessful.Store(true)
 				return httpmock.NewJsonResponse(200, map[string]interface{}{
 					"status":       "success",
 					"bytesCharged": 42,
@@ -189,13 +198,14 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	sc.SendAllAddEventsBuffers()
 
 	for {
-		if !wasSuccessful {
+		if !wasSuccessful.Load() {
 			time.Sleep(RetryBase)
 		} else {
 			break
 		}
 	}
 	assert.CmpNoError(err1)
+	assert.CmpNoError(sc.LastError())
 	info1 := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info1, map[string]int{"POST https://example.com/api/addEvents": 2})
 
@@ -205,45 +215,52 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	err2 := sc.AddEvents([]*add_events.EventBundle{eventBundle2})
 	sc.SendAllAddEventsBuffers()
 
-	wasSuccessful = false
+	wasSuccessful.Store(false)
 	for {
-		if !wasSuccessful {
+		if !wasSuccessful.Load() {
 			time.Sleep(RetryBase)
 		} else {
 			break
 		}
 	}
 	assert.CmpNoError(err2)
+	assert.CmpNoError(sc.LastError())
 	info2 := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info2, map[string]int{"POST https://example.com/api/addEvents": 3})
 }
 
 func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
-	attempt := 0
-	wasSuccessful := false
-	now, expectedTime := time.Now(), time.Now()
-	retryAfter := RetryBase * 3
+	attempt := atomic.Int32{}
+	attempt.Store(0)
+	wasSuccessful := atomic.Bool{}
+	wasSuccessful.Store(false)
+	now := atomic.Int64{}
+	now.Store(time.Now().UnixNano())
+	expectedTime := atomic.Int64{}
+	expectedTime.Store(time.Now().UnixNano())
+
+	retryAfter := (RetryBase * 3).Nanoseconds()
 	httpmock.RegisterResponder(
 		"POST",
 		"https://example.com/api/addEvents",
 		func(req *http.Request) (*http.Response, error) {
-			if attempt == 0 {
-				now = time.Now().Truncate(time.Second)
-				expectedTime = now.Add(retryAfter)
+			if attempt.Load() == 0 {
+				now.Store(time.Now().Truncate(time.Second).UnixNano())
+				expectedTime.Store(now.Load() + retryAfter)
 			} else {
-				assert.Gt(time.Now(), expectedTime, "start: %s, after: %s, expected: %s", now.Format(time.RFC1123), retryAfter, expectedTime.Format(time.RFC1123))
+				assert.Gt(time.Now().UnixNano(), expectedTime.Load(), "start: %s, after: %s, expected: %s", time.Unix(0, now.Load()).Format(time.RFC1123), retryAfter, time.Unix(0, expectedTime.Load()).Format(time.RFC1123))
 			}
-			attempt += 1
+			attempt.Add(1)
 
-			if attempt < 2 {
+			if attempt.Load() < 2 {
 				resp, errr := httpmock.NewJsonResponse(429, map[string]interface{}{
 					"status":       "error",
 					"bytesCharged": 42,
 				})
-				resp.Header.Set("Retry-After", expectedTime.Format(time.RFC1123))
+				resp.Header.Set("Retry-After", time.Unix(0, expectedTime.Load()).Format(time.RFC1123))
 				return resp, errr
 			} else {
-				wasSuccessful = true
+				wasSuccessful.Store(true)
 				return httpmock.NewJsonResponse(200, map[string]interface{}{
 					"status":       "success",
 					"bytesCharged": 42,
@@ -268,13 +285,14 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 	sc.SendAllAddEventsBuffers()
 
 	for {
-		if !wasSuccessful {
+		if !wasSuccessful.Load() {
 			time.Sleep(RetryBase)
 		} else {
 			break
 		}
 	}
 	assert.CmpNoError(err)
+	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 2})
 }
@@ -285,14 +303,16 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 		originalAttrs[fmt.Sprintf("%d", i)] = strings.Repeat(fmt.Sprintf("%d", i), 1000000+v)
 	}
 
-	attempt := 0
-	wasSuccessful := false
+	attempt := atomic.Int32{}
+	attempt.Store(0)
+	wasSuccessful := atomic.Bool{}
+	wasSuccessful.Store(false)
 	const succeedInAttempt = 3
 	httpmock.RegisterResponder(
 		"POST",
 		"https://example.com/api/addEvents",
 		func(req *http.Request) (*http.Response, error) {
-			attempt += 1
+			attempt.Add(1)
 			cer, err := extract(req)
 			assert.CmpNoError(err, "Error reading request: %v", err)
 			assert.Cmp("b", cer.SessionInfo.ServerType)
@@ -334,7 +354,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 			assert.Cmp(wasAttrs, expectedAttrs)
 			assert.Cmp(wasLengths, expectedLengths)
 
-			wasSuccessful = true
+			wasSuccessful.Store(true)
 			return httpmock.NewJsonResponse(200, map[string]interface{}{
 				"status":       "success",
 				"bytesCharged": 42,
@@ -358,13 +378,14 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 	sc.SendAllAddEventsBuffers()
 
 	for i := 0; i < succeedInAttempt*succeedInAttempt; i++ {
-		if !wasSuccessful {
+		if !wasSuccessful.Load() {
 			time.Sleep(RetryBase)
 		} else {
 			break
 		}
 	}
 	assert.CmpNoError(err)
+	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 1})
 }
@@ -375,14 +396,16 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 		originalAttrs[fmt.Sprintf("%d", i)] = strings.Repeat("\"", 1000000+v)
 	}
 
-	attempt := 0
-	wasSuccessful := false
+	attempt := atomic.Int32{}
+	attempt.Store(0)
+	wasSuccessful := atomic.Bool{}
+	wasSuccessful.Store(false)
 	const succeedInAttempt = 3
 	httpmock.RegisterResponder(
 		"POST",
 		"https://example.com/api/addEvents",
 		func(req *http.Request) (*http.Response, error) {
-			attempt += 1
+			attempt.Add(1)
 			cer, err := extract(req)
 			assert.CmpNoError(err, "Error reading request: %v", err)
 			assert.Cmp("b", cer.SessionInfo.ServerType)
@@ -418,7 +441,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 			assert.Cmp(wasAttrs, expectedAttrs)
 			assert.Cmp(wasLengths, expectedLengths)
 
-			wasSuccessful = true
+			wasSuccessful.Store(true)
 			return httpmock.NewJsonResponse(200, map[string]interface{}{
 				"status":       "success",
 				"bytesCharged": 42,
@@ -442,13 +465,14 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 	sc.SendAllAddEventsBuffers()
 
 	for i := 0; i < succeedInAttempt*succeedInAttempt; i++ {
-		if !wasSuccessful {
+		if !wasSuccessful.Load() {
 			time.Sleep(RetryBase)
 		} else {
 			break
 		}
 	}
 	assert.CmpNoError(err)
+	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 1})
 }
