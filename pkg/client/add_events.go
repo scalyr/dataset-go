@@ -22,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/scalyr/dataset-go/pkg/api/response"
 
@@ -184,5 +185,15 @@ func (client *DataSetClient) SendAllAddEventsBuffers() {
 		return true
 	})
 
-	// TODO: wait on all sending to be finished
+	for client.buffersEnqueued.Load() > client.buffersProcessed.Load() {
+		client.Logger.Info(
+			"Not all buffers has been processed",
+			zap.Int64("buffersEnqueued", client.buffersEnqueued.Load()),
+			zap.Int64("buffersProcessed", client.buffersProcessed.Load()),
+		)
+		time.Sleep(client.Config.RetryBase)
+		client.workers.Wait()
+	}
+
+	client.Logger.Info("All buffers have been processed")
 }

@@ -46,18 +46,21 @@ func IsRetryableStatus(status uint32) bool {
 }
 
 type DataSetClient struct {
-	Id             uuid.UUID
-	Config         *config.DataSetConfig
-	Client         *http.Client
-	SessionInfo    *add_events.SessionInfo
-	buffer         sync.Map
-	PubSub         *pubsub.PubSub
-	LastHttpStatus atomic.Uint32
-	lastError      error
-	lastErrorMu    sync.RWMutex
-	retryAfter     time.Time
-	retryAfterMu   sync.RWMutex
-	Logger         *zap.Logger
+	Id               uuid.UUID
+	Config           *config.DataSetConfig
+	Client           *http.Client
+	SessionInfo      *add_events.SessionInfo
+	buffer           sync.Map
+	buffersEnqueued  atomic.Int64
+	buffersProcessed atomic.Int64
+	PubSub           *pubsub.PubSub
+	workers          sync.WaitGroup
+	LastHttpStatus   atomic.Uint32
+	lastError        error
+	lastErrorMu      sync.RWMutex
+	retryAfter       time.Time
+	retryAfterMu     sync.RWMutex
+	Logger           *zap.Logger
 }
 
 func (client *DataSetClient) Buffer(key string, info *add_events.SessionInfo) (*buffer.Buffer, error) {
@@ -104,14 +107,19 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 			client.Logger.Debug("Received buffer from channel",
 				zap.String("session", session),
 				zap.Int("index", i),
+				zap.Int64("buffersEnqueued", client.buffersEnqueued.Load()),
+				zap.Int64("buffersProcessed", client.buffersProcessed.Load()),
 			)
 			buf, ok := msg.(*buffer.Buffer)
+			client.workers.Add(1)
 			if ok {
 				for client.RetryAfter().After(time.Now()) {
 					client.sleep(client.RetryAfter(), buf)
 				}
 				if !buf.HasEvents() {
 					client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
+					client.workers.Done()
+					client.buffersProcessed.Add(1)
 					continue
 				}
 				response, err := client.SendAddEventsBuffer(buf)
@@ -125,6 +133,8 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 					} else {
 						lastHttpStatus = HttpErrorHasErrorMessage
 						client.LastHttpStatus.Store(lastHttpStatus)
+						client.workers.Done()
+						client.buffersProcessed.Add(1)
 						continue
 					}
 				}
@@ -174,7 +184,10 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 			} else {
 				client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
 			}
+			client.workers.Done()
+			client.buffersProcessed.Add(1)
 		} else {
+			client.buffersProcessed.Add(1)
 			break
 		}
 	}
@@ -229,6 +242,7 @@ func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) *buffer.Buffer {
 	swapped := atomic.CompareAndSwapUint32(&buf.Status, buffer.Ready, buffer.Publishing)
 	if swapped || buf.Status == buffer.Retrying {
 		// publish buffer so it can be sent
+		client.buffersEnqueued.Add(+1)
 		client.PubSub.Pub(buf, session)
 	}
 	return newBuffer
@@ -286,6 +300,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		Config:         cfg,
 		Client:         client,
 		PubSub:         pubsub.New(0),
+		workers:        sync.WaitGroup{},
 		LastHttpStatus: atomic.Uint32{},
 		retryAfter:     time.Now(),
 		retryAfterMu:   sync.RWMutex{},

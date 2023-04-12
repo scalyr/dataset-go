@@ -130,13 +130,7 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
-	for i := 0; i < succeedInAttempt*succeedInAttempt; i++ {
-		if !wasSuccessful.Load() {
-			time.Sleep(RetryBase)
-		} else {
-			break
-		}
-	}
+	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": succeedInAttempt})
@@ -197,13 +191,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	err1 := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
-	for {
-		if !wasSuccessful.Load() {
-			time.Sleep(RetryBase)
-		} else {
-			break
-		}
-	}
+	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err1)
 	assert.CmpNoError(sc.LastError())
 	info1 := httpmock.GetCallCountInfo()
@@ -215,14 +203,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	err2 := sc.AddEvents([]*add_events.EventBundle{eventBundle2})
 	sc.SendAllAddEventsBuffers()
 
-	wasSuccessful.Store(false)
-	for {
-		if !wasSuccessful.Load() {
-			time.Sleep(RetryBase)
-		} else {
-			break
-		}
-	}
+	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err2)
 	assert.CmpNoError(sc.LastError())
 	info2 := httpmock.GetCallCountInfo()
@@ -284,13 +265,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
-	for {
-		if !wasSuccessful.Load() {
-			time.Sleep(RetryBase)
-		} else {
-			break
-		}
-	}
+	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
 	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
@@ -307,7 +282,6 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 	attempt.Store(0)
 	wasSuccessful := atomic.Bool{}
 	wasSuccessful.Store(false)
-	const succeedInAttempt = 3
 	httpmock.RegisterResponder(
 		"POST",
 		"https://example.com/api/addEvents",
@@ -377,13 +351,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
-	for i := 0; i < succeedInAttempt*succeedInAttempt; i++ {
-		if !wasSuccessful.Load() {
-			time.Sleep(RetryBase)
-		} else {
-			break
-		}
-	}
+	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
 	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
@@ -400,7 +368,6 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 	attempt.Store(0)
 	wasSuccessful := atomic.Bool{}
 	wasSuccessful.Store(false)
-	const succeedInAttempt = 3
 	httpmock.RegisterResponder(
 		"POST",
 		"https://example.com/api/addEvents",
@@ -464,13 +431,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
-	for i := 0; i < succeedInAttempt*succeedInAttempt; i++ {
-		if !wasSuccessful.Load() {
-			time.Sleep(RetryBase)
-		} else {
-			break
-		}
-	}
+	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
 	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
