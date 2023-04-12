@@ -192,8 +192,8 @@ func (client *DataSetClient) SendAllAddEventsBuffers() {
 			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 		)
 		time.Sleep(client.Config.RetryBase)
-		client.workers.Wait()
 	}
+	client.workers.Wait()
 
 	client.Logger.Info("All buffers have been processed")
 }
