@@ -61,10 +61,12 @@ jobs:
       - name: Run pre-commit
         run: |
           pre-commit run -a
-      - name: Code coverage Lib
+      - name: Code tests
         run: |
-          go test ./... -coverprofile coverage.out -covermode count
-          go tool cover -func coverage.out
+          make test
+      - name: Code coverage
+        run: |
+          make coverage
       - name: Build Examples
         run: |
           ( cd examples/client; go build )
