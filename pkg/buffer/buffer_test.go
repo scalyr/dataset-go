@@ -21,7 +21,9 @@ import (
 	"math"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/maxatome/go-testdeep/helpers/tdsuite"
 	"github.com/maxatome/go-testdeep/td"
@@ -66,22 +68,8 @@ func (s *SuiteBuffer) TestEmptySessionShouldFail(assert, require *td.T) {
 	assert.CmpError(err, "session is missing")
 }
 
-func (s *SuiteBuffer) TestPayloadFull(assert, require *td.T) {
-	sessionInfo := &add_events.SessionInfo{
-		ServerId:   "serverId",
-		ServerType: "serverType",
-		Region:     "region",
-	}
-	session := "session"
-	token := "token"
-	buffer, err := NewBuffer(
-		session,
-		sessionInfo,
-		token)
-
-	assert.Nil(err)
-
-	bundle := &add_events.EventBundle{
+func createTestBundle() add_events.EventBundle {
+	return add_events.EventBundle{
 		Log: &add_events.Log{Id: "LId", Attrs: map[string]interface{}{
 			"LAttr1": "LVal1",
 			"LAttr2": "LVal2",
@@ -97,14 +85,38 @@ func (s *SuiteBuffer) TestPayloadFull(assert, require *td.T) {
 			},
 		},
 	}
+}
 
-	added, err := buffer.AddBundle(bundle)
+func createEmptyBuffer() *Buffer {
+	sessionInfo := &add_events.SessionInfo{
+		ServerId:   "serverId",
+		ServerType: "serverType",
+		Region:     "region",
+	}
+	session := "session"
+	token := "token"
+	buffer, err := NewBuffer(
+		session,
+		sessionInfo,
+		token)
+	if err != nil {
+		return nil
+	}
+	return buffer
+}
+
+func (s *SuiteBuffer) TestPayloadFull(assert, require *td.T) {
+	buffer := createEmptyBuffer()
+	assert.NotNil(buffer)
+
+	bundle := createTestBundle()
+	added, err := buffer.AddBundle(&bundle)
 	assert.Nil(err)
 	assert.Cmp(added, Added)
-	assert.Cmp(buffer.countLogs, 1)
-	assert.Cmp(buffer.lenLogs, 57)
-	assert.Cmp(buffer.countThreads, 1)
-	assert.Cmp(buffer.lenThreads, 28)
+	assert.Cmp(buffer.countLogs.Load(), int32(1))
+	assert.Cmp(buffer.lenLogs.Load(), int32(57))
+	assert.Cmp(buffer.countThreads.Load(), int32(1))
+	assert.Cmp(buffer.lenThreads.Load(), int32(28))
 
 	payload, err := buffer.Payload()
 	assert.Nil(err)
@@ -112,9 +124,9 @@ func (s *SuiteBuffer) TestPayloadFull(assert, require *td.T) {
 	params := add_events.AddEventsRequest{}
 	err = json.Unmarshal(payload, &params)
 	assert.Nil(err)
-	assert.Cmp(params.Session, session)
-	assert.Cmp(params.Token, token)
-	assert.Cmp(params.SessionInfo, sessionInfo)
+	assert.Cmp(params.Session, buffer.Session)
+	assert.Cmp(params.Token, buffer.Token)
+	assert.Cmp(params.SessionInfo, buffer.sessionInfo)
 
 	expected := loadJson("buffer_test_payload_full.json")
 
@@ -166,11 +178,11 @@ func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
 	assert.Nil(err)
 	assert.Cmp(added, Added)
 
-	assert.Cmp(buffer.countLogs, 1)
-	assert.Cmp(buffer.lenLogs, 117)
+	assert.Cmp(buffer.countLogs.Load(), int32(1))
+	assert.Cmp(buffer.lenLogs.Load(), int32(117))
 
-	assert.Cmp(buffer.countThreads, 1)
-	assert.Cmp(buffer.lenThreads, 52)
+	assert.Cmp(buffer.countThreads.Load(), int32(1))
+	assert.Cmp(buffer.lenThreads.Load(), int32(52))
 
 	payload, err := buffer.Payload()
 	assert.Nil(err)
@@ -193,4 +205,81 @@ func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
 		}
 	}
 	assert.Cmp(payload, []byte(expected))
+}
+
+func (s *SuiteBuffer) TestAddEventWithShouldSendAge(assert, require *td.T) {
+	buffer := createEmptyBuffer()
+	assert.NotNil(buffer)
+
+	finished := atomic.Int32{}
+	// add events into buffer
+	go func() {
+		for i := 10; i < 100; i += 10 {
+			bundle := createTestBundle()
+			added, err := buffer.AddBundle(&bundle)
+			assert.Nil(err)
+			assert.Cmp(added, Added)
+			time.Sleep(time.Duration(i) * time.Millisecond)
+		}
+		finished.Add(1)
+	}()
+
+	go func() {
+		waited := 0
+		for !buffer.ShouldSendAge(60 * time.Millisecond) {
+			waited += 1
+			time.Sleep(10 * time.Millisecond)
+			require.Cmp(finished.Load(), int32(0))
+			if waited > 10 {
+				break
+			}
+		}
+		assert.Gt(waited, 5)
+		finished.Add(1)
+	}()
+
+	for finished.Load() < 2 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	assert.Cmp(finished.Load(), int32(2))
+}
+
+func (s *SuiteBuffer) TestAddEventWithShouldSendSize(assert, require *td.T) {
+	buffer := createEmptyBuffer()
+	assert.NotNil(buffer)
+
+	finished := atomic.Int32{}
+	// add events into buffer
+	go func() {
+		for {
+			bundle := createTestBundle()
+			added, err := buffer.AddBundle(&bundle)
+			assert.Nil(err)
+			if added != Added {
+				break
+			}
+			assert.Cmp(added, Added)
+			time.Sleep(time.Microsecond)
+		}
+		finished.Add(1)
+	}()
+
+	go func() {
+		waited := 0
+		for !buffer.ShouldSendSize() {
+			waited += 1
+			time.Sleep(10 * time.Microsecond)
+			if buffer.BufferLengths() > 10000 {
+				break
+			}
+		}
+		assert.Gt(waited, 5)
+		finished.Add(1)
+	}()
+
+	for finished.Load() < 2 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	assert.Cmp(finished.Load(), int32(2))
+	assert.Gt(buffer.BufferLengths(), int32(ShouldSentBufferSize-1000))
 }
