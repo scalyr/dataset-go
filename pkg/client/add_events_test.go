@@ -465,3 +465,57 @@ func (s *SuiteAddEvents) TestAddEventsRejectAfterFinish(assert, require *td.T) {
 	assert.NotNil(err1)
 	assert.Cmp(err1.Error(), fmt.Errorf("client has finished - rejecting all new events").Error())
 }
+
+/*
+func (s *SuiteAddEvents) TestAddEventsWithBufferSweeper(assert, require *td.T) {
+	attempt := atomic.Int32{}
+	attempt.Store(0)
+	httpmock.RegisterResponder(
+		"POST",
+		"https://example.com/api/addEvents",
+		func(req *http.Request) (*http.Response, error) {
+			attempt.Add(1)
+			cer, err := extract(req)
+
+			assert.CmpNoError(err, "Error reading request: %v", err)
+			assert.NotNil(cer)
+
+			return httpmock.NewJsonResponse(200, map[string]interface{}{
+				"status":       "success",
+				"bytesCharged": 42,
+			})
+		})
+
+	sentDelay := 5 * time.Millisecond
+	config := &config.DataSetConfig{
+		Endpoint:       "https://example.com",
+		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
+		MaxPayloadB:    1000,
+		MaxBufferDelay: 2 * sentDelay,
+		RetryBase:      RetryBase,
+	}
+	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+
+	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+	sc.SessionInfo = sessionInfo
+
+	const NumEvents = 10
+
+	go func(n int) {
+		for i := 0; i < n; i++ {
+			event := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"value": i}}
+			eventBundle := &add_events.EventBundle{Event: event, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+			err := sc.AddEvents([]*add_events.EventBundle{eventBundle})
+			assert.Nil(err)
+			time.Sleep(sentDelay)
+		}
+	}(NumEvents)
+
+	// wait on all buffers to be sent
+	time.Sleep(sentDelay * NumEvents * 2)
+
+	assert.Gt(attempt.Load(), int32(5))
+	info := httpmock.GetCallCountInfo()
+	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": int(attempt.Load())})
+}
+*/

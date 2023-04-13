@@ -15,7 +15,7 @@
 # build options are from https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/Makefile.Common
 # to make out library compatible with open telemetry
 GO_BUILD_TAGS=""
-GOTEST_OPT?= -race -timeout 300s -parallel 4 --tags=$(GO_BUILD_TAGS)
+GOTEST_OPT?= -race -timeout 300s -parallel 4 -count=1 --tags=$(GO_BUILD_TAGS)
 GOTEST_INTEGRATION_OPT?= -race -timeout 360s -parallel 4
 GOTEST_OPT_WITH_COVERAGE = $(GOTEST_OPT) -coverprofile=coverage.txt -covermode=atomic
 GOTEST_OPT_WITH_INTEGRATION=$(GOTEST_INTEGRATION_OPT) -tags=integration,$(GO_BUILD_TAGS) -run=Integration -coverprofile=integration-coverage.txt -covermode=atomic
