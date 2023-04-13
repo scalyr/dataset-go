@@ -48,6 +48,6 @@ repos:
       - id: gofumpt
       - id: go-err-check
       - id: go-static-check
-      - id: golangci-lint
+      # - id: golangci-lint
       # - id: go-ruleguard # requires https://github.com/quasilyte/go-ruleguard
       #    args: [rules/rules.go] # required

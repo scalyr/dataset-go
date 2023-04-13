@@ -46,18 +46,92 @@ func IsRetryableStatus(status uint32) bool {
 }
 
 type DataSetClient struct {
-	Id             uuid.UUID
-	Config         *config.DataSetConfig
-	Client         *http.Client
-	SessionInfo    *add_events.SessionInfo
-	buffer         sync.Map
-	PubSub         *pubsub.PubSub
-	LastHttpStatus atomic.Uint32
-	lastError      error
-	lastErrorMu    sync.RWMutex
-	retryAfter     time.Time
-	retryAfterMu   sync.RWMutex
-	Logger         *zap.Logger
+	Id               uuid.UUID
+	Config           *config.DataSetConfig
+	Client           *http.Client
+	SessionInfo      *add_events.SessionInfo
+	buffer           sync.Map
+	buffersEnqueued  atomic.Uint64
+	buffersProcessed atomic.Uint64
+	PubSub           *pubsub.PubSub
+	workers          sync.WaitGroup
+	LastHttpStatus   atomic.Uint32
+	lastError        error
+	lastErrorMu      sync.RWMutex
+	retryAfter       time.Time
+	retryAfterMu     sync.RWMutex
+	finished         atomic.Bool
+	Logger           *zap.Logger
+}
+
+func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
+	cfg, err := cfg.Update(config.FromEnv())
+	if err != nil {
+		return nil, fmt.Errorf("it was not possible to update config from env: %w", err)
+	}
+	logger.Info(
+		"Using config",
+		zap.String("endpoint", cfg.Endpoint),
+		zap.Bool("hasTokenWriteLog", len(cfg.Tokens.WriteLog) > 0),
+		zap.Bool("hasTokenReadLog", len(cfg.Tokens.ReadLog) > 0),
+		zap.Bool("hasTokenWriteConfig", len(cfg.Tokens.WriteConfig) > 0),
+		zap.Bool("hasTokenReadConfig", len(cfg.Tokens.ReadConfig) > 0),
+		zap.Int64("maxBufferDelay", cfg.MaxBufferDelay.Milliseconds()),
+		zap.Int64("maxPayloadB", cfg.MaxPayloadB),
+		zap.Strings("groupBy", cfg.GroupBy),
+		zap.Int64("retryBase", cfg.RetryBase.Milliseconds()),
+	)
+
+	if cfg.MaxPayloadB > buffer.LimitBufferSize {
+		return nil, fmt.Errorf(
+			"maxPayloadB has value %d which is more than %d",
+			cfg.MaxPayloadB,
+			buffer.LimitBufferSize,
+		)
+	}
+
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return nil, fmt.Errorf("it was not possible to generate UUID: %w", err)
+	}
+	dataClient := &DataSetClient{
+		Id:               id,
+		Config:           cfg,
+		Client:           client,
+		buffersEnqueued:  atomic.Uint64{},
+		buffersProcessed: atomic.Uint64{},
+		PubSub:           pubsub.New(0),
+		workers:          sync.WaitGroup{},
+		LastHttpStatus:   atomic.Uint32{},
+		retryAfter:       time.Now(),
+		retryAfterMu:     sync.RWMutex{},
+		lastErrorMu:      sync.RWMutex{},
+		Logger:           logger,
+		finished:         atomic.Bool{},
+	}
+
+	if cfg.MaxBufferDelay > 0 {
+		dataClient.Logger.Info("MaxBufferDelay is positive => send buffers regularly",
+			zap.Int64("maxDelayMs", cfg.MaxBufferDelay.Milliseconds()),
+		)
+		go dataClient.bufferSweeper(cfg.MaxBufferDelay)
+	} else {
+		dataClient.Logger.Warn(
+			"MaxBufferDelay is not positive => do NOT send buffers regularly",
+			zap.Int64("maxDelayMs", cfg.MaxBufferDelay.Milliseconds()),
+		)
+	}
+
+	dataClient.Logger.Info("DataSetClient was created",
+		zap.String("id", dataClient.Id.String()),
+	)
+
+	//// Server for pprof
+	//go func() {
+	//	fmt.Println(http.ListenAndServe("localhost:6060", nil))
+	//}()
+
+	return dataClient, nil
 }
 
 func (client *DataSetClient) Buffer(key string, info *add_events.SessionInfo) (*buffer.Buffer, error) {
@@ -104,14 +178,19 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 			client.Logger.Debug("Received buffer from channel",
 				zap.String("session", session),
 				zap.Int("index", i),
+				zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
+				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 			)
 			buf, ok := msg.(*buffer.Buffer)
+			client.workers.Add(1)
 			if ok {
 				for client.RetryAfter().After(time.Now()) {
 					client.sleep(client.RetryAfter(), buf)
 				}
 				if !buf.HasEvents() {
 					client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
+					client.workers.Done()
+					client.buffersProcessed.Add(1)
 					continue
 				}
 				response, err := client.SendAddEventsBuffer(buf)
@@ -125,6 +204,8 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 					} else {
 						lastHttpStatus = HttpErrorHasErrorMessage
 						client.LastHttpStatus.Store(lastHttpStatus)
+						client.workers.Done()
+						client.buffersProcessed.Add(1)
 						continue
 					}
 				}
@@ -174,7 +255,10 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 			} else {
 				client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
 			}
+			client.workers.Done()
+			client.buffersProcessed.Add(1)
 		} else {
+			client.buffersProcessed.Add(1)
 			break
 		}
 	}
@@ -229,6 +313,7 @@ func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) *buffer.Buffer {
 	swapped := atomic.CompareAndSwapUint32(&buf.Status, buffer.Ready, buffer.Publishing)
 	if swapped || buf.Status == buffer.Retrying {
 		// publish buffer so it can be sent
+		client.buffersEnqueued.Add(+1)
 		client.PubSub.Pub(buf, session)
 	}
 	return newBuffer
@@ -249,72 +334,6 @@ func (client *DataSetClient) shouldRejectNextBatch() error {
 	}
 
 	return nil
-}
-
-func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
-	cfg, err := cfg.Update(config.FromEnv())
-	if err != nil {
-		return nil, fmt.Errorf("it was not possible to update config from env: %w", err)
-	}
-	logger.Info(
-		"Using config",
-		zap.String("endpoint", cfg.Endpoint),
-		zap.Bool("hasTokenWriteLog", len(cfg.Tokens.WriteLog) > 0),
-		zap.Bool("hasTokenReadLog", len(cfg.Tokens.ReadLog) > 0),
-		zap.Bool("hasTokenWriteConfig", len(cfg.Tokens.WriteConfig) > 0),
-		zap.Bool("hasTokenReadConfig", len(cfg.Tokens.ReadConfig) > 0),
-		zap.Int64("maxBufferDelay", cfg.MaxBufferDelay.Milliseconds()),
-		zap.Int64("maxPayloadB", cfg.MaxPayloadB),
-		zap.Strings("groupBy", cfg.GroupBy),
-		zap.Int64("retryBase", cfg.RetryBase.Milliseconds()),
-	)
-
-	if cfg.MaxPayloadB > buffer.LimitBufferSize {
-		return nil, fmt.Errorf(
-			"maxPayloadB has value %d which is more than %d",
-			cfg.MaxPayloadB,
-			buffer.LimitBufferSize,
-		)
-	}
-
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return nil, fmt.Errorf("it was not possible to generate UUID: %w", err)
-	}
-	dataClient := &DataSetClient{
-		Id:             id,
-		Config:         cfg,
-		Client:         client,
-		PubSub:         pubsub.New(0),
-		LastHttpStatus: atomic.Uint32{},
-		retryAfter:     time.Now(),
-		retryAfterMu:   sync.RWMutex{},
-		lastErrorMu:    sync.RWMutex{},
-		Logger:         logger,
-	}
-
-	if cfg.MaxBufferDelay > 0 {
-		dataClient.Logger.Info("MaxBufferDelay is positive => send buffers regularly",
-			zap.Int64("maxDelayMs", cfg.MaxBufferDelay.Milliseconds()),
-		)
-		go dataClient.bufferSweeper(cfg.MaxBufferDelay)
-	} else {
-		dataClient.Logger.Warn(
-			"MaxBufferDelay is not positive => do NOT send buffers regularly",
-			zap.Int64("maxDelayMs", cfg.MaxBufferDelay.Milliseconds()),
-		)
-	}
-
-	dataClient.Logger.Info("DataSetClient was created",
-		zap.String("id", dataClient.Id.String()),
-	)
-
-	//// Server for pprof
-	//go func() {
-	//	fmt.Println(http.ListenAndServe("localhost:6060", nil))
-	//}()
-
-	return dataClient, nil
 }
 
 func (client *DataSetClient) getRetryAfter(response *http.Response, def time.Duration) (time.Time, bool) {

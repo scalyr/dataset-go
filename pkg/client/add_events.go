@@ -22,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/scalyr/dataset-go/pkg/api/response"
 
@@ -36,26 +37,19 @@ import (
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
 
+// AddEvents enqueues all the events for processing.
+// It returns an error if the batch was not accepted.
+// When you want to finish processing, call Finish method.
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
+	if client.finished.Load() {
+		return fmt.Errorf("client has finished - rejecting all new events")
+	}
 	errR := client.shouldRejectNextBatch()
 	if errR != nil {
-		return fmt.Errorf("AddEventsOptim - reject batch: %w", errR)
+		return fmt.Errorf("AddEvents - reject batch: %w", errR)
 	}
 
-	grouped := make(map[string][]*add_events.EventBundle)
-
-	// group batch
-	for _, bundle := range bundles {
-		if bundle == nil {
-			continue
-		}
-		key := bundle.Key(client.Config.GroupBy)
-		grouped[key] = append(grouped[key], bundle)
-	}
-	client.Logger.Debug("Batch was grouped",
-		zap.Int("batchSize", len(bundles)),
-		zap.Int("distinctStreams", len(grouped)),
-	)
+	grouped := client.groupBundles(bundles)
 
 	for key, bundles := range grouped {
 
@@ -95,6 +89,35 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	return nil
 }
 
+// IsProcessingData returns True if there are still some unprocessed data.
+// False otherwise.
+func (client *DataSetClient) IsProcessingData() bool {
+	return client.buffersEnqueued.Load() > client.buffersProcessed.Load()
+}
+
+// Finish stops processing of new events and waits until all the data that are
+// being processed are really processed.
+func (client *DataSetClient) Finish() {
+	// mark as finished
+	client.finished.Store(true)
+
+	// send all buffers
+	client.SendAllAddEventsBuffers()
+
+	// do wait for everything to be processed
+	for client.IsProcessingData() {
+		client.Logger.Info(
+			"Not all buffers has been processed",
+			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
+			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
+		)
+		time.Sleep(client.Config.RetryBase)
+	}
+	client.workers.Wait()
+
+	client.Logger.Info("All buffers have been processed")
+}
+
 func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, error) {
 	client.Logger.Debug("Sending buf", buf.ZapStats()...)
 
@@ -130,6 +153,24 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 	}
 
 	return response, err
+}
+
+func (client *DataSetClient) groupBundles(bundles []*add_events.EventBundle) map[string][]*add_events.EventBundle {
+	grouped := make(map[string][]*add_events.EventBundle)
+
+	// group batch
+	for _, bundle := range bundles {
+		if bundle == nil {
+			continue
+		}
+		key := bundle.Key(client.Config.GroupBy)
+		grouped[key] = append(grouped[key], bundle)
+	}
+	client.Logger.Debug("Batch was grouped",
+		zap.Int("batchSize", len(bundles)),
+		zap.Int("distinctStreams", len(grouped)),
+	)
+	return grouped
 }
 
 func (client *DataSetClient) apiCall(req *http.Request, response response.SetResponseObj) error {
@@ -183,6 +224,4 @@ func (client *DataSetClient) SendAllAddEventsBuffers() {
 		}
 		return true
 	})
-
-	// TODO: wait on all sending to be finished
 }
