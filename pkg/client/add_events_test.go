@@ -128,7 +128,7 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
-	sc.SendAllAddEventsBuffers()
+	sc.Finish()
 
 	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
@@ -191,6 +191,14 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	err1 := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	sc.SendAllAddEventsBuffers()
 
+	// wait for processing
+	for i := 0; i < 10; i++ {
+		if wasSuccessful.Load() {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
 	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err1)
 	assert.CmpNoError(sc.LastError())
@@ -201,7 +209,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	event2 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle2 := &add_events.EventBundle{Event: event2, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err2 := sc.AddEvents([]*add_events.EventBundle{eventBundle2})
-	sc.SendAllAddEventsBuffers()
+	sc.Finish()
 
 	assert.True(wasSuccessful.Load())
 	wasSuccessful.Store(false)
@@ -264,7 +272,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
-	sc.SendAllAddEventsBuffers()
+	sc.Finish()
 
 	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
@@ -351,7 +359,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
-	sc.SendAllAddEventsBuffers()
+	sc.Finish()
 
 	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
@@ -431,11 +439,29 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
-	sc.SendAllAddEventsBuffers()
+	sc.Finish()
 
 	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
 	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 1})
+}
+
+func (s *SuiteAddEvents) TestAddEventsRejectAfterFinish(assert, require *td.T) {
+	config := &config.DataSetConfig{
+		Endpoint:       "https://example.com",
+		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
+		MaxPayloadB:    20,
+		MaxBufferDelay: 0,
+		RetryBase:      RetryBase,
+	}
+	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc.Finish()
+
+	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+	err1 := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	assert.NotNil(err1)
+	assert.Cmp(err1.Error(), fmt.Errorf("client has finished - rejecting all new events").Error())
 }
