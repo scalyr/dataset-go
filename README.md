@@ -1,6 +1,11 @@
 # DataSet-Go
 
-[![Check code quality](https://github.com/scalyr/dataset-go/actions/workflows/code-quality.yaml/badge.svg)](https://github.com/scalyr/dataset-go/actions/workflows/code-quality.yaml) [![TruffleHog Secrets Scan](https://github.com/scalyr/dataset-go/actions/workflows/secrets-scanner.yaml/badge.svg)](https://github.com/scalyr/dataset-go/actions/workflows/secrets-scanner.yaml) [![codecov](https://codecov.io/gh/scalyr/dataset-go/branch/main/graph/badge.svg?token=IFTJDLGEF5)](https://codecov.io/gh/scalyr/dataset-go)
+[![Go Reference](https://pkg.go.dev/badge/github.com/scalyr/dataset-go.svg)](https://pkg.go.dev/github.com/scalyr/dataset-go)
+[![Go Report Card](https://goreportcard.com/badge/github.com/scalyr/dataset-go)](https://goreportcard.com/report/github.com/scalyr/dataset-go)
+[![Check code quality](https://github.com/scalyr/dataset-go/actions/workflows/code-quality.yaml/badge.svg)](https://github.com/scalyr/dataset-go/actions/workflows/code-quality.yaml)
+[![TruffleHog Secrets Scan](https://github.com/scalyr/dataset-go/actions/workflows/secrets-scanner.yaml/badge.svg)](https://github.com/scalyr/dataset-go/actions/workflows/secrets-scanner.yaml)
+[![codecov](https://codecov.io/gh/scalyr/dataset-go/branch/main/graph/badge.svg?token=IFTJDLGEF5)](https://codecov.io/gh/scalyr/dataset-go)
+[![Version](https://img.shields.io/github/tag/scalyr/dataset-go.svg)](https://github.com/scalyr/dataset-go/releases)
 
 This repository holds the source code for the Go wrapper around [DataSet API](https://app.scalyr.com/help/api).
 
