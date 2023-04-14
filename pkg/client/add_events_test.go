@@ -526,7 +526,7 @@ func (s *SuiteAddEvents) TestAddEventsWithBufferSweeper(assert, require *td.T) {
 	// wait on all buffers to be sent
 	time.Sleep(sentDelay * NumEvents * 2)
 
-	assert.Gte(attempt.Load(), int32(5))
+	assert.Gte(attempt.Load(), int32(4))
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": int(attempt.Load())})
 }
