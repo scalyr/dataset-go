@@ -18,6 +18,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -53,31 +54,38 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 
 	for key, bundles := range grouped {
 
-		buf, err := client.Buffer(key, client.SessionInfo)
-		if err != nil {
-			return fmt.Errorf("cannot get buffer: %w", err)
-		}
+		buf := client.Buffer(key, client.SessionInfo)
 
 		for _, bundle := range bundles {
 			added, err := buf.AddBundle(bundle)
 			if err != nil {
-				client.Logger.Error("Cannot add bundle", zap.Error(err))
-				// TODO: what to do? For now, lets skip it
-				continue
+				if errors.Is(err, &buffer.NotAcceptingError{}) {
+					buf = client.Buffer(key, client.SessionInfo)
+				} else {
+					client.Logger.Error("Cannot add bundle", zap.Error(err))
+					// TODO: what to do? For now, lets skip it
+					continue
+				}
 			}
 
 			if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
-				buf = client.PublishBuffer(buf)
+				client.PublishBuffer(buf)
+				buf = client.Buffer(key, client.SessionInfo)
 			}
 
 			if added == buffer.TooMuch {
 				added, err = buf.AddBundle(bundle)
 				if err != nil {
-					client.Logger.Error("Cannot add bundle", zap.Error(err))
-					continue
+					if errors.Is(err, &buffer.NotAcceptingError{}) {
+						buf = client.Buffer(key, client.SessionInfo)
+					} else {
+						client.Logger.Error("Cannot add bundle", zap.Error(err))
+						continue
+					}
 				}
 				if buf.ShouldSendSize() {
-					buf = client.PublishBuffer(buf)
+					client.PublishBuffer(buf)
+					buf = client.Buffer(key, client.SessionInfo)
 				}
 				if added == buffer.TooMuch {
 					client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
@@ -215,6 +223,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 }
 
 func (client *DataSetClient) SendAllAddEventsBuffers() {
+	client.Logger.Debug("Send all AddEvents buffers")
 	client.buffer.Range(func(k, v interface{}) bool {
 		buf, ok := v.(*buffer.Buffer)
 		if ok {

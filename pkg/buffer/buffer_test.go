@@ -48,21 +48,21 @@ func loadJson(name string) string {
 }
 
 func (s *SuiteBuffer) TestEmptyPayloadShouldFail(assert, require *td.T) {
-	buffer, err := NewBuffer("id", nil, "token")
+	buffer, err := NewBuffer("id", "token", nil)
 	assert.Nil(err)
 	_, err = buffer.Payload()
 	assert.CmpError(err, "there is no event")
 }
 
 func (s *SuiteBuffer) TestEmptyTokenShouldFail(assert, require *td.T) {
-	buffer, err := NewBuffer("id", nil, "")
+	buffer, err := NewBuffer("id", "", nil)
 	assert.Nil(err)
 	_, err = buffer.Payload()
 	assert.CmpError(err, "token is missing")
 }
 
 func (s *SuiteBuffer) TestEmptySessionShouldFail(assert, require *td.T) {
-	buffer, err := NewBuffer("", nil, "token")
+	buffer, err := NewBuffer("", "token", nil)
 	assert.Nil(err)
 	_, err = buffer.Payload()
 	assert.CmpError(err, "session is missing")
@@ -97,8 +97,8 @@ func createEmptyBuffer() *Buffer {
 	token := "token"
 	buffer, err := NewBuffer(
 		session,
-		sessionInfo,
-		token)
+		token,
+		sessionInfo)
 	if err != nil {
 		return nil
 	}
@@ -151,8 +151,8 @@ func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
 	token := "token\",\"events\":[{}],\"foo\":\"bar"
 	buffer, err := NewBuffer(
 		session,
-		sessionInfo,
-		token)
+		token,
+		sessionInfo)
 
 	assert.Nil(err)
 	bundle := &add_events.EventBundle{

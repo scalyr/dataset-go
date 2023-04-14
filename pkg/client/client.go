@@ -134,7 +134,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 	return dataClient, nil
 }
 
-func (client *DataSetClient) Buffer(key string, info *add_events.SessionInfo) (*buffer.Buffer, error) {
+func (client *DataSetClient) Buffer(key string, info *add_events.SessionInfo) *buffer.Buffer {
 	session := fmt.Sprintf("%s-%s", client.Id, key)
 	// get buf so we can start using it
 	buf, loaded := client.buffer.LoadOrStore(
@@ -142,23 +142,35 @@ func (client *DataSetClient) Buffer(key string, info *add_events.SessionInfo) (*
 		buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog),
 	)
 
-	if !loaded {
-		client.Logger.Debug("Creating new buf",
-			zap.String("key", key),
-			zap.String("session", session),
-		)
+	buff := buf.(*buffer.Buffer)
 
-		err := buf.(*buffer.Buffer).SetSessionInfo(info)
-		if err != nil {
-			return nil, fmt.Errorf("buffer - cannot set session: %w", err)
-		}
-		buf.(*buffer.Buffer).Reset()
+	if !loaded {
+		client.initBuffer(buff, info)
 
 		// it's brand-new buf, so let's create subscriber
 		client.AddEventsSubscriber(session)
 	}
 
-	return buf.(*buffer.Buffer), nil
+	return buff
+}
+
+func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.SessionInfo) {
+	client.Logger.Debug("Creating new buf",
+		zap.String("uuid", buff.Id.String()),
+		zap.String("session", buff.Session),
+	)
+
+	// Initialise
+	err := buff.Initialise(info)
+	// only reason why Initialise may fail is because SessionInfo cannot be
+	// serialised into JSON. We do not care, so we can set it to nil and continue
+	if err != nil {
+		client.Logger.Error("Cannot initialize buffer: %w", zap.Error(err))
+		err = buff.SetSessionInfo(nil)
+		if err != nil {
+			panic(fmt.Sprintf("Setting SessionInfo cannot cause an error: %s", err))
+		}
+	}
 }
 
 func (client *DataSetClient) AddEventsSubscriber(session string) {
@@ -173,11 +185,11 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 		zap.String("session", session),
 	)
 
-	for i := 0; ; i++ {
+	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		if msg, ok := <-ch; ok {
 			client.Logger.Debug("Received buffer from channel",
 				zap.String("session", session),
-				zap.Int("index", i),
+				zap.Int("processedMsgCnt", processedMsgCnt),
 				zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
 				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 			)
@@ -246,7 +258,7 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 					}
 
 					client.sleep(retryAfter, buf)
-					buf.Status = buffer.Retrying
+					buf.Status.Store(uint32(buffer.Retrying))
 					buf.Attempt++
 
 					// and publish message back
@@ -266,18 +278,18 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 
 func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 	client.Logger.Info("Starting buffer sweeper with delay", zap.Duration("delay", delay))
-	for i := 0; ; i++ {
-		kept := 0
-		swept := 0
-		client.Logger.Debug("Buffer sweeping started", zap.Int("sweepId", i))
+	for i := uint64(0); ; i++ {
+		kept := atomic.Uint64{}
+		swept := atomic.Uint64{}
+		client.Logger.Debug("Buffer sweeping started", zap.Uint64("sweepId", i))
 		client.buffer.Range(func(k, v interface{}) bool {
 			buf, ok := v.(*buffer.Buffer)
 			if ok {
 				if buf.ShouldSendAge(delay) {
 					client.PublishBuffer(buf)
-					swept++
+					swept.Add(1)
 				} else {
-					kept++
+					kept.Add(1)
 				}
 			} else {
 				client.Logger.Error("Unable to convert message to buffer")
@@ -293,30 +305,36 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 		client.Logger.Log(
 			lvl,
 			"Buffer sweeping finished",
-			zap.Int("sweepId", i),
-			zap.Int("kept", kept),
-			zap.Int("swept", swept),
-			zap.Int("total", kept+swept),
+			zap.Uint64("sweepId", i),
+			zap.Uint64("kept", kept.Load()),
+			zap.Uint64("swept", swept.Load()),
+			zap.Uint64("total", kept.Load()+swept.Load()),
 		)
 
 		time.Sleep(delay)
 	}
 }
 
-func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) *buffer.Buffer {
-	session := buf.Session
-	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
-	// lets remove it
-	newBuffer := buf.NewEmpty()
-	client.buffer.Store(session, newBuffer)
+func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) {
+	originalStatus := buffer.Status(buf.Status.Load())
+	buf.Status.Store(uint32(buffer.Publishing))
+	if originalStatus == buffer.Ready {
+		newBuf := buffer.NewEmptyBuffer(buf.Session, buf.Token)
+		client.Logger.Debug(
+			"Removing buffer for session",
+			zap.String("session", buf.Session),
+			zap.String("oldUuid", buf.Id.String()),
+			zap.String("newUuid", newBuf.Id.String()),
+		)
 
-	swapped := atomic.CompareAndSwapUint32(&buf.Status, buffer.Ready, buffer.Publishing)
-	if swapped || buf.Status == buffer.Retrying {
-		// publish buffer so it can be sent
-		client.buffersEnqueued.Add(+1)
-		client.PubSub.Pub(buf, session)
+		client.initBuffer(newBuf, buf.SessionInfo())
+		client.buffer.Store(buf.Session, newBuf)
 	}
-	return newBuffer
+	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
+
+	// publish buffer so it can be sent
+	client.buffersEnqueued.Add(+1)
+	client.PubSub.Pub(buf, buf.Session)
 }
 
 func (client *DataSetClient) shouldRejectNextBatch() error {
@@ -377,6 +395,7 @@ func (client *DataSetClient) sleep(retryAfter time.Time, buffer *buffer.Buffer) 
 		"RetryAfter is in the future, waiting...",
 		zap.Duration("sleepFor", sleepFor),
 		zap.String("bufferSession", buffer.Session),
+		zap.String("bufferUuid", buffer.Id.String()),
 	)
 	time.Sleep(sleepFor)
 }

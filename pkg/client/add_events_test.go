@@ -158,8 +158,11 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 				assert.Gt(time.Now().UnixNano(), expectedTime.Load(), "start: %s, after: %s, expected: %s", time.Unix(0, now.Load()).Format(time.RFC1123), retryAfter, time.Unix(0, expectedTime.Load()).Format(time.RFC1123))
 			}
 			attempt.Add(1)
-
+			cer, err := extract(req)
+			assert.CmpNoError(err, "Error reading request: %v", err)
+			msg := cer.Events[0].Attrs["message"].(string)
 			if attempt.Load() < 2 {
+				assert.Cmp(msg, "test - 1")
 				resp, errr := httpmock.NewJsonResponse(429, map[string]interface{}{
 					"status":       "error",
 					"bytesCharged": 42,
@@ -167,6 +170,14 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 				resp.Header.Set("Retry-After", fmt.Sprintf("%d", int(time.Duration(retryAfter).Seconds())))
 				return resp, errr
 			} else {
+				if attempt.Load() == 2 {
+					assert.Cmp(msg, "test - 1")
+				} else if attempt.Load() == 3 {
+					assert.Cmp(msg, "test - 22")
+				} else {
+					// this function should be called 3
+					assert.Nil(msg, "Attempt: %d", attempt.Load())
+				}
 				wasSuccessful.Store(true)
 				return httpmock.NewJsonResponse(200, map[string]interface{}{
 					"status":       "success",
@@ -200,18 +211,20 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	}
 
 	assert.True(wasSuccessful.Load())
+	assert.Cmp(attempt.Load(), int32(2))
 	assert.CmpNoError(err1)
 	assert.CmpNoError(sc.LastError())
 	info1 := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info1, map[string]int{"POST https://example.com/api/addEvents": 2})
 
 	// send second request to make sure that nothing is blocked
-	event2 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
+	event2 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 22"}}
 	eventBundle2 := &add_events.EventBundle{Event: event2, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err2 := sc.AddEvents([]*add_events.EventBundle{eventBundle2})
 	sc.Finish()
 
 	assert.True(wasSuccessful.Load())
+	assert.Cmp(attempt.Load(), int32(3))
 	wasSuccessful.Store(false)
 	assert.CmpNoError(err2)
 	assert.CmpNoError(sc.LastError())
@@ -466,7 +479,6 @@ func (s *SuiteAddEvents) TestAddEventsRejectAfterFinish(assert, require *td.T) {
 	assert.Cmp(err1.Error(), fmt.Errorf("client has finished - rejecting all new events").Error())
 }
 
-/*
 func (s *SuiteAddEvents) TestAddEventsWithBufferSweeper(assert, require *td.T) {
 	attempt := atomic.Int32{}
 	attempt.Store(0)
@@ -503,7 +515,7 @@ func (s *SuiteAddEvents) TestAddEventsWithBufferSweeper(assert, require *td.T) {
 
 	go func(n int) {
 		for i := 0; i < n; i++ {
-			event := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"value": i}}
+			event := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"value": fmt.Sprintf("val-%d", i)}}
 			eventBundle := &add_events.EventBundle{Event: event, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 			err := sc.AddEvents([]*add_events.EventBundle{eventBundle})
 			assert.Nil(err)
@@ -514,8 +526,7 @@ func (s *SuiteAddEvents) TestAddEventsWithBufferSweeper(assert, require *td.T) {
 	// wait on all buffers to be sent
 	time.Sleep(sentDelay * NumEvents * 2)
 
-	assert.Gt(attempt.Load(), int32(5))
+	assert.Gte(attempt.Load(), int32(5))
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": int(attempt.Load())})
 }
-*/

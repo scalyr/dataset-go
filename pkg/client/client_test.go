@@ -97,8 +97,7 @@ func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
 		},
 	}
 
-	buffer1, err := sc.Buffer("aaa", &sessionInfo)
-	assert.Nil(err)
+	buffer1 := sc.Buffer("aaa", &sessionInfo)
 	added, err := buffer1.AddBundle(&add_events.EventBundle{Event: event1})
 	assert.Nil(err)
 	assert.Cmp(added, buffer.Added)
@@ -119,7 +118,8 @@ func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
 		},
 	}
 
-	buffer2 := sc.PublishBuffer(buffer1)
+	sc.PublishBuffer(buffer1)
+	buffer2 := sc.Buffer("aaa", &sessionInfo)
 	added2, err := buffer2.AddBundle(&add_events.EventBundle{Event: event2})
 	assert.Nil(err)
 	assert.Cmp(added2, buffer.Added)

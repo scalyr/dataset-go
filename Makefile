@@ -14,6 +14,14 @@
 
 # build options are from https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/Makefile.Common
 # to make out library compatible with open telemetry
+
+SHELL = /bin/bash
+ifeq ($(shell uname -s),Windows)
+	.SHELLFLAGS = /e /o pipefile /c
+else
+	.SHELLFLAGS = -e -o pipefail -c
+endif
+
 GO_BUILD_TAGS=""
 GOTEST_OPT?= -race -timeout 300s -parallel 4 -count=1 --tags=$(GO_BUILD_TAGS)
 GOTEST_INTEGRATION_OPT?= -race -timeout 360s -parallel 4
@@ -39,6 +47,20 @@ build:
 .PHONY: test
 test:
 	$(GOTEST) $(GOTEST_OPT) ./...
+
+.PHONY: test-many-times
+test-many-times:
+	set -e; \
+	if [ "x$(COUNT)" == "x" ]; then \
+  		COUNT=50; \
+  	else \
+  		COUNT=$(COUNT); \
+  	fi; \
+  	for i in `seq 1 $${COUNT}`; do \
+  		echo "Running test $${i} / $${COUNT}"; \
+  		make test; \
+  	done;
+
 
 .PHONY: coverage
 coverage:
