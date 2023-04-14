@@ -7,6 +7,8 @@ on:
   pull_request:
     branches:
       - main
+  tags:
+    - "v[0-9]+.[0-9]+.[0-9]+"
   schedule:
     - cron: '0 4 * * *'
 
@@ -76,3 +78,14 @@ jobs:
         with:
           fail_ci_if_error: true
           verbose: true
+      - name: Run Tests Many Times
+        # Run test multiple times to check for data races
+        # if: github.ref_name == 'main'
+        run: |
+          set -e;
+          for i in `seq 1 50`; do
+            echo "Running test ${i} / 50";
+            make test;
+          done;
+        env:
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
