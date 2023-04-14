@@ -23,6 +23,6 @@ import (
 )
 
 func TestVersion(t *testing.T) {
-	assert.Equal(t, "0.0.1", Version)
-	assert.Equal(t, "2023-04-01", ReleasedDate)
+	assert.Equal(t, "0.0.3", Version)
+	assert.Equal(t, "2023-04-14", ReleasedDate)
 }

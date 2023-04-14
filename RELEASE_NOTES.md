@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.0.3 Fix Data Races
+
+* fixed [data races](https://go.dev/doc/articles/race_detector)
+
 ## 0.0.2 Fix Data Races
 
 * fixed [data races](https://go.dev/doc/articles/race_detector)
