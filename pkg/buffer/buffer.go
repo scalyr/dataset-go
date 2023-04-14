@@ -19,6 +19,7 @@ package buffer
 import (
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/scalyr/dataset-go/pkg/api/request"
@@ -35,11 +36,18 @@ const (
 	LimitBufferSize      = 5*1024*1024 + 960*1024
 )
 
+type Status uint32
+
 const (
-	Ready = /*Status*/ iota
+	Initialising = Status(iota)
+	Ready
 	Publishing
 	Retrying
 )
+
+func (s Status) String() string {
+	return [...]string{"Initialising", "Ready", "Publishing", "Retrying"}[s]
+}
 
 type AddStatus uint8
 
@@ -53,59 +61,91 @@ func (s AddStatus) String() string {
 	return [...]string{"Added", "Skipped", "TooMuch"}[s]
 }
 
+type NotAcceptingError struct {
+	status Status
+}
+
+func (e *NotAcceptingError) Error() string {
+	return fmt.Sprintf("Buffer has status %s => not accepting new events", e.status)
+}
+
 type Buffer struct {
 	Id      uuid.UUID
 	Session string
 	Token   string
 
-	Status  uint32
-	Attempt uint
+	Status    atomic.Uint32
+	Attempt   uint
+	createdAt atomic.Int64
 
 	sessionInfo *add_events.SessionInfo
 	threads     map[string]*add_events.Thread
 	logs        map[string]*add_events.Log
 	events      []*add_events.Event
 
-	bufferSent     time.Time
 	lenSessionInfo int
-	lenThreads     int
-	lenLogs        int
-	lenEvents      int
+	lenThreads     atomic.Int32
+	lenLogs        atomic.Int32
+	lenEvents      atomic.Int32
 
-	countThreads int
-	countLogs    int
-	countEvents  int
+	countThreads atomic.Int32
+	countLogs    atomic.Int32
+	countEvents  atomic.Int32
 }
 
 func NewEmptyBuffer(session string, token string) *Buffer {
 	id, _ := uuid.NewRandom()
 
-	return &Buffer{Id: id, Session: session, Token: token, Status: Ready, Attempt: 0}
+	return &Buffer{
+		Id:           id,
+		Session:      session,
+		Token:        token,
+		Status:       atomic.Uint32{},
+		Attempt:      0,
+		countThreads: atomic.Int32{},
+		countLogs:    atomic.Int32{},
+		countEvents:  atomic.Int32{},
+		lenThreads:   atomic.Int32{},
+		lenLogs:      atomic.Int32{},
+		lenEvents:    atomic.Int32{},
+		createdAt:    atomic.Int64{},
+	}
 }
 
-func NewBuffer(session string, sessionInfo *add_events.SessionInfo, token string) (*Buffer, error) {
+func NewBuffer(session string, token string, sessionInfo *add_events.SessionInfo) (*Buffer, error) {
 	buffer := NewEmptyBuffer(session, token)
+	err := buffer.Initialise(sessionInfo)
+	return buffer, err
+}
+
+func (buffer *Buffer) Initialise(sessionInfo *add_events.SessionInfo) error {
+	status := Status(buffer.Status.Load())
+	if status != Initialising {
+		panic(fmt.Sprintf("NewBuffer was already initialised: %s", status))
+	}
+	buffer.threads = map[string]*add_events.Thread{}
+	buffer.logs = map[string]*add_events.Log{}
+	buffer.events = []*add_events.Event{}
+
+	buffer.createdAt.Store(time.Now().UnixNano())
+	buffer.Status.Store(uint32(Ready))
+
 	err := buffer.SetSessionInfo(sessionInfo)
 	if err != nil {
-		return nil, fmt.Errorf("NewBuffer cannot convert to JSON: %w", err)
+		return fmt.Errorf("NewBuffer cannot set SessionInfo: %w", err)
 	}
-	buffer.Reset()
-	if err != nil {
-		return nil, fmt.Errorf("NewBuffer cannot convert to JSON: %w", err)
-	}
-	return buffer, nil
+
+	return nil
 }
 
-func (buffer *Buffer) NewEmpty() *Buffer {
+func (buffer *Buffer) NewEmpty() (*Buffer, error) {
 	newBuffer := NewEmptyBuffer(buffer.Session, buffer.Token)
-	newBuffer.sessionInfo = buffer.sessionInfo
-	newBuffer.lenSessionInfo = buffer.lenSessionInfo
-	newBuffer.Reset()
-	return newBuffer
+	err := newBuffer.Initialise(buffer.sessionInfo)
+	return newBuffer, err
 }
 
 func (buffer *Buffer) HasEvents() bool {
-	return buffer.countEvents > 0
+	return buffer.countEvents.Load() > 0
 }
 
 func (buffer *Buffer) SetSessionInfo(sessionInfo *add_events.SessionInfo) error {
@@ -126,22 +166,15 @@ func (buffer *Buffer) SetSessionInfo(sessionInfo *add_events.SessionInfo) error 
 	return nil
 }
 
-func (buffer *Buffer) Reset() {
-	buffer.threads = map[string]*add_events.Thread{}
-	buffer.logs = map[string]*add_events.Log{}
-	buffer.events = []*add_events.Event{}
-
-	buffer.bufferSent = time.Now()
-	buffer.lenThreads = 0
-	buffer.lenLogs = 0
-	buffer.lenEvents = 0
-
-	buffer.countThreads = 0
-	buffer.countLogs = 0
-	buffer.countEvents = 0
+func (buffer *Buffer) SessionInfo() *add_events.SessionInfo {
+	return buffer.sessionInfo
 }
 
 func (buffer *Buffer) AddBundle(bundle *add_events.EventBundle) (AddStatus, error) {
+	status := Status(buffer.Status.Load())
+	if status != Ready {
+		return TooMuch, &NotAcceptingError{status: status}
+	}
 	// append thread
 	addT, errT := buffer.addThread(bundle.Thread)
 	if errT != nil {
@@ -204,8 +237,8 @@ func (buffer *Buffer) addThread(thread *add_events.Thread) (AddStatus, error) {
 
 		if buffer.canAppend(threadSer) {
 			buffer.threads[thread.Id] = thread
-			buffer.lenThreads += len(threadSer) + 1
-			buffer.countThreads += 1
+			buffer.lenThreads.Add(int32(len(threadSer) + 1))
+			buffer.countThreads.Add(1)
 			return Added, nil
 		} else {
 			return Skipped, nil
@@ -223,8 +256,8 @@ func (buffer *Buffer) removeThread(thread *add_events.Thread) {
 		return
 	}
 	delete(buffer.threads, thread.Id)
-	buffer.lenThreads -= len(threadSer) + 1
-	buffer.countThreads -= 1
+	buffer.lenThreads.Add(int32(-(len(threadSer) + 1)))
+	buffer.countThreads.Add(-1)
 }
 
 func (buffer *Buffer) addLog(log *add_events.Log) (AddStatus, error) {
@@ -239,8 +272,8 @@ func (buffer *Buffer) addLog(log *add_events.Log) (AddStatus, error) {
 
 		if buffer.canAppend(logSer) {
 			buffer.logs[log.Id] = log
-			buffer.lenLogs += len(logSer) + 1
-			buffer.countLogs += 1
+			buffer.lenLogs.Add(int32(len(logSer) + 1))
+			buffer.countLogs.Add(1)
 			return Added, nil
 		} else {
 			return TooMuch, nil
@@ -258,8 +291,8 @@ func (buffer *Buffer) removeLog(log *add_events.Log) {
 		return
 	}
 	delete(buffer.logs, log.Id)
-	buffer.lenLogs -= len(logSer) + 1
-	buffer.countLogs -= 1
+	buffer.lenLogs.Add(int32(-(len(logSer) + 1)))
+	buffer.countLogs.Add(-1)
 }
 
 func (buffer *Buffer) addEvent(event *add_events.Event) (AddStatus, error) {
@@ -274,11 +307,11 @@ func (buffer *Buffer) addEvent(event *add_events.Event) (AddStatus, error) {
 
 	if buffer.canAppend(eventSer) {
 		buffer.events = append(buffer.events, event)
-		buffer.lenEvents += len(eventSer) + 1
-		buffer.countEvents += 1
+		buffer.lenEvents.Add(int32(len(eventSer) + 1))
+		buffer.countEvents.Add(1)
 		return Added, nil
 	} else {
-		if buffer.countEvents == 0 {
+		if buffer.countEvents.Load() == 0 {
 			trimmed := buffer.trimEvent(event)
 			if trimmed == nil {
 				return TooMuch, fmt.Errorf("objects Thread or Log is too large, cannot fix here")
@@ -294,7 +327,7 @@ func (buffer *Buffer) trimEvent(event *add_events.Event) *add_events.Event {
 
 	newEvent := event.CloneWithoutAttrs()
 	eventSer, _ := json.Marshal(*newEvent)
-	remaining -= len(eventSer)
+	remaining -= int32(len(eventSer))
 	if remaining < 0 {
 		// we have messed up, we should have reduced log or thread :/
 		return nil
@@ -302,25 +335,25 @@ func (buffer *Buffer) trimEvent(event *add_events.Event) *add_events.Event {
 
 	remaining -= 2
 
-	newEvent.Attrs = add_events.TrimAttrs(event.Attrs, remaining)
+	newEvent.Attrs = add_events.TrimAttrs(event.Attrs, int(remaining))
 
 	return newEvent
 }
 
 func (buffer *Buffer) canAppend(data []byte) bool {
-	return buffer.BufferLengths()+len(data)+1 < LimitBufferSize
+	return buffer.BufferLengths()+int32(len(data)+1) < LimitBufferSize
 }
 
 func (buffer *Buffer) ShouldSendSize() bool {
-	return buffer.countEvents > 0 && buffer.BufferLengths() > ShouldSentBufferSize
+	return buffer.countEvents.Load() > 0 && buffer.BufferLengths() > ShouldSentBufferSize
 }
 
 func (buffer *Buffer) ShouldSendAge(delay time.Duration) bool {
-	return buffer.countEvents > 0 && time.Since(buffer.bufferSent) > delay
+	return buffer.countEvents.Load() > 0 && time.Since(time.Unix(0, buffer.createdAt.Load())) > delay
 }
 
-func (buffer *Buffer) BufferLengths() int {
-	return buffer.lenSessionInfo + buffer.lenThreads + buffer.lenLogs + buffer.lenEvents
+func (buffer *Buffer) BufferLengths() int32 {
+	return int32(buffer.lenSessionInfo) + buffer.lenThreads.Load() + buffer.lenLogs.Load() + buffer.lenEvents.Load()
 }
 
 func (buffer *Buffer) Payload() ([]byte, error) {
@@ -332,7 +365,7 @@ func (buffer *Buffer) Payload() ([]byte, error) {
 		return nil, fmt.Errorf("session is missing")
 	}
 
-	if buffer.lenEvents == 0 {
+	if buffer.lenEvents.Load() == 0 {
 		return nil, fmt.Errorf("there is no event")
 	}
 
@@ -371,14 +404,14 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 	res := []zap.Field{
 		zap.String("uuid", buffer.Id.String()),
 		zap.String("session", buffer.Session),
-		zap.Uint32("status", buffer.Status),
+		zap.Uint32("status", buffer.Status.Load()),
 		zap.Uint("attempt", buffer.Attempt),
-		zap.Int("logs", buffer.countLogs),
-		zap.Int("threads", buffer.countThreads),
-		zap.Int("events", buffer.countEvents),
-		zap.Int("bufferLength", buffer.BufferLengths()),
+		zap.Int32("logs", buffer.countLogs.Load()),
+		zap.Int32("threads", buffer.countThreads.Load()),
+		zap.Int32("events", buffer.countEvents.Load()),
+		zap.Int32("bufferLength", buffer.BufferLengths()),
 		zap.Float64("bufferRatio", float64(buffer.BufferLengths())/ShouldSentBufferSize),
-		zap.Int64("sinceLastMs", time.Since(buffer.bufferSent).Milliseconds()),
+		zap.Int64("sinceCreatedAtMs", time.Since(time.Unix(0, buffer.createdAt.Load())).Milliseconds()),
 	}
 	res = append(res, fields...)
 	return res
