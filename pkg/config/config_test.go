@@ -80,6 +80,7 @@ func (s *SuiteConfig) TestDataConfigWithOptions(assert, require *td.T) {
 		WithMaxPayloadB(int64(12345)),
 		WithRetryBase(2*time.Minute),
 		WithGroupBy([]string{"fooOpt", "barOpt"}),
+		WithMaxRetries(int64(456)),
 	)
 	assert.CmpNoError(err)
 	assert.Cmp(cfg5.Endpoint, "https://fooOpt")
@@ -88,6 +89,7 @@ func (s *SuiteConfig) TestDataConfigWithOptions(assert, require *td.T) {
 	assert.Cmp(cfg5.MaxPayloadB, int64(12345))
 	assert.Cmp(cfg5.RetryBase, 2*time.Minute)
 	assert.Cmp(cfg5.GroupBy, []string{"fooOpt", "barOpt"})
+	assert.Cmp(cfg5.MaxRetries, int64(456))
 }
 
 func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
@@ -98,6 +100,7 @@ func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
 		WithMaxPayloadB(int64(123451)),
 		WithRetryBase(2*time.Minute),
 		WithGroupBy([]string{"fooOpt1", "barOpt1"}),
+		WithMaxRetries(int64(456)),
 	)
 	assert.CmpNoError(err)
 	assert.Cmp(cfg5.Endpoint, "https://fooOpt1")
@@ -106,6 +109,7 @@ func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
 	assert.Cmp(cfg5.MaxPayloadB, int64(123451))
 	assert.Cmp(cfg5.RetryBase, 2*time.Minute)
 	assert.Cmp(cfg5.GroupBy, []string{"fooOpt1", "barOpt1"})
+	assert.Cmp(cfg5.MaxRetries, int64(456))
 
 	cfg6, err := cfg5.Update(
 		WithEndpoint("https://fooOpt2"),
@@ -114,6 +118,7 @@ func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
 		WithMaxPayloadB(int64(54321)),
 		WithRetryBase(4*time.Minute),
 		WithGroupBy([]string{"fooOpt2", "barOpt2"}),
+		WithMaxRetries(int64(678)),
 	)
 	assert.CmpNoError(err)
 
@@ -124,6 +129,7 @@ func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
 	assert.Cmp(cfg5.MaxPayloadB, int64(123451))
 	assert.Cmp(cfg5.RetryBase, 2*time.Minute)
 	assert.Cmp(cfg5.GroupBy, []string{"fooOpt1", "barOpt1"})
+	assert.Cmp(cfg5.MaxRetries, int64(456))
 
 	// new config is changed
 	assert.Cmp(cfg6.Endpoint, "https://fooOpt2")
@@ -132,4 +138,5 @@ func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
 	assert.Cmp(cfg6.MaxPayloadB, int64(54321))
 	assert.Cmp(cfg6.RetryBase, 4*time.Minute)
 	assert.Cmp(cfg6.GroupBy, []string{"fooOpt2", "barOpt2"})
+	assert.Cmp(cfg6.MaxRetries, int64(678))
 }

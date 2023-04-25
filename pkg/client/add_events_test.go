@@ -120,6 +120,7 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 		MaxPayloadB:    20,
 		MaxBufferDelay: 0,
 		RetryBase:      RetryBase,
+		MaxRetries:     100,
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 
@@ -192,6 +193,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 		MaxPayloadB:    20,
 		MaxBufferDelay: 0,
 		RetryBase:      RetryBase,
+		MaxRetries:     100,
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 
@@ -277,6 +279,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 		MaxPayloadB:    20,
 		MaxBufferDelay: 0,
 		RetryBase:      RetryBase,
+		MaxRetries:     100,
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 

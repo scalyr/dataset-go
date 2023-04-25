@@ -250,19 +250,31 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 						),
 					)
 
-					if specified {
-						// retry after is specified, we should update
-						// client state, so we do not send more requests
+					if client.Config.MaxRetries < 0 || int64(buf.Attempt) < client.Config.MaxRetries {
+						// we should retry
 
-						client.SetRetryAfter(retryAfter)
+						if specified {
+							// retry after is specified, we should update
+							// client state, so we do not send more requests
+
+							client.SetRetryAfter(retryAfter)
+						}
+
+						client.sleep(retryAfter, buf)
+						buf.Status.Store(uint32(buffer.Retrying))
+						buf.Attempt++
+
+						// and publish message back
+						client.PublishBuffer(buf)
+					} else {
+						client.Logger.Error(
+							"Dropping buffer - maximum of retries",
+							buf.ZapStats(
+								zap.Int64("maxRetries", client.Config.MaxRetries),
+								zap.Uint("attempt", buf.Attempt),
+							)...,
+						)
 					}
-
-					client.sleep(retryAfter, buf)
-					buf.Status.Store(uint32(buffer.Retrying))
-					buf.Attempt++
-
-					// and publish message back
-					client.PublishBuffer(buf)
 				}
 			} else {
 				client.Logger.Error("Cannot convert message", zap.Any("msg", msg))

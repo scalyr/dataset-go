@@ -36,6 +36,7 @@ type DataSetConfig struct {
 	MaxPayloadB    int64
 	GroupBy        []string
 	RetryBase      time.Duration
+	MaxRetries     int64
 }
 
 type DataSetConfigOption func(*DataSetConfig) error
@@ -57,6 +58,13 @@ func WithTokens(tokens DataSetTokens) DataSetConfigOption {
 func WithMaxBufferDelay(maxBufferDelay time.Duration) DataSetConfigOption {
 	return func(c *DataSetConfig) error {
 		c.MaxBufferDelay = maxBufferDelay
+		return nil
+	}
+}
+
+func WithMaxRetries(maxRetries int64) DataSetConfigOption {
+	return func(c *DataSetConfig) error {
+		c.MaxRetries = maxRetries
 		return nil
 	}
 }
