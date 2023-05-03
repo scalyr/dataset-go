@@ -65,7 +65,7 @@ test-many-times:
   	fi; \
   	for i in `seq 1 $${COUNT}`; do \
   		echo "Running test $${i} / $${COUNT}"; \
-  		make test; \
+  		make test 2>&1 | tee out-test-$${i}.log; \
   	done;
 
 

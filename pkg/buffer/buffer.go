@@ -79,9 +79,10 @@ type Buffer struct {
 	Session string
 	Token   string
 
-	Attempt   uint
-	createdAt atomic.Int64
-	status    atomic.Uint32
+	Attempt     uint
+	createdAt   atomic.Int64
+	status      atomic.Uint32
+	PublishAsap atomic.Bool
 
 	sessionInfo *add_events.SessionInfo
 	threads     map[string]*add_events.Thread
@@ -107,6 +108,7 @@ func NewEmptyBuffer(session string, token string) *Buffer {
 		Token:        token,
 		status:       atomic.Uint32{},
 		Attempt:      0,
+		PublishAsap:  atomic.Bool{},
 		countThreads: atomic.Int32{},
 		countLogs:    atomic.Int32{},
 		countEvents:  atomic.Int32{},

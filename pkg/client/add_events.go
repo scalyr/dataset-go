@@ -53,54 +53,70 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	grouped := client.groupBundles(bundles)
 
 	for key, bundles := range grouped {
-
-		buf := client.Buffer(key, client.SessionInfo)
-		// change state to mark that bundles are being added
-		buf.SetStatus(buffer.AddingBundles)
-
-		for _, bundle := range bundles {
-			added, err := buf.AddBundle(bundle)
-			if err != nil {
-				if errors.Is(err, &buffer.NotAcceptingError{}) {
-					buf = client.Buffer(key, client.SessionInfo)
-					buf.SetStatus(buffer.AddingBundles)
-				} else {
-					client.Logger.Error("Cannot add bundle", zap.Error(err))
-					// TODO: what to do? For now, lets skip it
-					continue
-				}
-			}
-
-			if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
-				client.PublishBuffer(buf)
-				buf = client.Buffer(key, client.SessionInfo)
-				buf.SetStatus(buffer.AddingBundles)
-			}
-
-			if added == buffer.TooMuch {
-				added, err = buf.AddBundle(bundle)
-				if err != nil {
-					if errors.Is(err, &buffer.NotAcceptingError{}) {
-						buf = client.Buffer(key, client.SessionInfo)
-						buf.SetStatus(buffer.AddingBundles)
-					} else {
-						client.Logger.Error("Cannot add bundle", zap.Error(err))
-						continue
-					}
-				}
-				if buf.ShouldSendSize() {
-					client.PublishBuffer(buf)
-					buf = client.Buffer(key, client.SessionInfo)
-				}
-				if added == buffer.TooMuch {
-					client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
-				}
-			}
-		}
-		buf.SetStatus(buffer.Ready)
+		client.addBundle(key, bundles)
 	}
 
 	return nil
+}
+
+func (client *DataSetClient) addBundle(key string, bundles []*add_events.EventBundle) {
+	// this function has to be called from AddEvents - inner loop
+	// it assumes that all bundles have the same key
+	getBuffer := func(key string) *buffer.Buffer {
+		buf := client.Buffer(key, client.SessionInfo)
+		// change state to mark that bundles are being added
+		buf.SetStatus(buffer.AddingBundles)
+		return buf
+	}
+
+	publish := func(key string, buf *buffer.Buffer) *buffer.Buffer {
+		client.PublishBuffer(buf)
+		return getBuffer(key)
+	}
+
+	buf := getBuffer(key)
+	for _, bundle := range bundles {
+		added, err := buf.AddBundle(bundle)
+		if err != nil {
+			if errors.Is(err, &buffer.NotAcceptingError{}) {
+				buf = getBuffer(key)
+			} else {
+				client.Logger.Error("Cannot add bundle", zap.Error(err))
+				// TODO: what to do? For now, lets skip it
+				continue
+			}
+		}
+
+		if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
+			buf = publish(key, buf)
+		}
+
+		if added == buffer.TooMuch {
+			added, err = buf.AddBundle(bundle)
+			if err != nil {
+				if errors.Is(err, &buffer.NotAcceptingError{}) {
+					buf = getBuffer(key)
+				} else {
+					client.Logger.Error("Cannot add bundle", zap.Error(err))
+					continue
+				}
+			}
+			if buf.ShouldSendSize() {
+				buf = publish(key, buf)
+			}
+			if added == buffer.TooMuch {
+				client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
+			}
+		}
+	}
+	buf.SetStatus(buffer.Ready)
+
+	// it could happen that the buffer could have been published
+	// by buffer sweeper, but it was skipped, because we have been
+	// adding events, so lets check it and publish it if needed
+	if buf.PublishAsap.Load() {
+		client.PublishBuffer(buf)
+	}
 }
 
 // IsProcessingData returns True if there are still some unprocessed data.

@@ -293,9 +293,16 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 		client.Logger.Debug("Buffer sweeping started", zap.Uint64("sweepId", i))
 		buffers := client.getBuffers()
 		for _, buf := range buffers {
-			if buf.Status().IsActive() && buf.ShouldSendAge(delay) {
-				client.PublishBuffer(buf)
-				swept.Add(1)
+			// publish buffers that are ready only
+			// if we are actively adding events into this buffer skip it for now
+			if buf.ShouldSendAge(delay) {
+				if buf.HasStatus(buffer.Ready) {
+					client.PublishBuffer(buf)
+					swept.Add(1)
+				} else {
+					buf.PublishAsap.Store(true)
+					kept.Add(1)
+				}
 			} else {
 				kept.Add(1)
 			}
