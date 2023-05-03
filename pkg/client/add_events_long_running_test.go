@@ -162,7 +162,7 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 
 	assert.True(wasSuccessful.Load())
 
+	assert.Cmp(seenKeys, expectedKeys)
 	assert.Cmp(processedEvents.Load(), ExpectedLogs, "processed items")
 	assert.Cmp(uint64(len(seenKeys)), ExpectedLogs, "unique items")
-	assert.Cmp(seenKeys, expectedKeys)
 }
