@@ -19,6 +19,7 @@ package buffer
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -88,6 +89,7 @@ type Buffer struct {
 	threads     map[string]*add_events.Thread
 	logs        map[string]*add_events.Log
 	events      []*add_events.Event
+	dataMutex   sync.Mutex
 
 	lenSessionInfo int
 	lenThreads     atomic.Int32
@@ -133,6 +135,7 @@ func (buffer *Buffer) Initialise(sessionInfo *add_events.SessionInfo) error {
 	buffer.threads = map[string]*add_events.Thread{}
 	buffer.logs = map[string]*add_events.Log{}
 	buffer.events = []*add_events.Event{}
+	buffer.dataMutex = sync.Mutex{}
 
 	buffer.createdAt.Store(time.Now().UnixNano())
 	buffer.SetStatus(Ready)
@@ -178,6 +181,8 @@ func (buffer *Buffer) SessionInfo() *add_events.SessionInfo {
 }
 
 func (buffer *Buffer) AddBundle(bundle *add_events.EventBundle) (AddStatus, error) {
+	buffer.dataMutex.Lock()
+	defer buffer.dataMutex.Unlock()
 	status := buffer.Status()
 	if status != Ready && status != AddingBundles {
 		return TooMuch, &NotAcceptingError{status: status}
