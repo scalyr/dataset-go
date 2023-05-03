@@ -19,6 +19,7 @@ package buffer
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,12 +42,17 @@ type Status uint32
 const (
 	Initialising = Status(iota)
 	Ready
+	AddingBundles
 	Publishing
 	Retrying
 )
 
 func (s Status) String() string {
-	return [...]string{"Initialising", "Ready", "Publishing", "Retrying"}[s]
+	return [...]string{"Initialising", "Ready", "AddingBundles", "Publishing", "Retrying"}[s]
+}
+
+func (s Status) IsActive() bool {
+	return s == Ready || s == AddingBundles
 }
 
 type AddStatus uint8
@@ -74,14 +80,16 @@ type Buffer struct {
 	Session string
 	Token   string
 
-	Status    atomic.Uint32
-	Attempt   uint
-	createdAt atomic.Int64
+	Attempt     uint
+	createdAt   atomic.Int64
+	status      atomic.Uint32
+	PublishAsap atomic.Bool
 
 	sessionInfo *add_events.SessionInfo
 	threads     map[string]*add_events.Thread
 	logs        map[string]*add_events.Log
 	events      []*add_events.Event
+	dataMutex   sync.Mutex
 
 	lenSessionInfo int
 	lenThreads     atomic.Int32
@@ -100,8 +108,9 @@ func NewEmptyBuffer(session string, token string) *Buffer {
 		Id:           id,
 		Session:      session,
 		Token:        token,
-		Status:       atomic.Uint32{},
+		status:       atomic.Uint32{},
 		Attempt:      0,
+		PublishAsap:  atomic.Bool{},
 		countThreads: atomic.Int32{},
 		countLogs:    atomic.Int32{},
 		countEvents:  atomic.Int32{},
@@ -119,16 +128,17 @@ func NewBuffer(session string, token string, sessionInfo *add_events.SessionInfo
 }
 
 func (buffer *Buffer) Initialise(sessionInfo *add_events.SessionInfo) error {
-	status := Status(buffer.Status.Load())
+	status := buffer.Status()
 	if status != Initialising {
 		panic(fmt.Sprintf("NewBuffer was already initialised: %s", status))
 	}
 	buffer.threads = map[string]*add_events.Thread{}
 	buffer.logs = map[string]*add_events.Log{}
 	buffer.events = []*add_events.Event{}
+	buffer.dataMutex = sync.Mutex{}
 
 	buffer.createdAt.Store(time.Now().UnixNano())
-	buffer.Status.Store(uint32(Ready))
+	buffer.SetStatus(Ready)
 
 	err := buffer.SetSessionInfo(sessionInfo)
 	if err != nil {
@@ -171,8 +181,10 @@ func (buffer *Buffer) SessionInfo() *add_events.SessionInfo {
 }
 
 func (buffer *Buffer) AddBundle(bundle *add_events.EventBundle) (AddStatus, error) {
-	status := Status(buffer.Status.Load())
-	if status != Ready {
+	buffer.dataMutex.Lock()
+	defer buffer.dataMutex.Unlock()
+	status := buffer.Status()
+	if status != Ready && status != AddingBundles {
 		return TooMuch, &NotAcceptingError{status: status}
 	}
 	// append thread
@@ -404,7 +416,7 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 	res := []zap.Field{
 		zap.String("uuid", buffer.Id.String()),
 		zap.String("session", buffer.Session),
-		zap.Uint32("status", buffer.Status.Load()),
+		zap.String("status", buffer.Status().String()),
 		zap.Uint("attempt", buffer.Attempt),
 		zap.Int32("logs", buffer.countLogs.Load()),
 		zap.Int32("threads", buffer.countThreads.Load()),
@@ -415,4 +427,16 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 	}
 	res = append(res, fields...)
 	return res
+}
+
+func (buffer *Buffer) SetStatus(status Status) {
+	buffer.status.Store(uint32(status))
+}
+
+func (buffer *Buffer) Status() Status {
+	return Status(buffer.status.Load())
+}
+
+func (buffer *Buffer) HasStatus(status Status) bool {
+	return buffer.status.Load() == uint32(status)
 }
