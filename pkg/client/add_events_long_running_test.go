@@ -131,7 +131,18 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 				Ts:     fmt.Sprintf("%d", time.Now().Nanosecond()),
 				Attrs:  attrs,
 			}
-			eventBundle := &add_events.EventBundle{Event: event, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+
+			thread := &add_events.Thread{
+				Id:   "5",
+				Name: "fred",
+			}
+			log := &add_events.Log{
+				Id: "LO",
+				Attrs: map[string]interface{}{
+					"key": strings.Repeat("A", rand.Intn(200)),
+				},
+			}
+			eventBundle := &add_events.EventBundle{Event: event, Thread: thread, Log: log}
 
 			batch = append(batch, eventBundle)
 			expectedKeys[key] = 1
