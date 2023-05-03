@@ -50,6 +50,10 @@ func (s Status) String() string {
 	return [...]string{"Initialising", "Ready", "AddingBundles", "Publishing", "Retrying"}[s]
 }
 
+func (s Status) IsActive() bool {
+	return s == Ready || s == AddingBundles
+}
+
 type AddStatus uint8
 
 const (
@@ -418,14 +422,14 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 	return res
 }
 
-func (buffer *Buffer) HasStatus(status Status) bool {
-	return buffer.status.Load() == uint32(status)
-}
-
 func (buffer *Buffer) SetStatus(status Status) {
 	buffer.status.Store(uint32(status))
 }
 
 func (buffer *Buffer) Status() Status {
 	return Status(buffer.status.Load())
+}
+
+func (buffer *Buffer) HasStatus(status Status) bool {
+	return buffer.status.Load() == uint32(status)
 }

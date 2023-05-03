@@ -139,14 +139,19 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 
 func (client *DataSetClient) Buffer(key string, info *add_events.SessionInfo) *buffer.Buffer {
 	session := fmt.Sprintf("%s-%s", client.Id, key)
-	// get buf so we can start using it
+	// lock client.buffer so we can manipulate it safely
 	client.buffersMutex.Lock()
 	defer client.buffersMutex.Unlock()
+
+	// find the buffer
 	buf, found := client.buffer[session]
 	if !found {
+		// if it's not there, initialize it
 		buf = buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 		client.initBuffer(buf, info)
 		client.buffer[session] = buf
+
+		// create subscriber, so all the upcoming buffers are processed as well
 		client.AddEventsSubscriber(session)
 	}
 
@@ -278,6 +283,7 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 	client.Logger.Info("Starting buffer sweeper with delay", zap.Duration("delay", delay))
 	for i := uint64(0); ; i++ {
+		// if everything was finished, there is no need to run buffer sweeper
 		if client.finished.Load() {
 			client.Logger.Info("Stopping buffer sweeper", zap.Uint64("sweepId", i))
 			break
@@ -285,9 +291,9 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 		kept := atomic.Uint64{}
 		swept := atomic.Uint64{}
 		client.Logger.Debug("Buffer sweeping started", zap.Uint64("sweepId", i))
-		buffers := client.buffer
+		buffers := client.getBuffers()
 		for _, buf := range buffers {
-			if buf.HasStatus(buffer.Ready) && buf.ShouldSendAge(delay) {
+			if buf.Status().IsActive() && buf.ShouldSendAge(delay) {
 				client.PublishBuffer(buf)
 				swept.Add(1)
 			} else {
@@ -314,11 +320,21 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 }
 
 func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) {
+	if buf.HasStatus(buffer.Publishing) {
+		// buffer is already publishing, this should not happen
+		// so lets skip it
+		client.Logger.Warn("Buffer is already beeing published", buf.ZapStats()...)
+		return
+	}
+
+	// we are manipulating with client.buffer, so lets lock it
 	client.buffersMutex.Lock()
 	defer client.buffersMutex.Unlock()
 	originalStatus := buf.Status()
 	buf.SetStatus(buffer.Publishing)
-	if originalStatus == buffer.Ready || originalStatus == buffer.AddingBundles {
+
+	// if the buffer is being used, lets create new one as replacement
+	if originalStatus.IsActive() {
 		newBuf := buffer.NewEmptyBuffer(buf.Session, buf.Token)
 		client.Logger.Debug(
 			"Removing buffer for session",
