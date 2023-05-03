@@ -55,12 +55,15 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	for key, bundles := range grouped {
 
 		buf := client.Buffer(key, client.SessionInfo)
+		// change state to mark that bundles are being added
+		buf.SetStatus(buffer.AddingBundles)
 
 		for _, bundle := range bundles {
 			added, err := buf.AddBundle(bundle)
 			if err != nil {
 				if errors.Is(err, &buffer.NotAcceptingError{}) {
 					buf = client.Buffer(key, client.SessionInfo)
+					buf.SetStatus(buffer.AddingBundles)
 				} else {
 					client.Logger.Error("Cannot add bundle", zap.Error(err))
 					// TODO: what to do? For now, lets skip it
@@ -71,6 +74,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 			if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
 				client.PublishBuffer(buf)
 				buf = client.Buffer(key, client.SessionInfo)
+				buf.SetStatus(buffer.AddingBundles)
 			}
 
 			if added == buffer.TooMuch {
@@ -78,6 +82,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 				if err != nil {
 					if errors.Is(err, &buffer.NotAcceptingError{}) {
 						buf = client.Buffer(key, client.SessionInfo)
+						buf.SetStatus(buffer.AddingBundles)
 					} else {
 						client.Logger.Error("Cannot add bundle", zap.Error(err))
 						continue
@@ -92,6 +97,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 				}
 			}
 		}
+		buf.SetStatus(buffer.Ready)
 	}
 
 	return nil
@@ -223,14 +229,19 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 }
 
 func (client *DataSetClient) SendAllAddEventsBuffers() {
+	buffers := client.getBuffers()
 	client.Logger.Debug("Send all AddEvents buffers")
-	client.buffer.Range(func(k, v interface{}) bool {
-		buf, ok := v.(*buffer.Buffer)
-		if ok {
-			client.PublishBuffer(buf)
-		} else {
-			client.Logger.Error("Unable to convert message to buffer")
-		}
-		return true
-	})
+	for _, buf := range buffers {
+		client.PublishBuffer(buf)
+	}
+}
+
+func (client *DataSetClient) getBuffers() []*buffer.Buffer {
+	client.buffersMutex.Lock()
+	defer client.buffersMutex.Unlock()
+	buffers := make([]*buffer.Buffer, 0)
+	for _, buf := range client.buffer {
+		buffers = append(buffers, buf)
+	}
+	return buffers
 }

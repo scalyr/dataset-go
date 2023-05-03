@@ -24,9 +24,9 @@ endif
 
 GO_BUILD_TAGS=""
 GOTEST_OPT?= -race -timeout 300s -parallel 4 -count=1 --tags=$(GO_BUILD_TAGS)
-GOTEST_INTEGRATION_OPT?= -race -timeout 360s -parallel 4
+GOTEST_LONG_RUNNING_OPT?= -race -timeout 360s -parallel 4 -count=1 -tags=long_running,$(GO_BUILD_TAGS)
 GOTEST_OPT_WITH_COVERAGE = $(GOTEST_OPT) -coverprofile=coverage.txt -covermode=atomic
-GOTEST_OPT_WITH_INTEGRATION=$(GOTEST_INTEGRATION_OPT) -tags=integration,$(GO_BUILD_TAGS) -run=Integration -coverprofile=integration-coverage.txt -covermode=atomic
+GOTEST_OPT_WITH_COVERAGE_LONG_RUNNING=$(GOTEST_LONG_RUNNING_OPT) -coverprofile=coverage.txt -covermode=atomic
 GOCMD?= go
 GOTEST=$(GOCMD) test
 
@@ -45,8 +45,15 @@ build:
 	echo "Done"
 
 .PHONY: test
-test:
+test: test-all
+
+.PHONY: test-unit
+test-unit:
 	$(GOTEST) $(GOTEST_OPT) ./...
+
+.PHONY: test-all
+test-all:
+	$(GOTEST) $(GOTEST_LONG_RUNNING_OPT) ./...
 
 .PHONY: test-many-times
 test-many-times:
@@ -63,6 +70,15 @@ test-many-times:
 
 
 .PHONY: coverage
-coverage:
+coverage: coverage-all
+
+.PHONY: coverage-unit
+coverage-unit:
 	$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE) ./...
+	$(GOCMD) tool cover -html=coverage.txt -o coverage.html
+
+
+.PHONY: coverage-all
+coverage-all:
+	$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE_LONG_RUNNING) ./...
 	$(GOCMD) tool cover -html=coverage.txt -o coverage.html

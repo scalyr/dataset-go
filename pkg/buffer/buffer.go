@@ -41,12 +41,13 @@ type Status uint32
 const (
 	Initialising = Status(iota)
 	Ready
+	AddingBundles
 	Publishing
 	Retrying
 )
 
 func (s Status) String() string {
-	return [...]string{"Initialising", "Ready", "Publishing", "Retrying"}[s]
+	return [...]string{"Initialising", "Ready", "AddingBundles", "Publishing", "Retrying"}[s]
 }
 
 type AddStatus uint8
@@ -74,9 +75,9 @@ type Buffer struct {
 	Session string
 	Token   string
 
-	Status    atomic.Uint32
 	Attempt   uint
 	createdAt atomic.Int64
+	status    atomic.Uint32
 
 	sessionInfo *add_events.SessionInfo
 	threads     map[string]*add_events.Thread
@@ -100,7 +101,7 @@ func NewEmptyBuffer(session string, token string) *Buffer {
 		Id:           id,
 		Session:      session,
 		Token:        token,
-		Status:       atomic.Uint32{},
+		status:       atomic.Uint32{},
 		Attempt:      0,
 		countThreads: atomic.Int32{},
 		countLogs:    atomic.Int32{},
@@ -119,7 +120,7 @@ func NewBuffer(session string, token string, sessionInfo *add_events.SessionInfo
 }
 
 func (buffer *Buffer) Initialise(sessionInfo *add_events.SessionInfo) error {
-	status := Status(buffer.Status.Load())
+	status := buffer.Status()
 	if status != Initialising {
 		panic(fmt.Sprintf("NewBuffer was already initialised: %s", status))
 	}
@@ -128,7 +129,7 @@ func (buffer *Buffer) Initialise(sessionInfo *add_events.SessionInfo) error {
 	buffer.events = []*add_events.Event{}
 
 	buffer.createdAt.Store(time.Now().UnixNano())
-	buffer.Status.Store(uint32(Ready))
+	buffer.SetStatus(Ready)
 
 	err := buffer.SetSessionInfo(sessionInfo)
 	if err != nil {
@@ -171,8 +172,8 @@ func (buffer *Buffer) SessionInfo() *add_events.SessionInfo {
 }
 
 func (buffer *Buffer) AddBundle(bundle *add_events.EventBundle) (AddStatus, error) {
-	status := Status(buffer.Status.Load())
-	if status != Ready {
+	status := buffer.Status()
+	if status != Ready && status != AddingBundles {
 		return TooMuch, &NotAcceptingError{status: status}
 	}
 	// append thread
@@ -404,7 +405,7 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 	res := []zap.Field{
 		zap.String("uuid", buffer.Id.String()),
 		zap.String("session", buffer.Session),
-		zap.Uint32("status", buffer.Status.Load()),
+		zap.String("status", buffer.Status().String()),
 		zap.Uint("attempt", buffer.Attempt),
 		zap.Int32("logs", buffer.countLogs.Load()),
 		zap.Int32("threads", buffer.countThreads.Load()),
@@ -415,4 +416,16 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 	}
 	res = append(res, fields...)
 	return res
+}
+
+func (buffer *Buffer) HasStatus(status Status) bool {
+	return buffer.status.Load() == uint32(status)
+}
+
+func (buffer *Buffer) SetStatus(status Status) {
+	buffer.status.Store(uint32(status))
+}
+
+func (buffer *Buffer) Status() Status {
+	return Status(buffer.status.Load())
 }
