@@ -329,7 +329,6 @@ func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) {
 
 	// we are manipulating with client.buffer, so lets lock it
 	client.buffersMutex.Lock()
-	defer client.buffersMutex.Unlock()
 	originalStatus := buf.Status()
 	buf.SetStatus(buffer.Publishing)
 
@@ -346,6 +345,8 @@ func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) {
 		client.initBuffer(newBuf, buf.SessionInfo())
 		client.buffer[buf.Session] = newBuf
 	}
+
+	client.buffersMutex.Unlock()
 	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
 
 	// publish buffer so it can be sent
