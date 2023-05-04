@@ -46,23 +46,24 @@ func IsRetryableStatus(status uint32) bool {
 }
 
 type DataSetClient struct {
-	Id               uuid.UUID
-	Config           *config.DataSetConfig
-	Client           *http.Client
-	SessionInfo      *add_events.SessionInfo
-	buffer           map[string]*buffer.Buffer
-	buffersEnqueued  atomic.Uint64
-	buffersProcessed atomic.Uint64
-	buffersMutex     sync.Mutex
-	PubSub           *pubsub.PubSub
-	workers          sync.WaitGroup
-	LastHttpStatus   atomic.Uint32
-	lastError        error
-	lastErrorMu      sync.RWMutex
-	retryAfter       time.Time
-	retryAfterMu     sync.RWMutex
-	finished         atomic.Bool
-	Logger           *zap.Logger
+	Id                  uuid.UUID
+	Config              *config.DataSetConfig
+	Client              *http.Client
+	SessionInfo         *add_events.SessionInfo
+	buffer              map[string]*buffer.Buffer
+	buffersEnqueued     atomic.Uint64
+	buffersProcessed    atomic.Uint64
+	buffersMutex        sync.Mutex
+	PubSub              *pubsub.PubSub
+	workers             sync.WaitGroup
+	LastHttpStatus      atomic.Uint32
+	lastError           error
+	lastErrorMu         sync.RWMutex
+	retryAfter          time.Time
+	retryAfterMu        sync.RWMutex
+	finished            atomic.Bool
+	Logger              *zap.Logger
+	AddBundleInProgress atomic.Int64
 }
 
 func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
@@ -96,21 +97,22 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		return nil, fmt.Errorf("it was not possible to generate UUID: %w", err)
 	}
 	dataClient := &DataSetClient{
-		Id:               id,
-		Config:           cfg,
-		Client:           client,
-		buffer:           make(map[string]*buffer.Buffer),
-		buffersEnqueued:  atomic.Uint64{},
-		buffersProcessed: atomic.Uint64{},
-		buffersMutex:     sync.Mutex{},
-		PubSub:           pubsub.New(0),
-		workers:          sync.WaitGroup{},
-		LastHttpStatus:   atomic.Uint32{},
-		retryAfter:       time.Now(),
-		retryAfterMu:     sync.RWMutex{},
-		lastErrorMu:      sync.RWMutex{},
-		Logger:           logger,
-		finished:         atomic.Bool{},
+		Id:                  id,
+		Config:              cfg,
+		Client:              client,
+		buffer:              make(map[string]*buffer.Buffer),
+		buffersEnqueued:     atomic.Uint64{},
+		buffersProcessed:    atomic.Uint64{},
+		buffersMutex:        sync.Mutex{},
+		PubSub:              pubsub.New(0),
+		workers:             sync.WaitGroup{},
+		LastHttpStatus:      atomic.Uint32{},
+		retryAfter:          time.Now(),
+		retryAfterMu:        sync.RWMutex{},
+		lastErrorMu:         sync.RWMutex{},
+		Logger:              logger,
+		finished:            atomic.Bool{},
+		AddBundleInProgress: atomic.Int64{},
 	}
 
 	if cfg.MaxBufferDelay > 0 {
@@ -145,12 +147,13 @@ func (client *DataSetClient) Buffer(key string, info *add_events.SessionInfo) *b
 
 	// find the buffer
 	buf, found := client.buffer[session]
-	if !found {
+	if !found || buf == nil {
 		// if it's not there, initialize it
 		buf = buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 		client.initBuffer(buf, info)
 		client.buffer[session] = buf
-
+	}
+	if !found {
 		// create subscriber, so all the upcoming buffers are processed as well
 		client.AddEventsSubscriber(session)
 	}
@@ -295,15 +298,19 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 		for _, buf := range buffers {
 			// publish buffers that are ready only
 			// if we are actively adding events into this buffer skip it for now
+			buf.RLock()
 			if buf.ShouldSendAge(delay) {
 				if buf.HasStatus(buffer.Ready) {
+					buf.RUnlock()
 					client.PublishBuffer(buf)
 					swept.Add(1)
 				} else {
+					buf.RUnlock()
 					buf.PublishAsap.Store(true)
 					kept.Add(1)
 				}
 			} else {
+				buf.RUnlock()
 				kept.Add(1)
 			}
 		}
@@ -327,33 +334,26 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 }
 
 func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) {
-	if buf.HasStatus(buffer.Publishing) {
-		// buffer is already publishing, this should not happen
-		// so lets skip it
-		client.Logger.Warn("Buffer is already beeing published", buf.ZapStats()...)
-		return
+	buf.Lock()
+	defer buf.Unlock()
+	client.buffersMutex.Lock()
+	defer client.buffersMutex.Unlock()
+	if !buf.HasStatus(buffer.Ready) && !buf.HasStatus(buffer.Retrying) && !buf.HasStatus(buffer.ReadyForPublishing) {
+		panic(fmt.Sprintf("Illegal buffer %s - status: %s; session: %s; length: %d", buf.Id, buf.Status(), buf.Session, buf.BufferLengths()))
 	}
 
-	// we are manipulating with client.buffer, so lets lock it
-	client.buffersMutex.Lock()
-	originalStatus := buf.Status()
 	buf.SetStatus(buffer.Publishing)
 
 	// if the buffer is being used, lets create new one as replacement
-	if originalStatus.IsActive() {
-		newBuf := buffer.NewEmptyBuffer(buf.Session, buf.Token)
+	storedBuf := client.buffer[buf.Session]
+	if storedBuf != nil && storedBuf.Id == buf.Id {
 		client.Logger.Debug(
 			"Removing buffer for session",
 			zap.String("session", buf.Session),
 			zap.String("oldUuid", buf.Id.String()),
-			zap.String("newUuid", newBuf.Id.String()),
 		)
-
-		client.initBuffer(newBuf, buf.SessionInfo())
-		client.buffer[buf.Session] = newBuf
+		client.buffer[buf.Session] = nil
 	}
-
-	client.buffersMutex.Unlock()
 	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
 
 	// publish buffer so it can be sent

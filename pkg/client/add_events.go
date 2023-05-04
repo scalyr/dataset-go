@@ -42,6 +42,12 @@ Wrapper around: https://app.scalyr.com/help/api#addEvents
 // It returns an error if the batch was not accepted.
 // When you want to finish processing, call Finish method.
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
+	client.AddBundleInProgress.Add(+1)
+	client.AddBundleInProgress.Add(-1)
+
+	if client.AddBundleInProgress.Load() > 1 {
+		panic(fmt.Sprintf("AddBundleInProgress: %d", client.AddBundleInProgress.Load()))
+	}
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
 	}
@@ -63,14 +69,17 @@ func (client *DataSetClient) addBundle(key string, bundles []*add_events.EventBu
 	// this function has to be called from AddEvents - inner loop
 	// it assumes that all bundles have the same key
 	getBuffer := func(key string) *buffer.Buffer {
-		buf := client.Buffer(key, client.SessionInfo)
+		buff := client.Buffer(key, client.SessionInfo)
+		buff.Lock()
 		// change state to mark that bundles are being added
-		buf.SetStatus(buffer.AddingBundles)
-		return buf
+		buff.SetStatus(buffer.AddingBundles)
+		return buff
 	}
 
-	publish := func(key string, buf *buffer.Buffer) *buffer.Buffer {
-		client.PublishBuffer(buf)
+	publish := func(key string, buff *buffer.Buffer) *buffer.Buffer {
+		buff.SetStatus(buffer.ReadyForPublishing)
+		buff.Unlock()
+		client.PublishBuffer(buff)
 		return getBuffer(key)
 	}
 
@@ -78,7 +87,7 @@ func (client *DataSetClient) addBundle(key string, bundles []*add_events.EventBu
 	for _, bundle := range bundles {
 		added, err := buf.AddBundle(bundle)
 		if err != nil {
-			if errors.Is(err, &buffer.NotAcceptingError{}) {
+			if errors.Is(err, buffer.NotAcceptingError{Status: buffer.Publishing}) {
 				buf = getBuffer(key)
 			} else {
 				client.Logger.Error("Cannot add bundle", zap.Error(err))
@@ -94,7 +103,7 @@ func (client *DataSetClient) addBundle(key string, bundles []*add_events.EventBu
 		if added == buffer.TooMuch {
 			added, err = buf.AddBundle(bundle)
 			if err != nil {
-				if errors.Is(err, &buffer.NotAcceptingError{}) {
+				if errors.Is(err, buffer.NotAcceptingError{Status: buffer.Publishing}) {
 					buf = getBuffer(key)
 				} else {
 					client.Logger.Error("Cannot add bundle", zap.Error(err))
@@ -110,6 +119,7 @@ func (client *DataSetClient) addBundle(key string, bundles []*add_events.EventBu
 		}
 	}
 	buf.SetStatus(buffer.Ready)
+	buf.Unlock()
 
 	// it could happen that the buffer could have been published
 	// by buffer sweeper, but it was skipped, because we have been
@@ -257,7 +267,9 @@ func (client *DataSetClient) getBuffers() []*buffer.Buffer {
 	defer client.buffersMutex.Unlock()
 	buffers := make([]*buffer.Buffer, 0)
 	for _, buf := range client.buffer {
-		buffers = append(buffers, buf)
+		if buf != nil {
+			buffers = append(buffers, buf)
+		}
 	}
 	return buffers
 }

@@ -43,12 +43,20 @@ const (
 	Initialising = Status(iota)
 	Ready
 	AddingBundles
+	ReadyForPublishing
 	Publishing
 	Retrying
 )
 
 func (s Status) String() string {
-	return [...]string{"Initialising", "Ready", "AddingBundles", "Publishing", "Retrying"}[s]
+	return [...]string{
+		"Initialising",
+		"Ready",
+		"AddingBundles",
+		"ReadyForPublishing",
+		"Publishing",
+		"Retrying",
+	}[s]
 }
 
 func (s Status) IsActive() bool {
@@ -68,11 +76,11 @@ func (s AddStatus) String() string {
 }
 
 type NotAcceptingError struct {
-	status Status
+	Status Status
 }
 
-func (e *NotAcceptingError) Error() string {
-	return fmt.Sprintf("Buffer has status %s => not accepting new events", e.status)
+func (e NotAcceptingError) Error() string {
+	return fmt.Sprintf("Buffer has Status %s => not accepting new events", e.Status)
 }
 
 type Buffer struct {
@@ -89,7 +97,7 @@ type Buffer struct {
 	threads     map[string]*add_events.Thread
 	logs        map[string]*add_events.Log
 	events      []*add_events.Event
-	dataMutex   sync.Mutex
+	dataMutex   sync.RWMutex
 
 	lenSessionInfo int
 	lenThreads     atomic.Int32
@@ -135,7 +143,7 @@ func (buffer *Buffer) Initialise(sessionInfo *add_events.SessionInfo) error {
 	buffer.threads = map[string]*add_events.Thread{}
 	buffer.logs = map[string]*add_events.Log{}
 	buffer.events = []*add_events.Event{}
-	buffer.dataMutex = sync.Mutex{}
+	buffer.dataMutex = sync.RWMutex{}
 
 	buffer.createdAt.Store(time.Now().UnixNano())
 	buffer.SetStatus(Ready)
@@ -181,11 +189,9 @@ func (buffer *Buffer) SessionInfo() *add_events.SessionInfo {
 }
 
 func (buffer *Buffer) AddBundle(bundle *add_events.EventBundle) (AddStatus, error) {
-	buffer.dataMutex.Lock()
-	defer buffer.dataMutex.Unlock()
 	status := buffer.Status()
 	if status != Ready && status != AddingBundles {
-		return TooMuch, &NotAcceptingError{status: status}
+		return TooMuch, NotAcceptingError{Status: status}
 	}
 	// append thread
 	addT, errT := buffer.addThread(bundle.Thread)
@@ -416,7 +422,7 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 	res := []zap.Field{
 		zap.String("uuid", buffer.Id.String()),
 		zap.String("session", buffer.Session),
-		zap.String("status", buffer.Status().String()),
+		zap.String("Status", buffer.Status().String()),
 		zap.Uint("attempt", buffer.Attempt),
 		zap.Int32("logs", buffer.countLogs.Load()),
 		zap.Int32("threads", buffer.countThreads.Load()),
@@ -439,4 +445,20 @@ func (buffer *Buffer) Status() Status {
 
 func (buffer *Buffer) HasStatus(status Status) bool {
 	return buffer.status.Load() == uint32(status)
+}
+
+func (buffer *Buffer) Lock() {
+	buffer.dataMutex.Lock()
+}
+
+func (buffer *Buffer) RLock() {
+	buffer.dataMutex.RLock()
+}
+
+func (buffer *Buffer) Unlock() {
+	buffer.dataMutex.Unlock()
+}
+
+func (buffer *Buffer) RUnlock() {
+	buffer.dataMutex.RUnlock()
 }

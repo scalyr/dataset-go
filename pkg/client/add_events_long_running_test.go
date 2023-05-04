@@ -70,6 +70,7 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 		MaxPayloadB:    1000,
 		MaxBufferDelay: time.Duration(MaxDelayMs) * time.Millisecond,
 		RetryBase:      RetryBase,
+		GroupBy:        []string{"group_by"},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 
@@ -139,7 +140,8 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 			log := &add_events.Log{
 				Id: "LO",
 				Attrs: map[string]interface{}{
-					"key": strings.Repeat("A", rand.Intn(200)),
+					"key":      strings.Repeat("A", rand.Intn(200)),
+					"group_by": fmt.Sprintf("%d", rand.Intn(5)),
 				},
 			}
 			eventBundle := &add_events.EventBundle{Event: event, Thread: thread, Log: log}
