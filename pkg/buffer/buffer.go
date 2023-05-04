@@ -46,6 +46,7 @@ const (
 	ReadyForPublishing
 	Publishing
 	Retrying
+	Done
 )
 
 func (s Status) String() string {
@@ -56,6 +57,7 @@ func (s Status) String() string {
 		"ReadyForPublishing",
 		"Publishing",
 		"Retrying",
+		"Done",
 	}[s]
 }
 

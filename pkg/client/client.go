@@ -147,15 +147,21 @@ func (client *DataSetClient) Buffer(key string, info *add_events.SessionInfo) *b
 
 	// find the buffer
 	buf, found := client.buffer[session]
-	if !found || buf == nil {
-		// if it's not there, initialize it
+	if !found {
 		buf = buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 		client.initBuffer(buf, info)
 		client.buffer[session] = buf
-	}
-	if !found {
+
 		// create subscriber, so all the upcoming buffers are processed as well
 		client.AddEventsSubscriber(session)
+	} else {
+		// buffer was found, so lets check it's status
+		if buf.Status() >= buffer.Publishing {
+			// create new buffer
+			buf = buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
+			client.initBuffer(buf, info)
+			client.buffer[session] = buf
+		}
 	}
 
 	return buf
@@ -270,6 +276,8 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 
 					// and publish message back
 					client.PublishBuffer(buf)
+				} else {
+					buf.SetStatus(buffer.Done)
 				}
 			} else {
 				client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
@@ -338,8 +346,21 @@ func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) {
 	defer buf.Unlock()
 	client.buffersMutex.Lock()
 	defer client.buffersMutex.Unlock()
+	if buf.HasStatus(buffer.Publishing) {
+		return
+	}
 	if !buf.HasStatus(buffer.Ready) && !buf.HasStatus(buffer.Retrying) && !buf.HasStatus(buffer.ReadyForPublishing) {
-		panic(fmt.Sprintf("Illegal buffer %s - status: %s; session: %s; length: %d", buf.Id, buf.Status(), buf.Session, buf.BufferLengths()))
+		storedBuf, found := client.buffer[buf.Session]
+		panic(fmt.Sprintf(
+			"Illegal buffer %s - status: %s; session: %s; length: %d; found: %t; stored: %v",
+			buf.Id,
+			buf.Status(),
+			buf.Session,
+			buf.BufferLengths(),
+			found,
+			storedBuf,
+		),
+		)
 	}
 
 	buf.SetStatus(buffer.Publishing)
@@ -352,7 +373,6 @@ func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) {
 			zap.String("session", buf.Session),
 			zap.String("oldUuid", buf.Id.String()),
 		)
-		client.buffer[buf.Session] = nil
 	}
 	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
 

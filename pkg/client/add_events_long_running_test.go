@@ -64,15 +64,15 @@ func TestSuiteAddEventsLongRunning(t *testing.T) {
 
 func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, require *td.T) {
 	const MaxDelayMs = 200
-	config := &config.DataSetConfig{
+	cfg := &config.DataSetConfig{
 		Endpoint:       "https://example.com",
 		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
 		MaxPayloadB:    1000,
 		MaxBufferDelay: time.Duration(MaxDelayMs) * time.Millisecond,
 		RetryBase:      RetryBase,
-		GroupBy:        []string{"group_by"},
+		// GroupBy:        []string{"group_by"},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, _ := NewClient(cfg, &http.Client{}, zap.Must(zap.NewDevelopment()))
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
