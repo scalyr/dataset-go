@@ -63,6 +63,7 @@ type DataSetClient struct {
 	retryAfterMu     sync.RWMutex
 	finished         atomic.Bool
 	Logger           *zap.Logger
+	addEventsMutex   sync.Mutex
 }
 
 func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
@@ -111,6 +112,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		lastErrorMu:      sync.RWMutex{},
 		Logger:           logger,
 		finished:         atomic.Bool{},
+		addEventsMutex:   sync.Mutex{},
 	}
 
 	if cfg.MaxBufferDelay > 0 {
