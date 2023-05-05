@@ -52,6 +52,8 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 
 	grouped := client.groupBundles(bundles)
 
+	client.addEventsMutex.Lock()
+	defer client.addEventsMutex.Unlock()
 	for key, bundles := range grouped {
 		client.addBundle(key, bundles)
 	}
