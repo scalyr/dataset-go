@@ -43,7 +43,7 @@ Wrapper around: https://app.scalyr.com/help/api#addEvents
 // When you want to finish processing, call Finish method.
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
 	client.AddBundleInProgress.Add(+1)
-	client.AddBundleInProgress.Add(-1)
+	defer client.AddBundleInProgress.Add(-1)
 
 	if client.AddBundleInProgress.Load() > 1 {
 		panic(fmt.Sprintf("AddBundleInProgress: %d", client.AddBundleInProgress.Load()))
