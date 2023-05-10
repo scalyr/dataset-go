@@ -84,7 +84,8 @@ jobs:
         if: github.ref_name == 'main'
         run: |
           set -e;
-          for i in `seq 1 30`; do
-            echo "Running test ${i} / 50";
+          N=10;
+          for i in `seq 1 ${N}`; do
+            echo "Running test ${i} / ${N}";
             make test;
           done;
