@@ -23,7 +23,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/scalyr/dataset-go/pkg/api/response"
@@ -91,14 +90,14 @@ func (client *DataSetClient) newChannelForEvents(key string) {
 }
 
 func (client *DataSetClient) newBufferForEvents(key string) {
-	client.buffersAllMutex.Lock()
-	defer client.buffersAllMutex.Unlock()
-
 	session := fmt.Sprintf("%s-%s", client.Id, key)
-	client.buffersMutex[session] = &sync.Mutex{}
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 	client.initBuffer(buf, client.SessionInfo)
+
+	client.buffersAllMutex.Lock()
 	client.buffer[session] = buf
+	defer client.buffersAllMutex.Unlock()
+
 	// create subscriber, so all the upcoming buffers are processed as well
 	client.addEventsSubscriber(session)
 }

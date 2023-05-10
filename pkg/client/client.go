@@ -51,7 +51,6 @@ type DataSetClient struct {
 	Client            *http.Client
 	SessionInfo       *add_events.SessionInfo
 	buffer            map[string]*buffer.Buffer
-	buffersMutex      map[string]*sync.Mutex
 	buffersAllMutex   sync.Mutex
 	buffersEnqueued   atomic.Uint64
 	buffersProcessed  atomic.Uint64
@@ -108,7 +107,6 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		buffer:            make(map[string]*buffer.Buffer),
 		buffersEnqueued:   atomic.Uint64{},
 		buffersProcessed:  atomic.Uint64{},
-		buffersMutex:      make(map[string]*sync.Mutex),
 		buffersAllMutex:   sync.Mutex{},
 		BuffersPubSub:     pubsub.New(0),
 		workers:           sync.WaitGroup{},
@@ -151,8 +149,6 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 
 func (client *DataSetClient) getBuffer(key string) *buffer.Buffer {
 	session := fmt.Sprintf("%s-%s", client.Id, key)
-	client.buffersMutex[session].Lock()
-	defer client.buffersMutex[session].Unlock()
 	client.buffersAllMutex.Lock()
 	defer client.buffersAllMutex.Unlock()
 	return client.buffer[session]
@@ -335,9 +331,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	}
 
 	// we are manipulating with client.buffer, so lets lock it
-	client.buffersMutex[buf.Session].Lock()
 	client.buffersAllMutex.Lock()
-	defer client.buffersAllMutex.Unlock()
 	originalStatus := buf.Status()
 	buf.SetStatus(buffer.Publishing)
 
@@ -354,8 +348,8 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 		client.initBuffer(newBuf, buf.SessionInfo())
 		client.buffer[buf.Session] = newBuf
 	}
+	client.buffersAllMutex.Unlock()
 
-	client.buffersMutex[buf.Session].Unlock()
 	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
 
 	// publish buffer so it can be sent
