@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.0.6 Fix Concurency Issues
+
+* OpenTelemetry can call AddEvents multiple times in parallel. Lets use another Pub/Sub to publish events into topic and then consume them independently.
+
 ## 0.0.5 Quick Hack
 
 * OpenTelemetry can call AddEvents multiple times in parallel. Add lock so only one of them is in progress in any given time.
