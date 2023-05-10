@@ -91,13 +91,16 @@ func (client *DataSetClient) newChannelForEvents(key string) {
 }
 
 func (client *DataSetClient) newBufferForEvents(key string) {
+	client.buffersAllMutex.Lock()
+	defer client.buffersAllMutex.Unlock()
+
 	session := fmt.Sprintf("%s-%s", client.Id, key)
 	client.buffersMutex[session] = &sync.Mutex{}
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 	client.initBuffer(buf, client.SessionInfo)
 	client.buffer[session] = buf
 	// create subscriber, so all the upcoming buffers are processed as well
-	client.AddEventsSubscriber(session)
+	client.addEventsSubscriber(session)
 }
 
 func (client *DataSetClient) ListenAndSendBundlesForKey(key string, ch chan interface{}) {
@@ -108,14 +111,14 @@ func (client *DataSetClient) ListenAndSendBundlesForKey(key string, ch chan inte
 	// this function has to be called from AddEvents - inner loop
 	// it assumes that all bundles have the same key
 	getBuffer := func(key string) *buffer.Buffer {
-		buf := client.Buffer(key)
+		buf := client.getBuffer(key)
 		// change state to mark that bundles are being added
 		buf.SetStatus(buffer.AddingBundles)
 		return buf
 	}
 
 	publish := func(key string, buf *buffer.Buffer) *buffer.Buffer {
-		client.PublishBuffer(buf)
+		client.publishBuffer(buf)
 		return getBuffer(key)
 	}
 
@@ -163,7 +166,7 @@ func (client *DataSetClient) ListenAndSendBundlesForKey(key string, ch chan inte
 				// by buffer sweeper, but it was skipped, because we have been
 				// adding events, so lets check it and publish it if needed
 				if buf.PublishAsap.Load() {
-					client.PublishBuffer(buf)
+					client.publishBuffer(buf)
 				}
 			}
 		}
@@ -325,12 +328,14 @@ func (client *DataSetClient) SendAllAddEventsBuffers() {
 	buffers := client.getBuffers()
 	client.Logger.Debug("Send all AddEvents buffers")
 	for _, buf := range buffers {
-		client.PublishBuffer(buf)
+		client.publishBuffer(buf)
 	}
 }
 
 func (client *DataSetClient) getBuffers() []*buffer.Buffer {
 	buffers := make([]*buffer.Buffer, 0)
+	client.buffersAllMutex.Lock()
+	defer client.buffersAllMutex.Unlock()
 	for _, buf := range client.buffer {
 		buffers = append(buffers, buf)
 	}

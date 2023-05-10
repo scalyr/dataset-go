@@ -52,6 +52,7 @@ type DataSetClient struct {
 	SessionInfo       *add_events.SessionInfo
 	buffer            map[string]*buffer.Buffer
 	buffersMutex      map[string]*sync.Mutex
+	buffersAllMutex   sync.Mutex
 	buffersEnqueued   atomic.Uint64
 	buffersProcessed  atomic.Uint64
 	BuffersPubSub     *pubsub.PubSub
@@ -108,6 +109,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		buffersEnqueued:   atomic.Uint64{},
 		buffersProcessed:  atomic.Uint64{},
 		buffersMutex:      make(map[string]*sync.Mutex),
+		buffersAllMutex:   sync.Mutex{},
 		BuffersPubSub:     pubsub.New(0),
 		workers:           sync.WaitGroup{},
 		LastHttpStatus:    atomic.Uint32{},
@@ -147,10 +149,12 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 	return dataClient, nil
 }
 
-func (client *DataSetClient) Buffer(key string) *buffer.Buffer {
+func (client *DataSetClient) getBuffer(key string) *buffer.Buffer {
 	session := fmt.Sprintf("%s-%s", client.Id, key)
 	client.buffersMutex[session].Lock()
 	defer client.buffersMutex[session].Unlock()
+	client.buffersAllMutex.Lock()
+	defer client.buffersAllMutex.Unlock()
 	return client.buffer[session]
 }
 
@@ -173,14 +177,14 @@ func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.Se
 	}
 }
 
-func (client *DataSetClient) AddEventsSubscriber(session string) {
+func (client *DataSetClient) addEventsSubscriber(session string) {
 	ch := client.BuffersPubSub.Sub(session)
 	go (func(session string, ch chan interface{}) {
-		client.ListenAndSendBufferForSession(session, ch)
+		client.listenAndSendBufferForSession(session, ch)
 	})(session, ch)
 }
 
-func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch chan interface{}) {
+func (client *DataSetClient) listenAndSendBufferForSession(session string, ch chan interface{}) {
 	client.Logger.Info("Listening to submit buffer",
 		zap.String("session", session),
 	)
@@ -206,7 +210,7 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 					continue
 				}
 				response, err := client.SendAddEventsBuffer(buf)
-				client.SetLastError(err)
+				client.setLastError(err)
 				lastHttpStatus := uint32(0)
 				if err != nil {
 					client.Logger.Error("unable to send addEvents buffers", zap.Error(err))
@@ -254,7 +258,7 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 						// retry after is specified, we should update
 						// client state, so we do not send more requests
 
-						client.SetRetryAfter(retryAfter)
+						client.setRetryAfter(retryAfter)
 					}
 
 					client.sleep(retryAfter, buf)
@@ -262,7 +266,7 @@ func (client *DataSetClient) ListenAndSendBufferForSession(session string, ch ch
 					buf.Attempt++
 
 					// and publish message back
-					client.PublishBuffer(buf)
+					client.publishBuffer(buf)
 				}
 			} else {
 				client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
@@ -293,7 +297,7 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 			// if we are actively adding events into this buffer skip it for now
 			if buf.ShouldSendAge(delay) {
 				if buf.HasStatus(buffer.Ready) {
-					client.PublishBuffer(buf)
+					client.publishBuffer(buf)
 					swept.Add(1)
 				} else {
 					buf.PublishAsap.Store(true)
@@ -322,7 +326,7 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 	}
 }
 
-func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) {
+func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	if buf.HasStatus(buffer.Publishing) {
 		// buffer is already publishing, this should not happen
 		// so lets skip it
@@ -332,6 +336,8 @@ func (client *DataSetClient) PublishBuffer(buf *buffer.Buffer) {
 
 	// we are manipulating with client.buffer, so lets lock it
 	client.buffersMutex[buf.Session].Lock()
+	client.buffersAllMutex.Lock()
+	defer client.buffersAllMutex.Unlock()
 	originalStatus := buf.Status()
 	buf.SetStatus(buffer.Publishing)
 
@@ -426,7 +432,7 @@ func (client *DataSetClient) LastError() error {
 	return client.lastError
 }
 
-func (client *DataSetClient) SetLastError(err error) {
+func (client *DataSetClient) setLastError(err error) {
 	client.lastErrorMu.Lock()
 	defer client.lastErrorMu.Unlock()
 	client.lastError = err
@@ -438,7 +444,7 @@ func (client *DataSetClient) RetryAfter() time.Time {
 	return client.retryAfter
 }
 
-func (client *DataSetClient) SetRetryAfter(t time.Time) {
+func (client *DataSetClient) setRetryAfter(t time.Time) {
 	client.retryAfterMu.Lock()
 	defer client.retryAfterMu.Unlock()
 	client.retryAfter = t
