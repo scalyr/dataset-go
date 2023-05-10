@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/scalyr/dataset-go/pkg/api/response"
@@ -50,22 +51,64 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		return fmt.Errorf("AddEvents - reject batch: %w", errR)
 	}
 
-	grouped := client.groupBundles(bundles)
+	// first, figure out which keys are part of the batch
+	seenKeys := make(map[string]bool)
+	for _, bundle := range bundles {
+		key := bundle.Key(client.Config.GroupBy)
+		seenKeys[key] = true
+	}
 
+	// then create all subscribers
+	// add subscriber for events by key
+	// add subscriber for buffer by key
 	client.addEventsMutex.Lock()
 	defer client.addEventsMutex.Unlock()
-	for key, bundles := range grouped {
-		client.addBundle(key, bundles)
+	for key := range seenKeys {
+		_, found := client.addEventsChannels[key]
+		if !found {
+			client.newBufferForEvents(key)
+
+			client.newChannelForEvents(key)
+		}
+	}
+
+	// and as last step - publish them
+	for _, bundle := range bundles {
+		key := bundle.Key(client.Config.GroupBy)
+		client.eventsEnqueued.Add(1)
+		client.addEventsPubSub.Pub(bundle, key)
 	}
 
 	return nil
 }
 
-func (client *DataSetClient) addBundle(key string, bundles []*add_events.EventBundle) {
+func (client *DataSetClient) newChannelForEvents(key string) {
+	ch := client.addEventsPubSub.Sub(key)
+	client.addEventsChannels[key] = ch
+	go (func(session string, ch chan interface{}) {
+		client.ListenAndSendBundlesForKey(key, ch)
+	})(key, ch)
+}
+
+func (client *DataSetClient) newBufferForEvents(key string) {
+	session := fmt.Sprintf("%s-%s", client.Id, key)
+	client.buffersMutex[session] = &sync.Mutex{}
+	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
+	client.initBuffer(buf, client.SessionInfo)
+	client.buffer[session] = buf
+	// create subscriber, so all the upcoming buffers are processed as well
+	client.AddEventsSubscriber(session)
+}
+
+func (client *DataSetClient) ListenAndSendBundlesForKey(key string, ch chan interface{}) {
+	client.Logger.Info("Listening to events with key",
+		zap.String("key", key),
+	)
+
 	// this function has to be called from AddEvents - inner loop
 	// it assumes that all bundles have the same key
 	getBuffer := func(key string) *buffer.Buffer {
-		buf := client.Buffer(key, client.SessionInfo)
+		buf := client.Buffer(key)
 		// change state to mark that bundles are being added
 		buf.SetStatus(buffer.AddingBundles)
 		return buf
@@ -76,55 +119,67 @@ func (client *DataSetClient) addBundle(key string, bundles []*add_events.EventBu
 		return getBuffer(key)
 	}
 
-	buf := getBuffer(key)
-	for _, bundle := range bundles {
-		added, err := buf.AddBundle(bundle)
-		if err != nil {
-			if errors.Is(err, &buffer.NotAcceptingError{}) {
-				buf = getBuffer(key)
-			} else {
-				client.Logger.Error("Cannot add bundle", zap.Error(err))
-				// TODO: what to do? For now, lets skip it
-				continue
-			}
-		}
+	for processedMsgCnt := 0; ; processedMsgCnt++ {
+		if msg, ok := <-ch; ok {
+			bundle, ok := msg.(*add_events.EventBundle)
+			if ok {
+				buf := getBuffer(key)
+				added, err := buf.AddBundle(bundle)
+				if err != nil {
+					if errors.Is(err, &buffer.NotAcceptingError{}) {
+						buf = getBuffer(key)
+					} else {
+						client.Logger.Error("Cannot add bundle", zap.Error(err))
+						// TODO: what to do? For now, lets skip it
+						continue
+					}
+				}
 
-		if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
-			buf = publish(key, buf)
-		}
+				if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
+					buf = publish(key, buf)
+				}
 
-		if added == buffer.TooMuch {
-			added, err = buf.AddBundle(bundle)
-			if err != nil {
-				if errors.Is(err, &buffer.NotAcceptingError{}) {
-					buf = getBuffer(key)
-				} else {
-					client.Logger.Error("Cannot add bundle", zap.Error(err))
-					continue
+				if added == buffer.TooMuch {
+					added, err = buf.AddBundle(bundle)
+					if err != nil {
+						if errors.Is(err, &buffer.NotAcceptingError{}) {
+							buf = getBuffer(key)
+						} else {
+							client.Logger.Error("Cannot add bundle", zap.Error(err))
+							continue
+						}
+					}
+					if buf.ShouldSendSize() {
+						buf = publish(key, buf)
+					}
+					if added == buffer.TooMuch {
+						client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
+					}
+				}
+				client.eventsProcessed.Add(1)
+
+				buf.SetStatus(buffer.Ready)
+				// it could happen that the buffer could have been published
+				// by buffer sweeper, but it was skipped, because we have been
+				// adding events, so lets check it and publish it if needed
+				if buf.PublishAsap.Load() {
+					client.PublishBuffer(buf)
 				}
 			}
-			if buf.ShouldSendSize() {
-				buf = publish(key, buf)
-			}
-			if added == buffer.TooMuch {
-				client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
-			}
 		}
-	}
-	buf.SetStatus(buffer.Ready)
-
-	// it could happen that the buffer could have been published
-	// by buffer sweeper, but it was skipped, because we have been
-	// adding events, so lets check it and publish it if needed
-	if buf.PublishAsap.Load() {
-		client.PublishBuffer(buf)
 	}
 }
 
-// IsProcessingData returns True if there are still some unprocessed data.
+// IsProcessingBuffers returns True if there are still some unprocessed data.
 // False otherwise.
-func (client *DataSetClient) IsProcessingData() bool {
+func (client *DataSetClient) IsProcessingBuffers() bool {
 	return client.buffersEnqueued.Load() > client.buffersProcessed.Load()
+}
+
+// IsProcessingBuffers returns True if there are still some unprocessed data.
+// False otherwise.
+func (client *DataSetClient) IsProcessingEvents() bool {
+	return client.eventsEnqueued.Load() > client.eventsProcessed.Load()
 }
 
 // Finish stops processing of new events and waits until all the data that are
@@ -133,17 +188,37 @@ func (client *DataSetClient) Finish() {
 	// mark as finished
 	client.finished.Store(true)
 
+	// do wait for all events to be processed
+	i := 1
+	for client.IsProcessingEvents() {
+		client.Logger.Info(
+			"Not all events has been processed",
+			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
+			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
+		)
+		time.Sleep(client.Config.RetryBase)
+		i++
+		if i > 50 {
+			break
+		}
+	}
+
 	// send all buffers
 	client.SendAllAddEventsBuffers()
 
-	// do wait for everything to be processed
-	for client.IsProcessingData() {
+	// do wait for all buffers to be processed
+	j := 0
+	for client.IsProcessingBuffers() {
 		client.Logger.Info(
 			"Not all buffers has been processed",
 			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
 			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 		)
 		time.Sleep(client.Config.RetryBase)
+		j++
+		if j > 50 {
+			break
+		}
 	}
 	client.workers.Wait()
 
@@ -187,23 +262,23 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 	return response, err
 }
 
-func (client *DataSetClient) groupBundles(bundles []*add_events.EventBundle) map[string][]*add_events.EventBundle {
-	grouped := make(map[string][]*add_events.EventBundle)
-
-	// group batch
-	for _, bundle := range bundles {
-		if bundle == nil {
-			continue
-		}
-		key := bundle.Key(client.Config.GroupBy)
-		grouped[key] = append(grouped[key], bundle)
-	}
-	client.Logger.Debug("Batch was grouped",
-		zap.Int("batchSize", len(bundles)),
-		zap.Int("distinctStreams", len(grouped)),
-	)
-	return grouped
-}
+//func (client *DataSetClient) groupBundles(bundles []*add_events.EventBundle) map[string][]*add_events.EventBundle {
+//	grouped := make(map[string][]*add_events.EventBundle)
+//
+//	// group batch
+//	for _, bundle := range bundles {
+//		if bundle == nil {
+//			continue
+//		}
+//		key := bundle.Key(client.Config.GroupBy)
+//		grouped[key] = append(grouped[key], bundle)
+//	}
+//	client.Logger.Debug("Batch was grouped",
+//		zap.Int("batchSize", len(bundles)),
+//		zap.Int("distinctStreams", len(grouped)),
+//	)
+//	return grouped
+//}
 
 func (client *DataSetClient) apiCall(req *http.Request, response response.SetResponseObj) error {
 	resp, err := client.Client.Do(req)
@@ -255,8 +330,6 @@ func (client *DataSetClient) SendAllAddEventsBuffers() {
 }
 
 func (client *DataSetClient) getBuffers() []*buffer.Buffer {
-	client.buffersMutex.Lock()
-	defer client.buffersMutex.Unlock()
 	buffers := make([]*buffer.Buffer, 0)
 	for _, buf := range client.buffer {
 		buffers = append(buffers, buf)
