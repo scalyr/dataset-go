@@ -200,6 +200,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err1 := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	time.Sleep(RetryBase)
 	sc.SendAllAddEventsBuffers()
 
 	// wait for processing
@@ -207,7 +208,7 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 		if wasSuccessful.Load() {
 			break
 		}
-		time.Sleep(time.Second)
+		time.Sleep(RetryBase)
 	}
 
 	assert.True(wasSuccessful.Load())

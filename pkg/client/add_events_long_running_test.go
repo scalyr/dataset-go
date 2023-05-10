@@ -81,7 +81,7 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 	const ExpectedLogs = uint64(MaxBatchCount * LogsPerBatch)
 
 	attempt := atomic.Uint64{}
-	wasSuccessful := atomic.Bool{}
+	lastCall := atomic.Int64{}
 	processedEvents := atomic.Uint64{}
 	seenKeys := make(map[string]int64)
 	expectedKeys := make(map[string]int64)
@@ -110,7 +110,8 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 				mutex.Unlock()
 			}
 
-			wasSuccessful.Store(true)
+			lastCall.Store(time.Now().UnixNano())
+			time.Sleep(time.Duration(MaxDelayMs*0.7) * time.Millisecond)
 			return httpmock.NewJsonResponse(200, map[string]interface{}{
 				"status":       "success",
 				"bytesCharged": 42,
@@ -149,18 +150,21 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 		}
 
 		assert.Logf("Consuming batch: %d", bI)
-		err := sc.AddEvents(batch)
-		assert.Nil(err)
-
-		time.Sleep(time.Duration(MaxDelayMs*0.7) * time.Millisecond)
+		go (func(batch []*add_events.EventBundle) {
+			err := sc.AddEvents(batch)
+			assert.Nil(err)
+		})(batch)
+		time.Sleep(time.Duration(MaxDelayMs*0.3) * time.Millisecond)
 	}
 
-	time.Sleep(time.Second)
 	sc.Finish()
 
-	time.Sleep(2 * time.Second)
-
-	assert.True(wasSuccessful.Load())
+	for {
+		if time.Now().UnixNano()-lastCall.Load() > 5*time.Second.Nanoseconds() {
+			break
+		}
+		time.Sleep(time.Second)
+	}
 
 	assert.Cmp(seenKeys, expectedKeys)
 	assert.Cmp(processedEvents.Load(), ExpectedLogs, "processed items")
