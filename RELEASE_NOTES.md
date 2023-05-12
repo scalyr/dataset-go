@@ -3,6 +3,7 @@
 ## 0.0.7 Add more retry parameters
 
 * To make OpenTelemetry configuration more stable we have introduced more retry options. We have to propagate them to the library.
+* Fix another data race caused by `client.worker`.
 
 ## 0.0.6 Fix Concurrency Issues
 
