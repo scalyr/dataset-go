@@ -55,7 +55,6 @@ type DataSetClient struct {
 	buffersEnqueued   atomic.Uint64
 	buffersProcessed  atomic.Uint64
 	BuffersPubSub     *pubsub.PubSub
-	workers           sync.WaitGroup
 	LastHttpStatus    atomic.Uint32
 	lastError         error
 	lastErrorMu       sync.RWMutex
@@ -109,7 +108,6 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		buffersProcessed:  atomic.Uint64{},
 		buffersAllMutex:   sync.Mutex{},
 		BuffersPubSub:     pubsub.New(0),
-		workers:           sync.WaitGroup{},
 		LastHttpStatus:    atomic.Uint32{},
 		retryAfter:        time.Now(),
 		retryAfterMu:      sync.RWMutex{},
@@ -194,14 +192,12 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 			)
 			buf, ok := msg.(*buffer.Buffer)
-			client.workers.Add(1)
 			if ok {
 				for client.RetryAfter().After(time.Now()) {
 					client.sleep(client.RetryAfter(), buf)
 				}
 				if !buf.HasEvents() {
 					client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
-					client.workers.Done()
 					client.buffersProcessed.Add(1)
 					continue
 				}
@@ -216,7 +212,6 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 					} else {
 						lastHttpStatus = HttpErrorHasErrorMessage
 						client.LastHttpStatus.Store(lastHttpStatus)
-						client.workers.Done()
 						client.buffersProcessed.Add(1)
 						continue
 					}
@@ -267,7 +262,6 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 			} else {
 				client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
 			}
-			client.workers.Done()
 			client.buffersProcessed.Add(1)
 		} else {
 			client.buffersProcessed.Add(1)

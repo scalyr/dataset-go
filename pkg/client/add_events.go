@@ -172,13 +172,13 @@ func (client *DataSetClient) ListenAndSendBundlesForKey(key string, ch chan inte
 	}
 }
 
-// IsProcessingBuffers returns True if there are still some unprocessed data.
+// IsProcessingBuffers returns True if there are still some unprocessed buffers.
 // False otherwise.
 func (client *DataSetClient) IsProcessingBuffers() bool {
 	return client.buffersEnqueued.Load() > client.buffersProcessed.Load()
 }
 
-// IsProcessingBuffers returns True if there are still some unprocessed data.
+// IsProcessingEvents returns True if there are still some unprocessed events.
 // False otherwise.
 func (client *DataSetClient) IsProcessingEvents() bool {
 	return client.eventsEnqueued.Load() > client.eventsProcessed.Load()
@@ -222,7 +222,6 @@ func (client *DataSetClient) Finish() {
 			break
 		}
 	}
-	client.workers.Wait()
 
 	client.Logger.Info("All buffers have been processed")
 }
