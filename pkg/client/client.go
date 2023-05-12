@@ -55,7 +55,6 @@ type DataSetClient struct {
 	buffersEnqueued   atomic.Uint64
 	buffersProcessed  atomic.Uint64
 	BuffersPubSub     *pubsub.PubSub
-	workers           sync.WaitGroup
 	LastHttpStatus    atomic.Uint32
 	lastError         error
 	lastErrorMu       sync.RWMutex
@@ -82,16 +81,16 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		zap.Bool("hasTokenReadLog", len(cfg.Tokens.ReadLog) > 0),
 		zap.Bool("hasTokenWriteConfig", len(cfg.Tokens.WriteConfig) > 0),
 		zap.Bool("hasTokenReadConfig", len(cfg.Tokens.ReadConfig) > 0),
-		zap.Int64("maxBufferDelay", cfg.MaxBufferDelay.Milliseconds()),
-		zap.Int64("maxPayloadB", cfg.MaxPayloadB),
-		zap.Strings("groupBy", cfg.GroupBy),
-		zap.Int64("retryBase", cfg.RetryBase.Milliseconds()),
+		zap.Duration("bufferMaxDelay", cfg.BufferSettings.MaxLifetime),
+		zap.Int("bufferMaxSize", cfg.BufferSettings.MaxSize),
+		zap.Strings("bufferGroupBy", cfg.BufferSettings.GroupBy),
+		zap.Duration("bufferRetryInitialInterval", cfg.BufferSettings.RetryInitialInterval),
 	)
 
-	if cfg.MaxPayloadB > buffer.LimitBufferSize {
+	if cfg.BufferSettings.MaxSize > buffer.LimitBufferSize {
 		return nil, fmt.Errorf(
 			"maxPayloadB has value %d which is more than %d",
-			cfg.MaxPayloadB,
+			cfg.BufferSettings.MaxSize,
 			buffer.LimitBufferSize,
 		)
 	}
@@ -109,7 +108,6 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		buffersProcessed:  atomic.Uint64{},
 		buffersAllMutex:   sync.Mutex{},
 		BuffersPubSub:     pubsub.New(0),
-		workers:           sync.WaitGroup{},
 		LastHttpStatus:    atomic.Uint32{},
 		retryAfter:        time.Now(),
 		retryAfterMu:      sync.RWMutex{},
@@ -123,15 +121,15 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		addEventsChannels: make(map[string]chan interface{}),
 	}
 
-	if cfg.MaxBufferDelay > 0 {
+	if cfg.BufferSettings.MaxLifetime > 0 {
 		dataClient.Logger.Info("MaxBufferDelay is positive => send buffers regularly",
-			zap.Int64("maxDelayMs", cfg.MaxBufferDelay.Milliseconds()),
+			zap.Int64("maxDelayMs", cfg.BufferSettings.MaxLifetime.Milliseconds()),
 		)
-		go dataClient.bufferSweeper(cfg.MaxBufferDelay)
+		go dataClient.bufferSweeper(cfg.BufferSettings.MaxLifetime)
 	} else {
 		dataClient.Logger.Warn(
 			"MaxBufferDelay is not positive => do NOT send buffers regularly",
-			zap.Int64("maxDelayMs", cfg.MaxBufferDelay.Milliseconds()),
+			zap.Duration("maxDelay", cfg.BufferSettings.MaxLifetime),
 		)
 	}
 
@@ -194,14 +192,12 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 			)
 			buf, ok := msg.(*buffer.Buffer)
-			client.workers.Add(1)
 			if ok {
 				for client.RetryAfter().After(time.Now()) {
 					client.sleep(client.RetryAfter(), buf)
 				}
 				if !buf.HasEvents() {
 					client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
-					client.workers.Done()
 					client.buffersProcessed.Add(1)
 					continue
 				}
@@ -216,7 +212,6 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 					} else {
 						lastHttpStatus = HttpErrorHasErrorMessage
 						client.LastHttpStatus.Store(lastHttpStatus)
-						client.workers.Done()
 						client.buffersProcessed.Add(1)
 						continue
 					}
@@ -246,8 +241,8 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 					retryAfter, specified := client.getRetryAfter(
 						response.ResponseObj,
 						time.Duration(
-							int64(buf.Attempt+1)*client.Config.RetryBase.Nanoseconds(),
-						),
+							int64(buf.Attempt+1),
+						)*client.Config.BufferSettings.RetryInitialInterval,
 					)
 
 					if specified {
@@ -267,7 +262,6 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 			} else {
 				client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
 			}
-			client.workers.Done()
 			client.buffersProcessed.Add(1)
 		} else {
 			client.buffersProcessed.Add(1)
@@ -276,8 +270,10 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 	}
 }
 
-func (client *DataSetClient) bufferSweeper(delay time.Duration) {
-	client.Logger.Info("Starting buffer sweeper with delay", zap.Duration("delay", delay))
+func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {
+	client.Logger.Info("Starting buffer sweeper with lifetime", zap.Duration("lifetime", lifetime))
+	totalKept := atomic.Uint64{}
+	totalSwept := atomic.Uint64{}
 	for i := uint64(0); ; i++ {
 		// if everything was finished, there is no need to run buffer sweeper
 		//if client.finished.Load() {
@@ -291,16 +287,19 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 		for _, buf := range buffers {
 			// publish buffers that are ready only
 			// if we are actively adding events into this buffer skip it for now
-			if buf.ShouldSendAge(delay) {
+			if buf.ShouldSendAge(lifetime) {
 				if buf.HasStatus(buffer.Ready) {
 					client.publishBuffer(buf)
 					swept.Add(1)
+					totalSwept.Add(1)
 				} else {
 					buf.PublishAsap.Store(true)
 					kept.Add(1)
+					totalKept.Add(1)
 				}
 			} else {
 				kept.Add(1)
+				totalKept.Add(1)
 			}
 		}
 
@@ -313,12 +312,15 @@ func (client *DataSetClient) bufferSweeper(delay time.Duration) {
 			lvl,
 			"Buffer sweeping finished",
 			zap.Uint64("sweepId", i),
-			zap.Uint64("kept", kept.Load()),
-			zap.Uint64("swept", swept.Load()),
-			zap.Uint64("total", kept.Load()+swept.Load()),
+			zap.Uint64("nowKept", kept.Load()),
+			zap.Uint64("nowSwept", swept.Load()),
+			zap.Uint64("nowCombined", kept.Load()+swept.Load()),
+			zap.Uint64("totalKept", totalKept.Load()),
+			zap.Uint64("totalSwept", totalSwept.Load()),
+			zap.Uint64("totalCombined", totalKept.Load()+totalSwept.Load()),
 		)
 
-		time.Sleep(delay)
+		time.Sleep(lifetime)
 	}
 }
 

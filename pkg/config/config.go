@@ -17,9 +17,8 @@
 package config
 
 import (
-	"time"
-
 	"github.com/scalyr/dataset-go/internal/pkg/util"
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
 
 type DataSetTokens struct {
@@ -32,10 +31,7 @@ type DataSetTokens struct {
 type DataSetConfig struct {
 	Endpoint       string
 	Tokens         DataSetTokens
-	MaxBufferDelay time.Duration
-	MaxPayloadB    int64
-	GroupBy        []string
-	RetryBase      time.Duration
+	BufferSettings buffer_config.DataSetBufferSettings
 }
 
 type DataSetConfigOption func(*DataSetConfig) error
@@ -54,30 +50,9 @@ func WithTokens(tokens DataSetTokens) DataSetConfigOption {
 	}
 }
 
-func WithMaxBufferDelay(maxBufferDelay time.Duration) DataSetConfigOption {
+func WithBufferSettings(bufferSettings buffer_config.DataSetBufferSettings) DataSetConfigOption {
 	return func(c *DataSetConfig) error {
-		c.MaxBufferDelay = maxBufferDelay
-		return nil
-	}
-}
-
-func WithMaxPayloadB(maxPayloadB int64) DataSetConfigOption {
-	return func(c *DataSetConfig) error {
-		c.MaxPayloadB = maxPayloadB
-		return nil
-	}
-}
-
-func WithRetryBase(retryBase time.Duration) DataSetConfigOption {
-	return func(c *DataSetConfig) error {
-		c.RetryBase = retryBase
-		return nil
-	}
-}
-
-func WithGroupBy(groupBy []string) DataSetConfigOption {
-	return func(c *DataSetConfig) error {
-		c.GroupBy = groupBy
+		c.BufferSettings = bufferSettings
 		return nil
 	}
 }

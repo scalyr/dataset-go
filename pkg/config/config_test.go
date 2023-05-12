@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
+
 	"github.com/maxatome/go-testdeep/helpers/tdsuite"
 	"github.com/maxatome/go-testdeep/td"
 )
@@ -73,63 +75,99 @@ func (s *SuiteConfig) TestDataConfigFromEnvTokens(assert, require *td.T) {
 }
 
 func (s *SuiteConfig) TestDataConfigWithOptions(assert, require *td.T) {
+	bufCfg, errB := buffer_config.New(
+		buffer_config.WithMaxLifetime(3*time.Second),
+		buffer_config.WithMaxSize(12345),
+		buffer_config.WithGroupBy([]string{"aaa", "bbb"}),
+		buffer_config.WithRetryInitialInterval(8*time.Second),
+		buffer_config.WithRetryMaxInterval(30*time.Second),
+		buffer_config.WithRetryMaxElapsedTime(10*time.Minute),
+	)
+	assert.CmpNoError(errB)
 	cfg5, err := New(
 		WithEndpoint("https://fooOpt"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt"}),
-		WithMaxBufferDelay(3*time.Second),
-		WithMaxPayloadB(int64(12345)),
-		WithRetryBase(2*time.Minute),
-		WithGroupBy([]string{"fooOpt", "barOpt"}),
+		WithBufferSettings(*bufCfg),
 	)
 	assert.CmpNoError(err)
 	assert.Cmp(cfg5.Endpoint, "https://fooOpt")
 	assert.Cmp(cfg5.Tokens, DataSetTokens{WriteLog: "writeLogOpt"})
-	assert.Cmp(cfg5.MaxBufferDelay, 3*time.Second)
-	assert.Cmp(cfg5.MaxPayloadB, int64(12345))
-	assert.Cmp(cfg5.RetryBase, 2*time.Minute)
-	assert.Cmp(cfg5.GroupBy, []string{"fooOpt", "barOpt"})
+	assert.Cmp(cfg5.BufferSettings, buffer_config.DataSetBufferSettings{
+		MaxLifetime:          3 * time.Second,
+		MaxSize:              12345,
+		GroupBy:              []string{"aaa", "bbb"},
+		RetryInitialInterval: 8 * time.Second,
+		RetryMaxInterval:     30 * time.Second,
+		RetryMaxElapsedTime:  10 * time.Minute,
+	})
 }
 
 func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
+	bufCfg, errB := buffer_config.New(
+		buffer_config.WithMaxLifetime(3*time.Second),
+		buffer_config.WithMaxSize(12345),
+		buffer_config.WithGroupBy([]string{"aaa", "bbb"}),
+		buffer_config.WithRetryInitialInterval(8*time.Second),
+		buffer_config.WithRetryMaxInterval(30*time.Second),
+		buffer_config.WithRetryMaxElapsedTime(10*time.Minute),
+	)
+	assert.CmpNoError(errB)
+
 	cfg5, err := New(
 		WithEndpoint("https://fooOpt1"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt1"}),
-		WithMaxBufferDelay(3*time.Second),
-		WithMaxPayloadB(int64(123451)),
-		WithRetryBase(2*time.Minute),
-		WithGroupBy([]string{"fooOpt1", "barOpt1"}),
+		WithBufferSettings(*bufCfg),
 	)
 	assert.CmpNoError(err)
 	assert.Cmp(cfg5.Endpoint, "https://fooOpt1")
 	assert.Cmp(cfg5.Tokens, DataSetTokens{WriteLog: "writeLogOpt1"})
-	assert.Cmp(cfg5.MaxBufferDelay, 3*time.Second)
-	assert.Cmp(cfg5.MaxPayloadB, int64(123451))
-	assert.Cmp(cfg5.RetryBase, 2*time.Minute)
-	assert.Cmp(cfg5.GroupBy, []string{"fooOpt1", "barOpt1"})
+	assert.Cmp(cfg5.BufferSettings, buffer_config.DataSetBufferSettings{
+		MaxLifetime:          3 * time.Second,
+		MaxSize:              12345,
+		GroupBy:              []string{"aaa", "bbb"},
+		RetryInitialInterval: 8 * time.Second,
+		RetryMaxInterval:     30 * time.Second,
+		RetryMaxElapsedTime:  10 * time.Minute,
+	})
+
+	bufCfg2, errB := buffer_config.New(
+		buffer_config.WithMaxLifetime(23*time.Second),
+		buffer_config.WithMaxSize(212345),
+		buffer_config.WithGroupBy([]string{"2aaa", "2bbb"}),
+		buffer_config.WithRetryInitialInterval(28*time.Second),
+		buffer_config.WithRetryMaxInterval(230*time.Second),
+		buffer_config.WithRetryMaxElapsedTime(210*time.Minute),
+	)
+	assert.CmpNoError(errB)
 
 	cfg6, err := cfg5.Update(
 		WithEndpoint("https://fooOpt2"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt2"}),
-		WithMaxBufferDelay(5*time.Second),
-		WithMaxPayloadB(int64(54321)),
-		WithRetryBase(4*time.Minute),
-		WithGroupBy([]string{"fooOpt2", "barOpt2"}),
+		WithBufferSettings(*bufCfg2),
 	)
 	assert.CmpNoError(err)
 
 	// original config is unchanged
 	assert.Cmp(cfg5.Endpoint, "https://fooOpt1")
 	assert.Cmp(cfg5.Tokens, DataSetTokens{WriteLog: "writeLogOpt1"})
-	assert.Cmp(cfg5.MaxBufferDelay, 3*time.Second)
-	assert.Cmp(cfg5.MaxPayloadB, int64(123451))
-	assert.Cmp(cfg5.RetryBase, 2*time.Minute)
-	assert.Cmp(cfg5.GroupBy, []string{"fooOpt1", "barOpt1"})
+	assert.Cmp(cfg5.BufferSettings, buffer_config.DataSetBufferSettings{
+		MaxLifetime:          3 * time.Second,
+		MaxSize:              12345,
+		GroupBy:              []string{"aaa", "bbb"},
+		RetryInitialInterval: 8 * time.Second,
+		RetryMaxInterval:     30 * time.Second,
+		RetryMaxElapsedTime:  10 * time.Minute,
+	})
 
 	// new config is changed
 	assert.Cmp(cfg6.Endpoint, "https://fooOpt2")
 	assert.Cmp(cfg6.Tokens, DataSetTokens{WriteLog: "writeLogOpt2"})
-	assert.Cmp(cfg6.MaxBufferDelay, 5*time.Second)
-	assert.Cmp(cfg6.MaxPayloadB, int64(54321))
-	assert.Cmp(cfg6.RetryBase, 4*time.Minute)
-	assert.Cmp(cfg6.GroupBy, []string{"fooOpt2", "barOpt2"})
+	assert.Cmp(cfg6.BufferSettings, buffer_config.DataSetBufferSettings{
+		MaxLifetime:          23 * time.Second,
+		MaxSize:              212345,
+		GroupBy:              []string{"2aaa", "2bbb"},
+		RetryInitialInterval: 28 * time.Second,
+		RetryMaxInterval:     230 * time.Second,
+		RetryMaxElapsedTime:  210 * time.Minute,
+	})
 }

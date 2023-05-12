@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
+
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/scalyr/dataset-go/pkg/client"
 	"github.com/scalyr/dataset-go/pkg/config"
@@ -41,7 +43,14 @@ func main() {
 	}
 
 	// manually adjust delay between sending buffers
-	cfg, err = cfg.Update(config.WithMaxBufferDelay(3 * BatchDelay))
+	bufCfg, err := cfg.BufferSettings.Update(buffer_config.WithMaxLifetime(3 * BatchDelay))
+	if err != nil {
+		panic(err)
+	}
+	cfg, err = cfg.Update(config.WithBufferSettings(*bufCfg))
+	if err != nil {
+		panic(err)
+	}
 
 	// build client
 	cl, err := client.NewClient(
