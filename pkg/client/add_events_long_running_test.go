@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
+
 	"github.com/maxatome/go-testdeep/helpers/tdsuite"
 
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
@@ -65,11 +67,13 @@ func TestSuiteAddEventsLongRunning(t *testing.T) {
 func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, require *td.T) {
 	const MaxDelayMs = 200
 	config := &config.DataSetConfig{
-		Endpoint:       "https://example.com",
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		MaxPayloadB:    1000,
-		MaxBufferDelay: time.Duration(MaxDelayMs) * time.Millisecond,
-		RetryBase:      RetryBase,
+		Endpoint: "https://example.com",
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:              1000,
+			MaxLifetime:          time.Duration(MaxDelayMs) * time.Millisecond,
+			RetryInitialInterval: RetryBase,
+		},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 

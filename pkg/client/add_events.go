@@ -53,7 +53,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// first, figure out which keys are part of the batch
 	seenKeys := make(map[string]bool)
 	for _, bundle := range bundles {
-		key := bundle.Key(client.Config.GroupBy)
+		key := bundle.Key(client.Config.BufferSettings.GroupBy)
 		seenKeys[key] = true
 	}
 
@@ -73,7 +73,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 
 	// and as last step - publish them
 	for _, bundle := range bundles {
-		key := bundle.Key(client.Config.GroupBy)
+		key := bundle.Key(client.Config.BufferSettings.GroupBy)
 		client.eventsEnqueued.Add(1)
 		client.addEventsPubSub.Pub(bundle, key)
 	}
@@ -198,7 +198,7 @@ func (client *DataSetClient) Finish() {
 			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
 			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
 		)
-		time.Sleep(client.Config.RetryBase)
+		time.Sleep(client.Config.BufferSettings.RetryInitialInterval)
 		i++
 		if i > 50 {
 			break
@@ -216,7 +216,7 @@ func (client *DataSetClient) Finish() {
 			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
 			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 		)
-		time.Sleep(client.Config.RetryBase)
+		time.Sleep(client.Config.BufferSettings.RetryInitialInterval)
 		j++
 		if j > 50 {
 			break

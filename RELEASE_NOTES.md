@@ -1,8 +1,12 @@
 # Release Notes
 
-## 0.0.6 Fix Concurency Issues
+## 0.0.7 Add more retry parameters
 
-* OpenTelemetry can call AddEvents multiple times in parallel. Lets use another Pub/Sub to publish events into topic and then consume them independently.
+* To make OpenTelemetry configuration more stable we have introduced more retry options. We have to propagate them to the library.
+
+## 0.0.6 Fix Concurrency Issues
+
+* OpenTelemetry can call AddEvents multiple times in parallel. Let's use another Pub/Sub to publish events into topic and then consume them independently.
 
 ## 0.0.5 Quick Hack
 

@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
+
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/scalyr/dataset-go/pkg/config"
 	"go.uber.org/zap"
@@ -115,11 +117,13 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 		})
 
 	config := &config.DataSetConfig{
-		Endpoint:       "https://example.com",
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		MaxPayloadB:    20,
-		MaxBufferDelay: 0,
-		RetryBase:      RetryBase,
+		Endpoint: "https://example.com",
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:              20,
+			MaxLifetime:          0,
+			RetryInitialInterval: RetryBase,
+		},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 
@@ -187,11 +191,13 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 		})
 
 	config := &config.DataSetConfig{
-		Endpoint:       "https://example.com",
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		MaxPayloadB:    20,
-		MaxBufferDelay: 0,
-		RetryBase:      RetryBase,
+		Endpoint: "https://example.com",
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:              20,
+			MaxLifetime:          0,
+			RetryInitialInterval: RetryBase,
+		},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 
@@ -273,11 +279,13 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 		})
 
 	config := &config.DataSetConfig{
-		Endpoint:       "https://example.com",
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		MaxPayloadB:    20,
-		MaxBufferDelay: 0,
-		RetryBase:      RetryBase,
+		Endpoint: "https://example.com",
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:              20,
+			MaxLifetime:          0,
+			RetryInitialInterval: RetryBase,
+		},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 
@@ -360,11 +368,13 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 		})
 
 	config := &config.DataSetConfig{
-		Endpoint:       "https://example.com",
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		MaxPayloadB:    20,
-		MaxBufferDelay: 0,
-		RetryBase:      RetryBase,
+		Endpoint: "https://example.com",
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:              20,
+			MaxLifetime:          0,
+			RetryInitialInterval: RetryBase,
+		},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 
@@ -440,11 +450,13 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 		})
 
 	config := &config.DataSetConfig{
-		Endpoint:       "https://example.com",
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		MaxPayloadB:    20,
-		MaxBufferDelay: 0,
-		RetryBase:      RetryBase,
+		Endpoint: "https://example.com",
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:              20,
+			MaxLifetime:          0,
+			RetryInitialInterval: RetryBase,
+		},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 
@@ -464,11 +476,13 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 
 func (s *SuiteAddEvents) TestAddEventsRejectAfterFinish(assert, require *td.T) {
 	config := &config.DataSetConfig{
-		Endpoint:       "https://example.com",
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		MaxPayloadB:    20,
-		MaxBufferDelay: 0,
-		RetryBase:      RetryBase,
+		Endpoint: "https://example.com",
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:              20,
+			MaxLifetime:          0,
+			RetryInitialInterval: RetryBase,
+		},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	sc.Finish()
@@ -501,11 +515,13 @@ func (s *SuiteAddEvents) TestAddEventsWithBufferSweeper(assert, require *td.T) {
 
 	sentDelay := 5 * time.Millisecond
 	config := &config.DataSetConfig{
-		Endpoint:       "https://example.com",
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		MaxPayloadB:    1000,
-		MaxBufferDelay: 2 * sentDelay,
-		RetryBase:      RetryBase,
+		Endpoint: "https://example.com",
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:              1000,
+			MaxLifetime:          2 * sentDelay,
+			RetryInitialInterval: RetryBase,
+		},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 

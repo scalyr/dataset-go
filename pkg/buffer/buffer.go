@@ -360,8 +360,8 @@ func (buffer *Buffer) ShouldSendSize() bool {
 	return buffer.countEvents.Load() > 0 && buffer.BufferLengths() > ShouldSentBufferSize
 }
 
-func (buffer *Buffer) ShouldSendAge(delay time.Duration) bool {
-	return buffer.countEvents.Load() > 0 && time.Since(time.Unix(0, buffer.createdAt.Load())) > delay
+func (buffer *Buffer) ShouldSendAge(lifetime time.Duration) bool {
+	return buffer.countEvents.Load() > 0 && time.Since(time.Unix(0, buffer.createdAt.Load())) > lifetime
 }
 
 func (buffer *Buffer) BufferLengths() int32 {
