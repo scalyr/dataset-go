@@ -18,15 +18,37 @@ package buffer_config
 
 import (
 	"time"
+
+	"github.com/cenkalti/backoff/v4"
+)
+
+const (
+	ShouldSentBufferSize = 5 * 1024 * 1024
+	LimitBufferSize      = 5*1024*1024 + 960*1024
 )
 
 type DataSetBufferSettings struct {
-	MaxLifetime          time.Duration
-	MaxSize              int
-	GroupBy              []string
-	RetryInitialInterval time.Duration
-	RetryMaxInterval     time.Duration
-	RetryMaxElapsedTime  time.Duration
+	MaxLifetime              time.Duration
+	MaxSize                  int
+	GroupBy                  []string
+	RetryRandomizationFactor float64
+	RetryMultiplier          float64
+	RetryInitialInterval     time.Duration
+	RetryMaxInterval         time.Duration
+	RetryMaxElapsedTime      time.Duration
+}
+
+func NewDefaultDataSetBufferSettings() DataSetBufferSettings {
+	return DataSetBufferSettings{
+		MaxLifetime:              5 * time.Second,
+		MaxSize:                  LimitBufferSize,
+		GroupBy:                  []string{},
+		RetryInitialInterval:     5 * time.Second,
+		RetryMaxInterval:         30 * time.Second,
+		RetryMaxElapsedTime:      300 * time.Second,
+		RetryRandomizationFactor: backoff.DefaultRandomizationFactor,
+		RetryMultiplier:          backoff.DefaultMultiplier,
+	}
 }
 
 type DataSetBufferSettingsOption func(*DataSetBufferSettings) error
@@ -55,6 +77,20 @@ func WithGroupBy(groupBy []string) DataSetBufferSettingsOption {
 func WithRetryInitialInterval(retryInitialInterval time.Duration) DataSetBufferSettingsOption {
 	return func(c *DataSetBufferSettings) error {
 		c.RetryInitialInterval = retryInitialInterval
+		return nil
+	}
+}
+
+func WithRetryMultiplier(retryMultiplier float64) DataSetBufferSettingsOption {
+	return func(c *DataSetBufferSettings) error {
+		c.RetryMultiplier = retryMultiplier
+		return nil
+	}
+}
+
+func WithRetryRandomizationFactor(retryRandomizationFactor float64) DataSetBufferSettingsOption {
+	return func(c *DataSetBufferSettings) error {
+		c.RetryRandomizationFactor = retryRandomizationFactor
 		return nil
 	}
 }

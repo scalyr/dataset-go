@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cskr/pubsub v1.0.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
