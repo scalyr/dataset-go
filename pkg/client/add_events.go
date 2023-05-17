@@ -186,7 +186,7 @@ func (client *DataSetClient) IsProcessingEvents() bool {
 
 // Finish stops processing of new events and waits until all the data that are
 // being processed are really processed.
-func (client *DataSetClient) Finish() {
+func (client *DataSetClient) Finish() error {
 	// mark as finished
 	client.finished.Store(true)
 
@@ -224,6 +224,7 @@ func (client *DataSetClient) Finish() {
 	}
 
 	client.Logger.Info("All buffers have been processed")
+	return client.lastError
 }
 
 func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, error) {

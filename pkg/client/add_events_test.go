@@ -132,7 +132,9 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
-	sc.Finish()
+	assert.CmpNoError(err)
+	err = sc.Finish()
+	assert.CmpNoError(err)
 
 	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
@@ -228,7 +230,9 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 	event2 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 22"}}
 	eventBundle2 := &add_events.EventBundle{Event: event2, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err2 := sc.AddEvents([]*add_events.EventBundle{eventBundle2})
-	sc.Finish()
+	assert.CmpNoError(err2)
+	err3 := sc.Finish()
+	assert.CmpNoError(err3)
 
 	assert.True(wasSuccessful.Load())
 	assert.Cmp(attempt.Load(), int32(3))
@@ -294,7 +298,9 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
-	sc.Finish()
+	assert.CmpNoError(err)
+	err = sc.Finish()
+	assert.CmpNoError(err)
 
 	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
@@ -383,7 +389,9 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
-	sc.Finish()
+	assert.CmpNoError(err)
+	err = sc.Finish()
+	assert.CmpNoError(err)
 
 	assert.True(wasSuccessful.Load())
 	assert.CmpNoError(err)
@@ -465,10 +473,11 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
-	sc.Finish()
+	assert.CmpNoError(err)
+	err = sc.Finish()
+	assert.CmpNoError(err)
 
 	assert.True(wasSuccessful.Load())
-	assert.CmpNoError(err)
 	assert.CmpNoError(sc.LastError())
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 1})
@@ -485,7 +494,8 @@ func (s *SuiteAddEvents) TestAddEventsRejectAfterFinish(assert, require *td.T) {
 		},
 	}
 	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
-	sc.Finish()
+	err := sc.Finish()
+	assert.CmpNoError(err)
 
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}

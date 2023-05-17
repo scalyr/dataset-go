@@ -56,6 +56,7 @@ func makeBundles() []*add_events.EventBundle {
 
 func main() {
 	logger := zap.Must(zap.NewDevelopment())
+
 	// read configuration from env variables
 	cfg, err := config.New(config.FromEnv())
 	if err != nil {
@@ -68,11 +69,14 @@ func main() {
 		panic(err)
 	}
 
-	// send all buffers when we want to finish
-	defer cl.SendAllAddEventsBuffers()
-
 	// send bundles
 	err = cl.AddEvents(makeBundles())
+	if err != nil {
+		panic(err)
+	}
+
+	// send all buffers when we want to finish
+	err = cl.Finish()
 	if err != nil {
 		panic(err)
 	}
