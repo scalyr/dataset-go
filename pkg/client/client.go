@@ -263,6 +263,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 					}
 
 					backoffDelay := expBackoff.NextBackOff()
+					client.Logger.Info("Backoff + Retries: ", zap.Int64("retryNum", retryNum), zap.Duration("backoffDelay", backoffDelay))
 					if backoffDelay == backoff.Stop {
 						// throw away the batch
 						err = fmt.Errorf("max elapsed time expired %w", err)

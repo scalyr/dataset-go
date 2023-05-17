@@ -547,3 +547,45 @@ func (s *SuiteAddEvents) TestAddEventsWithBufferSweeper(assert, require *td.T) {
 	info := httpmock.GetCallCountInfo()
 	assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": int(attempt.Load())})
 }
+
+func (s *SuiteAddEvents) TestAddEventsDoNotRetryForever(assert, require *td.T) {
+	attempt := atomic.Int32{}
+	attempt.Store(0)
+	httpmock.RegisterResponder(
+		"POST",
+		"https://example.com/api/addEvents",
+		func(req *http.Request) (*http.Response, error) {
+			attempt.Add(1)
+
+			return httpmock.NewJsonResponse(503, map[string]interface{}{
+				"status":       "error",
+				"bytesCharged": 42,
+			})
+		})
+
+	config := &config.DataSetConfig{
+		Endpoint: "https://example.com",
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:                  20,
+			MaxLifetime:              0,
+			RetryInitialInterval:     time.Second,
+			RetryMaxInterval:         time.Second,
+			RetryMaxElapsedTime:      5 * time.Second,
+			RetryMultiplier:          1.0,
+			RetryRandomizationFactor: 1.0,
+		},
+	}
+	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+
+	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+	sc.SessionInfo = sessionInfo
+	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	sc.Finish()
+
+	assert.CmpNoError(err)
+	info := httpmock.GetCallCountInfo()
+	assert.Gte(info["POST https://example.com/api/addEvents"], 3)
+}
