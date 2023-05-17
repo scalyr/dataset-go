@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
+
 	"github.com/scalyr/dataset-go/pkg/api/request"
 
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
@@ -32,12 +34,12 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	ShouldSentBufferSize = 5 * 1024 * 1024
-	LimitBufferSize      = 5*1024*1024 + 960*1024
-)
-
 type Status uint32
+
+const (
+	ShouldSentBufferSize = buffer_config.ShouldSentBufferSize
+	LimitBufferSize      = buffer_config.LimitBufferSize
+)
 
 const (
 	Initialising = Status(iota)
@@ -80,7 +82,6 @@ type Buffer struct {
 	Session string
 	Token   string
 
-	Attempt     uint
 	createdAt   atomic.Int64
 	status      atomic.Uint32
 	PublishAsap atomic.Bool
@@ -109,7 +110,6 @@ func NewEmptyBuffer(session string, token string) *Buffer {
 		Session:      session,
 		Token:        token,
 		status:       atomic.Uint32{},
-		Attempt:      0,
 		PublishAsap:  atomic.Bool{},
 		countThreads: atomic.Int32{},
 		countLogs:    atomic.Int32{},
@@ -417,7 +417,6 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 		zap.String("uuid", buffer.Id.String()),
 		zap.String("session", buffer.Session),
 		zap.String("status", buffer.Status().String()),
-		zap.Uint("attempt", buffer.Attempt),
 		zap.Int32("logs", buffer.countLogs.Load()),
 		zap.Int32("threads", buffer.countThreads.Load()),
 		zap.Int32("events", buffer.countEvents.Load()),

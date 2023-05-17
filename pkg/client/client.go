@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/scalyr/dataset-go/pkg/buffer"
 	"github.com/scalyr/dataset-go/pkg/config"
@@ -40,6 +42,10 @@ const (
 	HttpErrorCannotConnect   = 600
 	HttpErrorHasErrorMessage = 499
 )
+
+func isOkStatus(status uint32) bool {
+	return status == http.StatusOK
+}
 
 func IsRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
@@ -201,63 +207,91 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 					client.buffersProcessed.Add(1)
 					continue
 				}
-				response, err := client.SendAddEventsBuffer(buf)
-				client.setLastError(err)
-				lastHttpStatus := uint32(0)
-				if err != nil {
-					client.Logger.Error("unable to send addEvents buffers", zap.Error(err))
-					if strings.Contains(err.Error(), "Unable to send request") {
-						lastHttpStatus = HttpErrorCannotConnect
-						client.LastHttpStatus.Store(lastHttpStatus)
-					} else {
-						lastHttpStatus = HttpErrorHasErrorMessage
-						client.LastHttpStatus.Store(lastHttpStatus)
-						client.buffersProcessed.Add(1)
-						continue
-					}
+
+				// Do not use NewExponentialBackOff since it calls Reset and the code here must
+				// call Reset after changing the InitialInterval (this saves an unnecessary call to Now).
+				expBackoff := backoff.ExponentialBackOff{
+					InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
+					RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
+					Multiplier:          client.Config.BufferSettings.RetryMultiplier,
+					MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
+					MaxElapsedTime:      client.Config.BufferSettings.RetryMaxElapsedTime,
+					Stop:                backoff.Stop,
+					Clock:               backoff.SystemClock,
 				}
-				zaps := make([]zap.Field, 0)
-				if response.ResponseObj != nil {
+				expBackoff.Reset()
+				retryNum := int64(0)
+				for {
+					response, err := client.SendAddEventsBuffer(buf)
+					client.setLastError(err)
+					lastHttpStatus := uint32(0)
+					if err != nil {
+						client.Logger.Error("unable to send addEvents buffers", zap.Error(err))
+						if strings.Contains(err.Error(), "Unable to send request") {
+							lastHttpStatus = HttpErrorCannotConnect
+							client.LastHttpStatus.Store(lastHttpStatus)
+						} else {
+							lastHttpStatus = HttpErrorHasErrorMessage
+							client.LastHttpStatus.Store(lastHttpStatus)
+							client.onBufferDrop(buf, lastHttpStatus, err)
+							break
+						}
+					}
+					zaps := make([]zap.Field, 0)
+					if response.ResponseObj != nil {
+						zaps = append(
+							zaps,
+							zap.String("httpStatus", response.ResponseObj.Status),
+							zap.Int("httpCode", response.ResponseObj.StatusCode),
+						)
+						lastHttpStatus = uint32(response.ResponseObj.StatusCode)
+						client.LastHttpStatus.Store(lastHttpStatus)
+					}
+
 					zaps = append(
 						zaps,
-						zap.String("httpStatus", response.ResponseObj.Status),
-						zap.Int("httpCode", response.ResponseObj.StatusCode),
+						zap.String("status", response.Status),
+						zap.String("message", response.Message),
 					)
-					lastHttpStatus = uint32(response.ResponseObj.StatusCode)
-					client.LastHttpStatus.Store(lastHttpStatus)
-				}
-
-				zaps = append(
-					zaps,
-					zap.String("status", response.Status),
-					zap.String("message", response.Message),
-				)
-				client.Logger.Debug("Events were sent to DataSet",
-					zaps...,
-				)
-
-				if IsRetryableStatus(lastHttpStatus) {
-					// check whether header is specified and get its value
-					retryAfter, specified := client.getRetryAfter(
-						response.ResponseObj,
-						time.Duration(
-							int64(buf.Attempt+1),
-						)*client.Config.BufferSettings.RetryInitialInterval,
+					client.Logger.Debug("Events were sent to DataSet",
+						zaps...,
 					)
 
-					if specified {
-						// retry after is specified, we should update
-						// client state, so we do not send more requests
-
-						client.setRetryAfter(retryAfter)
+					if isOkStatus(lastHttpStatus) {
+						// everything was fine, there is no need for retries
+						break
 					}
 
-					client.sleep(retryAfter, buf)
-					buf.SetStatus(buffer.Retrying)
-					buf.Attempt++
+					backoffDelay := expBackoff.NextBackOff()
+					if backoffDelay == backoff.Stop {
+						// throw away the batch
+						err = fmt.Errorf("max elapsed time expired %w", err)
+						client.onBufferDrop(buf, lastHttpStatus, err)
+						break
+					}
 
-					// and publish message back
-					client.publishBuffer(buf)
+					if IsRetryableStatus(lastHttpStatus) {
+						// check whether header is specified and get its value
+						retryAfter, specified := client.getRetryAfter(
+							response.ResponseObj,
+							backoffDelay,
+						)
+
+						if specified {
+							// retry after is specified, we should update
+							// client state, so we do not send more requests
+
+							client.setRetryAfter(retryAfter)
+						}
+
+						client.sleep(retryAfter, buf)
+						buf.SetStatus(buffer.Retrying)
+					} else {
+						err = fmt.Errorf("non recoverable error %w", err)
+						client.onBufferDrop(buf, lastHttpStatus, err)
+						break
+					}
+					retryNum++
 				}
 			} else {
 				client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
@@ -444,4 +478,13 @@ func (client *DataSetClient) setRetryAfter(t time.Time) {
 	client.retryAfterMu.Lock()
 	defer client.retryAfterMu.Unlock()
 	client.retryAfter = t
+}
+
+func (client *DataSetClient) onBufferDrop(buf *buffer.Buffer, status uint32, err error) {
+	client.Logger.Error("Dropping buffer",
+		buf.ZapStats(
+			zap.Uint32("httpStatus", status),
+			zap.Error(err),
+		)...,
+	)
 }
