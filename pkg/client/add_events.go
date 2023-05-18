@@ -241,7 +241,7 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 			zap.Float64("payloadRatio", float64(len(payload))/buffer.ShouldSentBufferSize),
 		)...,
 	)
-	response := &add_events.AddEventsResponse{}
+	resp := &add_events.AddEventsResponse{}
 
 	httpRequest, err := request.NewRequest(
 		"POST", client.Config.Endpoint+"/api/addEvents",
@@ -250,18 +250,18 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 		return nil, fmt.Errorf("cannot create request: %w", err)
 	}
 
-	err = client.apiCall(httpRequest, response)
+	err = client.apiCall(httpRequest, resp)
 
-	if strings.HasPrefix(response.Status, "error") {
+	if strings.HasPrefix(resp.Status, "error") {
 		client.Logger.Error(
 			"Problematic payload",
-			zap.String("message", response.Message),
-			zap.String("status", response.Status),
-			zap.ByteString("Payload", payload),
+			zap.String("message", resp.Message),
+			zap.String("status", resp.Status),
+			zap.Int("payloadLength", len(payload)),
 		)
 	}
 
-	return response, err
+	return resp, err
 }
 
 //func (client *DataSetClient) groupBundles(bundles []*add_events.EventBundle) map[string][]*add_events.EventBundle {
