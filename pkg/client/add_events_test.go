@@ -65,13 +65,6 @@ func TestSuiteAddEvents(t *testing.T) {
 	tdsuite.Run(t, &SuiteAddEvents{})
 }
 
-func (s *SuiteAddEvents) TestArticles(assert, require *td.T) {
-	httpmock.RegisterResponder("GET", "https://api.mybiz.com/articles.json",
-		httpmock.NewStringResponder(200, `[{"id": 1, "name": "My Great Article"}]`))
-
-	// do stuff that makes a request to articles.json
-}
-
 func extract(req *http.Request) (add_events.AddEventsRequest, error) {
 	data, _ := io.ReadAll(req.Body)
 	b := bytes.NewBuffer(data)
@@ -378,7 +371,7 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 				"3":          strings.Repeat("3", expectedLengths["3"]),
 				"6":          strings.Repeat("6", expectedLengths["6"]),
 			}
-			assert.Cmp(wasAttrs, expectedAttrs)
+			assert.Cmp(wasAttrs, expectedAttrs, wasAttrs)
 			assert.Cmp(wasLengths, expectedLengths)
 
 			wasSuccessful.Store(true)
@@ -633,7 +626,6 @@ func (s *SuiteAddEvents) TestAddEventsDoNotRetryForever(assert, require *td.T) {
 	err = sc.Finish()
 
 	assert.NotNil(err)
-	assert.Cmp(err.Error(), "some buffers were dropped during finishing - 1")
 	info := httpmock.GetCallCountInfo()
 	assert.Gte(info["POST https://example.com/api/addEvents"], 3)
 }

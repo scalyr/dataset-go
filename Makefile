@@ -66,7 +66,10 @@ test-many-times:
   	for i in `seq 1 $${COUNT}`; do \
   		echo "Running test $${i} / $${COUNT}"; \
   		make test 2>&1 | tee out-test-$${i}.log; \
-  	done;
+  		echo; \
+  		grep -H FAIL out-test-$${i}.log; \
+  	done; \
+  	grep FAIL out-test-*.log;
 
 
 .PHONY: coverage
