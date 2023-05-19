@@ -68,6 +68,7 @@ test-many-times:
   		make test 2>&1 | tee out-test-$${i}.log; \
   		echo; \
   		grep -H FAIL out-test-$${i}.log; \
+  		echo; \
   	done; \
   	grep FAIL out-test-*.log;
 
