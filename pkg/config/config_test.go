@@ -16,65 +16,41 @@
 package config
 
 import (
-	"os"
 	"testing"
 	"time"
 
-	"github.com/scalyr/dataset-go/pkg/buffer_config"
+	"github.com/stretchr/testify/assert"
 
-	"github.com/maxatome/go-testdeep/helpers/tdsuite"
-	"github.com/maxatome/go-testdeep/td"
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
 
-type SuiteConfig struct{}
-
-func (s *SuiteConfig) PreTest(t *td.T, testName string) error {
-	os.Clearenv()
-	return nil
-}
-
-func (s *SuiteConfig) PostTest(t *td.T, testName string) error {
-	os.Clearenv()
-	return nil
-}
-
-func (s *SuiteConfig) Destroy(t *td.T) error {
-	os.Clearenv()
-	return nil
-}
-
-func TestSuiteConfig(t *testing.T) {
-	td.NewT(t)
-	tdsuite.Run(t, &SuiteConfig{})
-}
-
-func (s *SuiteConfig) TestDataConfigEmptyEnv(assert, require *td.T) {
+func TestDataConfigEmptyEnv(t *testing.T) {
 	cfg1, err := New(FromEnv())
-	assert.CmpNoError(err)
-	assert.Cmp(cfg1.Endpoint, "")
+	assert.Nil(t, err)
+	assert.Equal(t, "", cfg1.Endpoint)
 }
 
-func (s *SuiteConfig) TestDataConfigFromEnvEndpoint(assert, require *td.T) {
-	assert.Setenv("SCALYR_SERVER", "http://test")
+func TestDataConfigFromEnvEndpoint(t *testing.T) {
+	t.Setenv("SCALYR_SERVER", "http://test")
 	cfg2, err := New(FromEnv())
-	assert.CmpNoError(err)
-	assert.Cmp(cfg2.Endpoint, "http://test")
+	assert.Nil(t, err)
+	assert.Equal(t, cfg2.Endpoint, "http://test")
 }
 
-func (s *SuiteConfig) TestDataConfigFromEnvTokens(assert, require *td.T) {
-	assert.Setenv("SCALYR_WRITELOG_TOKEN", "writelog")
-	assert.Setenv("SCALYR_READLOG_TOKEN", "readlog")
-	assert.Setenv("SCALYR_WRITECONFIG_TOKEN", "writeconfig")
-	assert.Setenv("SCALYR_READCONFIG_TOKEN", "readconfig")
+func TestDataConfigFromEnvTokens(t *testing.T) {
+	t.Setenv("SCALYR_WRITELOG_TOKEN", "writelog")
+	t.Setenv("SCALYR_READLOG_TOKEN", "readlog")
+	t.Setenv("SCALYR_WRITECONFIG_TOKEN", "writeconfig")
+	t.Setenv("SCALYR_READCONFIG_TOKEN", "readconfig")
 	cfg4, err := New(FromEnv())
-	assert.CmpNoError(err)
-	assert.Cmp(cfg4.Tokens.ReadLog, "readlog")
-	assert.Cmp(cfg4.Tokens.WriteLog, "writelog")
-	assert.Cmp(cfg4.Tokens.ReadConfig, "readconfig")
-	assert.Cmp(cfg4.Tokens.WriteConfig, "writeconfig")
+	assert.Nil(t, err)
+	assert.Equal(t, "readlog", cfg4.Tokens.ReadLog)
+	assert.Equal(t, "writelog", cfg4.Tokens.WriteLog)
+	assert.Equal(t, "readconfig", cfg4.Tokens.ReadConfig)
+	assert.Equal(t, "writeconfig", cfg4.Tokens.WriteConfig)
 }
 
-func (s *SuiteConfig) TestDataConfigWithOptions(assert, require *td.T) {
+func TestDataConfigWithOptions(t *testing.T) {
 	bufCfg, errB := buffer_config.New(
 		buffer_config.WithMaxLifetime(3*time.Second),
 		buffer_config.WithMaxSize(12345),
@@ -83,26 +59,26 @@ func (s *SuiteConfig) TestDataConfigWithOptions(assert, require *td.T) {
 		buffer_config.WithRetryMaxInterval(30*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(10*time.Minute),
 	)
-	assert.CmpNoError(errB)
+	assert.Nil(t, errB)
 	cfg5, err := New(
 		WithEndpoint("https://fooOpt"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt"}),
 		WithBufferSettings(*bufCfg),
 	)
-	assert.CmpNoError(err)
-	assert.Cmp(cfg5.Endpoint, "https://fooOpt")
-	assert.Cmp(cfg5.Tokens, DataSetTokens{WriteLog: "writeLogOpt"})
-	assert.Cmp(cfg5.BufferSettings, buffer_config.DataSetBufferSettings{
+	assert.Nil(t, err)
+	assert.Equal(t, "https://fooOpt", cfg5.Endpoint)
+	assert.Equal(t, DataSetTokens{WriteLog: "writeLogOpt"}, cfg5.Tokens)
+	assert.Equal(t, buffer_config.DataSetBufferSettings{
 		MaxLifetime:          3 * time.Second,
 		MaxSize:              12345,
 		GroupBy:              []string{"aaa", "bbb"},
 		RetryInitialInterval: 8 * time.Second,
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
-	})
+	}, cfg5.BufferSettings)
 }
 
-func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
+func TestDataConfigUpdate(t *testing.T) {
 	bufCfg, errB := buffer_config.New(
 		buffer_config.WithMaxLifetime(3*time.Second),
 		buffer_config.WithMaxSize(12345),
@@ -111,24 +87,24 @@ func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
 		buffer_config.WithRetryMaxInterval(30*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(10*time.Minute),
 	)
-	assert.CmpNoError(errB)
+	assert.Nil(t, errB)
 
 	cfg5, err := New(
 		WithEndpoint("https://fooOpt1"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt1"}),
 		WithBufferSettings(*bufCfg),
 	)
-	assert.CmpNoError(err)
-	assert.Cmp(cfg5.Endpoint, "https://fooOpt1")
-	assert.Cmp(cfg5.Tokens, DataSetTokens{WriteLog: "writeLogOpt1"})
-	assert.Cmp(cfg5.BufferSettings, buffer_config.DataSetBufferSettings{
+	assert.Nil(t, err)
+	assert.Equal(t, "https://fooOpt1", cfg5.Endpoint)
+	assert.Equal(t, DataSetTokens{WriteLog: "writeLogOpt1"}, cfg5.Tokens)
+	assert.Equal(t, buffer_config.DataSetBufferSettings{
 		MaxLifetime:          3 * time.Second,
 		MaxSize:              12345,
 		GroupBy:              []string{"aaa", "bbb"},
 		RetryInitialInterval: 8 * time.Second,
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
-	})
+	}, cfg5.BufferSettings)
 
 	bufCfg2, errB := buffer_config.New(
 		buffer_config.WithMaxLifetime(23*time.Second),
@@ -138,46 +114,46 @@ func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
 		buffer_config.WithRetryMaxInterval(230*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(210*time.Minute),
 	)
-	assert.CmpNoError(errB)
+	assert.Nil(t, errB)
 
 	cfg6, err := cfg5.Update(
 		WithEndpoint("https://fooOpt2"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt2"}),
 		WithBufferSettings(*bufCfg2),
 	)
-	assert.CmpNoError(err)
+	assert.Nil(t, err)
 
 	// original config is unchanged
-	assert.Cmp(cfg5.Endpoint, "https://fooOpt1")
-	assert.Cmp(cfg5.Tokens, DataSetTokens{WriteLog: "writeLogOpt1"})
-	assert.Cmp(cfg5.BufferSettings, buffer_config.DataSetBufferSettings{
+	assert.Equal(t, "https://fooOpt1", cfg5.Endpoint)
+	assert.Equal(t, DataSetTokens{WriteLog: "writeLogOpt1"}, cfg5.Tokens)
+	assert.Equal(t, buffer_config.DataSetBufferSettings{
 		MaxLifetime:          3 * time.Second,
 		MaxSize:              12345,
 		GroupBy:              []string{"aaa", "bbb"},
 		RetryInitialInterval: 8 * time.Second,
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
-	})
+	}, cfg5.BufferSettings)
 
 	// new config is changed
-	assert.Cmp(cfg6.Endpoint, "https://fooOpt2")
-	assert.Cmp(cfg6.Tokens, DataSetTokens{WriteLog: "writeLogOpt2"})
-	assert.Cmp(cfg6.BufferSettings, buffer_config.DataSetBufferSettings{
+	assert.Equal(t, "https://fooOpt2", cfg6.Endpoint)
+	assert.Equal(t, DataSetTokens{WriteLog: "writeLogOpt2"}, cfg6.Tokens)
+	assert.Equal(t, buffer_config.DataSetBufferSettings{
 		MaxLifetime:          23 * time.Second,
 		MaxSize:              212345,
 		GroupBy:              []string{"2aaa", "2bbb"},
 		RetryInitialInterval: 28 * time.Second,
 		RetryMaxInterval:     230 * time.Second,
 		RetryMaxElapsedTime:  210 * time.Minute,
-	})
+	}, cfg6.BufferSettings)
 }
 
-func (s *SuiteConfig) TestDataConfigNewDefaultToString(assert, require *td.T) {
+func TestDataConfigNewDefaultToString(t *testing.T) {
 	cfg := NewDefaultDataSetConfig()
-	assert.Cmp(cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s)")
+	assert.Equal(t, cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s)")
 }
 
-func (s *SuiteConfig) TestDataConfigNewDefaultIsValid(assert, require *td.T) {
+func TestDataConfigNewDefaultIsValid(t *testing.T) {
 	cfg := NewDefaultDataSetConfig()
-	assert.Nil(cfg.Validate())
+	assert.Nil(t, cfg.Validate())
 }

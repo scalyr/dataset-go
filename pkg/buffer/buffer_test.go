@@ -25,18 +25,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maxatome/go-testdeep/helpers/tdsuite"
-	"github.com/maxatome/go-testdeep/td"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 )
-
-type SuiteBuffer struct{}
-
-func TestSuiteBuffer(t *testing.T) {
-	td.NewT(t)
-	tdsuite.Run(t, &SuiteBuffer{})
-}
 
 func loadJson(name string) string {
 	dat, err := os.ReadFile("../../test/testdata/" + name)
@@ -47,25 +40,25 @@ func loadJson(name string) string {
 	return strings.Join(strings.Fields(string(dat)), "")
 }
 
-func (s *SuiteBuffer) TestEmptyPayloadShouldFail(assert, require *td.T) {
+func TestEmptyPayloadShouldFail(t *testing.T) {
 	buffer, err := NewBuffer("id", "token", nil)
-	assert.Nil(err)
+	assert.Nil(t, err)
 	_, err = buffer.Payload()
-	assert.CmpError(err, "there is no event")
+	assert.EqualError(t, err, "there is no event")
 }
 
-func (s *SuiteBuffer) TestEmptyTokenShouldFail(assert, require *td.T) {
+func TestEmptyTokenShouldFail(t *testing.T) {
 	buffer, err := NewBuffer("id", "", nil)
-	assert.Nil(err)
+	assert.Nil(t, err)
 	_, err = buffer.Payload()
-	assert.CmpError(err, "token is missing")
+	assert.EqualError(t, err, "token is missing")
 }
 
-func (s *SuiteBuffer) TestEmptySessionShouldFail(assert, require *td.T) {
+func TestEmptySessionShouldFail(t *testing.T) {
 	buffer, err := NewBuffer("", "token", nil)
-	assert.Nil(err)
+	assert.Nil(t, err)
 	_, err = buffer.Payload()
-	assert.CmpError(err, "session is missing")
+	assert.EqualError(t, err, "session is missing")
 }
 
 func createTestBundle() add_events.EventBundle {
@@ -105,43 +98,43 @@ func createEmptyBuffer() *Buffer {
 	return buffer
 }
 
-func (s *SuiteBuffer) TestPayloadFull(assert, require *td.T) {
+func TestPayloadFull(t *testing.T) {
 	buffer := createEmptyBuffer()
-	assert.NotNil(buffer)
+	assert.NotNil(t, buffer)
 
 	bundle := createTestBundle()
 	added, err := buffer.AddBundle(&bundle)
-	assert.Nil(err)
-	assert.Cmp(added, Added)
-	assert.Cmp(buffer.countLogs.Load(), int32(1))
-	assert.Cmp(buffer.lenLogs.Load(), int32(57))
-	assert.Cmp(buffer.countThreads.Load(), int32(1))
-	assert.Cmp(buffer.lenThreads.Load(), int32(28))
+	assert.Nil(t, err)
+	assert.Equal(t, added, Added)
+	assert.Equal(t, buffer.countLogs.Load(), int32(1))
+	assert.Equal(t, buffer.lenLogs.Load(), int32(57))
+	assert.Equal(t, buffer.countThreads.Load(), int32(1))
+	assert.Equal(t, buffer.lenThreads.Load(), int32(28))
 
 	payload, err := buffer.Payload()
-	assert.Nil(err)
+	assert.Nil(t, err)
 
 	params := add_events.AddEventsRequest{}
 	err = json.Unmarshal(payload, &params)
-	assert.Nil(err)
-	assert.Cmp(params.Session, buffer.Session)
-	assert.Cmp(params.Token, buffer.Token)
-	assert.Cmp(params.SessionInfo, buffer.sessionInfo)
+	assert.Nil(t, err)
+	assert.Equal(t, params.Session, buffer.Session)
+	assert.Equal(t, params.Token, buffer.Token)
+	assert.Equal(t, params.SessionInfo, buffer.sessionInfo)
 
 	expected := loadJson("buffer_test_payload_full.json")
 
-	assert.Cmp(len(payload), len(expected), "Length differs")
+	assert.Equal(t, len(payload), len(expected), "Length differs")
 
 	upperBound := int(math.Min(float64(len(expected)), float64(len(payload))))
 	for i := 0; i < upperBound; i++ {
 		if expected[i] != (payload)[i] {
-			assert.Cmp(payload[0:i], expected[0:i], "Pos: %d", i)
+			assert.Equal(t, payload[0:i], expected[0:i], "Pos: %d", i)
 		}
 	}
-	assert.Cmp(payload, []byte(expected))
+	assert.Equal(t, payload, []byte(expected))
 }
 
-func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
+func TestPayloadInjection(t *testing.T) {
 	sessionInfo := &add_events.SessionInfo{
 		ServerId:   "serverId\",\"sI\":\"I",
 		ServerType: "serverType\",\"sT\":\"T",
@@ -154,7 +147,7 @@ func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
 		token,
 		sessionInfo)
 
-	assert.Nil(err)
+	assert.Nil(t, err)
 	bundle := &add_events.EventBundle{
 		Log: &add_events.Log{
 			Id: "LId\",\"i\":\"i",
@@ -175,41 +168,41 @@ func (s *SuiteBuffer) TestPayloadInjection(assert, require *td.T) {
 		},
 	}
 	added, err := buffer.AddBundle(bundle)
-	assert.Nil(err)
-	assert.Cmp(added, Added)
+	assert.Nil(t, err)
+	assert.Equal(t, added, Added)
 
-	assert.Cmp(buffer.countLogs.Load(), int32(1))
-	assert.Cmp(buffer.lenLogs.Load(), int32(117))
+	assert.Equal(t, buffer.countLogs.Load(), int32(1))
+	assert.Equal(t, buffer.lenLogs.Load(), int32(117))
 
-	assert.Cmp(buffer.countThreads.Load(), int32(1))
-	assert.Cmp(buffer.lenThreads.Load(), int32(52))
+	assert.Equal(t, buffer.countThreads.Load(), int32(1))
+	assert.Equal(t, buffer.lenThreads.Load(), int32(52))
 
 	payload, err := buffer.Payload()
-	assert.Nil(err)
+	assert.Nil(t, err)
 
 	params := add_events.AddEventsRequest{}
 	err = json.Unmarshal(payload, &params)
-	assert.Nil(err)
-	assert.Cmp(params.Session, session)
-	assert.Cmp(params.Token, token)
-	assert.Cmp(len(params.Events), 1)
+	assert.Nil(t, err)
+	assert.Equal(t, params.Session, session)
+	assert.Equal(t, params.Token, token)
+	assert.Equal(t, len(params.Events), 1)
 
 	expected := loadJson("buffer_test_payload_injection.json")
 
-	assert.Cmp(len(payload), len(expected), "Length differs")
+	assert.Equal(t, len(payload), len(expected), "Length differs")
 
 	upperBound := int(math.Min(float64(len(expected)), float64(len(payload))))
 	for i := 0; i < upperBound; i++ {
 		if expected[i] != (payload)[i] {
-			assert.Cmp(payload[0:i], expected[0:i], "Pos: %d", i)
+			assert.Equal(t, payload[0:i], expected[0:i], "Pos: %d", i)
 		}
 	}
-	assert.Cmp(payload, []byte(expected))
+	assert.Equal(t, payload, []byte(expected))
 }
 
-func (s *SuiteBuffer) TestAddEventWithShouldSendAge(assert, require *td.T) {
+func TestAddEventWithShouldSendAge(t *testing.T) {
 	buffer := createEmptyBuffer()
-	assert.NotNil(buffer)
+	assert.NotNil(t, buffer)
 
 	finished := atomic.Int32{}
 	// add events into buffer
@@ -217,8 +210,8 @@ func (s *SuiteBuffer) TestAddEventWithShouldSendAge(assert, require *td.T) {
 		for i := 10; i < 100; i += 10 {
 			bundle := createTestBundle()
 			added, err := buffer.AddBundle(&bundle)
-			assert.Nil(err)
-			assert.Cmp(added, Added)
+			assert.Nil(t, err)
+			assert.Equal(t, added, Added)
 			time.Sleep(time.Duration(i) * time.Millisecond)
 		}
 		finished.Add(1)
@@ -229,24 +222,24 @@ func (s *SuiteBuffer) TestAddEventWithShouldSendAge(assert, require *td.T) {
 		for !buffer.ShouldSendAge(60 * time.Millisecond) {
 			waited += 1
 			time.Sleep(10 * time.Millisecond)
-			require.Cmp(finished.Load(), int32(0))
+			require.Equal(t, int32(0), finished.Load())
 			if waited > 10 {
 				break
 			}
 		}
-		assert.Gt(waited, 5)
+		assert.Greater(t, waited, 5)
 		finished.Add(1)
 	}()
 
 	for finished.Load() < 2 {
 		time.Sleep(10 * time.Millisecond)
 	}
-	assert.Cmp(finished.Load(), int32(2))
+	assert.Equal(t, finished.Load(), int32(2))
 }
 
-func (s *SuiteBuffer) TestAddEventWithShouldSendSize(assert, require *td.T) {
+func TestAddEventWithShouldSendSize(t *testing.T) {
 	buffer := createEmptyBuffer()
-	assert.NotNil(buffer)
+	assert.NotNil(t, buffer)
 
 	finished := atomic.Int32{}
 	// add events into buffer
@@ -254,11 +247,11 @@ func (s *SuiteBuffer) TestAddEventWithShouldSendSize(assert, require *td.T) {
 		for {
 			bundle := createTestBundle()
 			added, err := buffer.AddBundle(&bundle)
-			assert.Nil(err)
+			assert.Nil(t, err)
 			if added != Added {
 				break
 			}
-			assert.Cmp(added, Added)
+			assert.Equal(t, added, Added)
 			time.Sleep(time.Microsecond)
 		}
 		finished.Add(1)
@@ -273,13 +266,13 @@ func (s *SuiteBuffer) TestAddEventWithShouldSendSize(assert, require *td.T) {
 				break
 			}
 		}
-		assert.Gt(waited, 5)
+		assert.Greater(t, waited, 5)
 		finished.Add(1)
 	}()
 
 	for finished.Load() < 2 {
 		time.Sleep(10 * time.Millisecond)
 	}
-	assert.Cmp(finished.Load(), int32(2))
-	assert.Gt(buffer.BufferLengths(), int32(ShouldSentBufferSize-1000))
+	assert.Equal(t, finished.Load(), int32(2))
+	assert.Greater(t, buffer.BufferLengths(), int32(ShouldSentBufferSize-1000))
 }

@@ -19,18 +19,10 @@ package add_events
 import (
 	"testing"
 
-	"github.com/maxatome/go-testdeep/helpers/tdsuite"
-	"github.com/maxatome/go-testdeep/td"
+	"github.com/stretchr/testify/assert"
 )
 
-type SuiteEventsBundle struct{}
-
-func TestSuiteEventsBundle(t *testing.T) {
-	td.NewT(t)
-	tdsuite.Run(t, &SuiteEventsBundle{})
-}
-
-func (s *SuiteEventsBundle) TestEventBundle(assert, require *td.T) {
+func TestEventBundle(t *testing.T) {
 	event := &Event{
 		Thread: "5",
 		Sev:    3,
@@ -49,14 +41,14 @@ func (s *SuiteEventsBundle) TestEventBundle(assert, require *td.T) {
 	keyNotThere1 := bundle.Key([]string{"notThere1"})
 	keyNotThere2 := bundle.Key([]string{"notThere2"})
 
-	assert.Cmp(keyFoo, "ef9faec68698672038857b2647429002")
-	assert.Cmp(keyBar, "55a2f7ebf2af8927837c599131d32d07")
-	assert.Cmp(keyBaz, "6dd515483537f552fd5fa604cd60f0d9")
-	assert.Cmp(keyNotThere1, "d41d8cd98f00b204e9800998ecf8427e")
-	assert.Cmp(keyNotThere2, "d41d8cd98f00b204e9800998ecf8427e")
+	assert.Equal(t, "ef9faec68698672038857b2647429002", keyFoo)
+	assert.Equal(t, "55a2f7ebf2af8927837c599131d32d07", keyBar)
+	assert.Equal(t, "6dd515483537f552fd5fa604cd60f0d9", keyBaz)
+	assert.Equal(t, "d41d8cd98f00b204e9800998ecf8427e", keyNotThere1)
+	assert.Equal(t, "d41d8cd98f00b204e9800998ecf8427e", keyNotThere2)
 
 	// although the value is same, key should be different because attributes differ
-	assert.Not(keyBaz, keyFoo)
+	assert.NotEqual(t, keyBaz, keyFoo)
 	// non-existing attributes should have the same key
-	assert.Cmp(keyNotThere1, keyNotThere2)
+	assert.Equal(t, keyNotThere1, keyNotThere2)
 }

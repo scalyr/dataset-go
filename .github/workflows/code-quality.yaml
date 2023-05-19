@@ -70,6 +70,11 @@ jobs:
       - name: Code coverage
         run: |
           make coverage
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          fail_ci_if_error: true
+          verbose: true
       - name: Build Examples
         run: |
           ( cd examples/client; go build )
@@ -78,11 +83,6 @@ jobs:
         run: |
           cd scripts
           ./test-ssl-certificates.sh
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          fail_ci_if_error: true
-          verbose: true
       - name: Run Tests Many Times
         # Run test multiple times to check for data races
         if: github.ref_name == 'main'

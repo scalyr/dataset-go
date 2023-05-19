@@ -21,13 +21,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
-	"github.com/scalyr/dataset-go/pkg/buffer_config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/maxatome/go-testdeep/helpers/tdsuite"
-	"github.com/maxatome/go-testdeep/td"
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
 
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/scalyr/dataset-go/pkg/buffer"
@@ -35,48 +34,26 @@ import (
 	"go.uber.org/zap"
 )
 
-type SuiteClient struct{}
-
-func (s *SuiteClient) PreTest(t *td.T, testName string) error {
-	os.Clearenv()
-	return nil
-}
-
-func (s *SuiteClient) PostTest(t *td.T, testName string) error {
-	os.Clearenv()
-	return nil
-}
-
-func (s *SuiteClient) Destroy(t *td.T) error {
-	os.Clearenv()
-	return nil
-}
-
-func TestSuiteClient(t *testing.T) {
-	td.NewT(t)
-	tdsuite.Run(t, &SuiteClient{})
-}
-
-func (s *SuiteClient) TestNewClient(assert, require *td.T) {
-	assert.Setenv("SCALYR_SERVER", "test")
-	assert.Setenv("SCALYR_WRITELOG_TOKEN", "writelog")
-	assert.Setenv("SCALYR_READLOG_TOKEN", "readlog")
-	assert.Setenv("SCALYR_WRITECONFIG_TOKEN", "writeconfig")
-	assert.Setenv("SCALYR_READCONFIG_TOKEN", "readconfig")
+func TestNewClient(t *testing.T) {
+	t.Setenv("SCALYR_SERVER", "test")
+	t.Setenv("SCALYR_WRITELOG_TOKEN", "writelog")
+	t.Setenv("SCALYR_READLOG_TOKEN", "readlog")
+	t.Setenv("SCALYR_WRITECONFIG_TOKEN", "writeconfig")
+	t.Setenv("SCALYR_READCONFIG_TOKEN", "readconfig")
 	cfg, err := config.New(config.FromEnv())
-	assert.Nil(err)
+	assert.Nil(t, err)
 	sc4, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()))
-	require.Nil(err)
-	assert.Cmp(sc4.Config.Tokens.ReadLog, "readlog")
-	assert.Cmp(sc4.Config.Tokens.WriteLog, "writelog")
-	assert.Cmp(sc4.Config.Tokens.ReadConfig, "readconfig")
-	assert.Cmp(sc4.Config.Tokens.WriteConfig, "writeconfig")
+	require.Nil(t, err)
+	assert.Equal(t, sc4.Config.Tokens.ReadLog, "readlog")
+	assert.Equal(t, sc4.Config.Tokens.WriteLog, "writelog")
+	assert.Equal(t, sc4.Config.Tokens.ReadConfig, "readconfig")
+	assert.Equal(t, sc4.Config.Tokens.WriteConfig, "writeconfig")
 }
 
-func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
+func TestClientBuffer(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := fmt.Fprintln(w, "{ \"hello\": \"yo\" }")
-		assert.Nil(err)
+		assert.Nil(t, err)
 	}))
 
 	token := "token-test"
@@ -85,7 +62,7 @@ func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
 		Tokens:         config.DataSetTokens{WriteLog: token},
 		BufferSettings: buffer_config.NewDefaultDataSetBufferSettings(),
 	}, &http.Client{}, zap.Must(zap.NewDevelopment()))
-	require.Nil(err)
+	require.Nil(t, err)
 
 	sessionInfo := add_events.SessionInfo{
 		ServerId:   "serverId",
@@ -106,14 +83,14 @@ func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
 	sc.newBufferForEvents("aaa")
 	buffer1 := sc.getBuffer("aaa")
 	added, err := buffer1.AddBundle(&add_events.EventBundle{Event: event1})
-	assert.Nil(err)
-	assert.Cmp(added, buffer.Added)
+	assert.Nil(t, err)
+	assert.Equal(t, added, buffer.Added)
 
 	payload1, err := buffer1.Payload()
-	assert.Nil(err)
+	assert.Nil(t, err)
 	params1 := add_events.AddEventsRequest{}
 	err = json.Unmarshal(payload1, &params1)
-	assert.Nil(err)
+	assert.Nil(t, err)
 
 	event2 := &add_events.Event{
 		Thread: "TId",
@@ -128,20 +105,20 @@ func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
 	sc.publishBuffer(buffer1)
 	buffer2 := sc.getBuffer("aaa")
 	added2, err := buffer2.AddBundle(&add_events.EventBundle{Event: event2})
-	assert.Nil(err)
-	assert.Cmp(added2, buffer.Added)
+	assert.Nil(t, err)
+	assert.Equal(t, added2, buffer.Added)
 
 	payload2, err := buffer2.Payload()
-	assert.Nil(err)
+	assert.Nil(t, err)
 	params2 := add_events.AddEventsRequest{}
 	err = json.Unmarshal(payload2, &params2)
-	assert.Nil(err)
+	assert.Nil(t, err)
 
-	assert.Cmp(params1.Token, params2.Token)
-	assert.Cmp(params1.Session, params2.Session)
-	assert.Cmp(params1.SessionInfo, params2.SessionInfo)
+	assert.Equal(t, params1.Token, params2.Token)
+	assert.Equal(t, params1.Session, params2.Session)
+	assert.Equal(t, params1.SessionInfo, params2.SessionInfo)
 
-	assert.Not((params1.Events)[0], (params2.Events)[0])
-	assert.Cmp((params1.Events)[0].Ts, "1")
-	assert.Cmp((params2.Events)[0].Ts, "2")
+	assert.NotEqual(t, (params1.Events)[0], (params2.Events)[0])
+	assert.Equal(t, (params1.Events)[0].Ts, "1")
+	assert.Equal(t, (params2.Events)[0].Ts, "2")
 }

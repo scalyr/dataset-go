@@ -19,9 +19,11 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,61 +31,16 @@ import (
 	"time"
 
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
-
-	"github.com/maxatome/go-testdeep/helpers/tdsuite"
-
-	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/scalyr/dataset-go/pkg/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/jarcoal/httpmock"
-	"github.com/maxatome/go-testdeep/td"
+	"github.com/scalyr/dataset-go/pkg/api/add_events"
 )
 
-type SuiteAddEventsLongRunning struct{}
-
-func (s *SuiteAddEventsLongRunning) Setup(t *td.T) error {
-	// block all HTTP requests
-	httpmock.Activate()
-	return nil
-}
-
-func (s *SuiteAddEventsLongRunning) PostTest(t *td.T, testName string) error {
-	// remove any mocks after each test
-	httpmock.Reset()
-	return nil
-}
-
-func (s *SuiteAddEventsLongRunning) Destroy(t *td.T) error {
-	httpmock.DeactivateAndReset()
-	return nil
-}
-
-func TestSuiteAddEventsLongRunning(t *testing.T) {
-	td.NewT(t)
-	tdsuite.Run(t, &SuiteAddEventsLongRunning{})
-}
-
-func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, require *td.T) {
+func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	const MaxDelayMs = 200
-	config := &config.DataSetConfig{
-		Endpoint: "https://example.com",
-		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  1000,
-			MaxLifetime:              time.Duration(MaxDelayMs) * time.Millisecond,
-			RetryRandomizationFactor: 1.0,
-			RetryMultiplier:          1.0,
-			RetryInitialInterval:     RetryBase,
-			RetryMaxInterval:         RetryBase,
-			RetryMaxElapsedTime:      10 * RetryBase,
-		},
-	}
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
-	require.Nil(err)
-
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
 
 	const MaxBatchCount = 20
 	const LogsPerBatch = 10000
@@ -96,36 +53,56 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 	expectedKeys := make(map[string]int64)
 	mutex := &sync.RWMutex{}
 
-	httpmock.RegisterResponder(
-		"POST",
-		"https://example.com/api/addEvents",
-		func(req *http.Request) (*http.Response, error) {
-			attempt.Add(1)
-			cer, err := extract(req)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		attempt.Add(1)
+		cer, err := extract(req)
 
-			assert.CmpNoError(err, "Error reading request: %v", err)
+		assert.Nil(t, err, "Error reading request: %v", err)
 
-			for _, ev := range cer.Events {
-				processedEvents.Add(1)
-				key, found := ev.Attrs["body.str"]
-				assert.True(found)
-				mutex.Lock()
-				sKey := key.(string)
-				_, f := seenKeys[sKey]
-				if !f {
-					seenKeys[sKey] = 0
-				}
-				seenKeys[sKey] += 1
-				mutex.Unlock()
+		for _, ev := range cer.Events {
+			processedEvents.Add(1)
+			key, found := ev.Attrs["body.str"]
+			assert.True(t, found)
+			mutex.Lock()
+			sKey := key.(string)
+			_, f := seenKeys[sKey]
+			if !f {
+				seenKeys[sKey] = 0
 			}
+			seenKeys[sKey] += 1
+			mutex.Unlock()
+		}
 
-			lastCall.Store(time.Now().UnixNano())
-			time.Sleep(time.Duration(MaxDelayMs*0.7) * time.Millisecond)
-			return httpmock.NewJsonResponse(200, map[string]interface{}{
-				"status":       "success",
-				"bytesCharged": 42,
-			})
+		lastCall.Store(time.Now().UnixNano())
+		time.Sleep(time.Duration(MaxDelayMs*0.7) * time.Millisecond)
+		payload, err := json.Marshal(map[string]interface{}{
+			"status":       "success",
+			"bytesCharged": 42,
 		})
+		l, err := w.Write(payload)
+		assert.Greater(t, l, 1)
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	config := &config.DataSetConfig{
+		Endpoint: server.URL,
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:                  1000,
+			MaxLifetime:              time.Duration(MaxDelayMs) * time.Millisecond,
+			RetryRandomizationFactor: 1.0,
+			RetryMultiplier:          1.0,
+			RetryInitialInterval:     RetryBase,
+			RetryMaxInterval:         RetryBase,
+			RetryMaxElapsedTime:      10 * RetryBase,
+		},
+	}
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(t, err)
+
+	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+	sc.SessionInfo = sessionInfo
 
 	for bI := 0; bI < MaxBatchCount; bI++ {
 		batch := make([]*add_events.EventBundle, 0)
@@ -158,15 +135,16 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 			expectedKeys[key] = 1
 		}
 
-		assert.Logf("Consuming batch: %d", bI)
+		t.Logf("Consuming batch: %d", bI)
 		go (func(batch []*add_events.EventBundle) {
 			err := sc.AddEvents(batch)
-			assert.Nil(err)
+			assert.Nil(t, err)
 		})(batch)
 		time.Sleep(time.Duration(MaxDelayMs*0.3) * time.Millisecond)
 	}
 
-	sc.Finish()
+	err = sc.Finish()
+	assert.Nil(t, err, err)
 
 	for {
 		if time.Now().UnixNano()-lastCall.Load() > 5*time.Second.Nanoseconds() {
@@ -175,7 +153,7 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 		time.Sleep(time.Second)
 	}
 
-	assert.Cmp(seenKeys, expectedKeys)
-	assert.Cmp(processedEvents.Load(), ExpectedLogs, "processed items")
-	assert.Cmp(uint64(len(seenKeys)), ExpectedLogs, "unique items")
+	assert.Equal(t, seenKeys, expectedKeys)
+	assert.Equal(t, processedEvents.Load(), ExpectedLogs, "processed items")
+	assert.Equal(t, uint64(len(seenKeys)), ExpectedLogs, "unique items")
 }
