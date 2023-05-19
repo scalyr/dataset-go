@@ -59,19 +59,21 @@ test-all:
 test-many-times:
 	set -e; \
 	if [ "x$(COUNT)" == "x" ]; then \
-  		COUNT=50; \
-  	else \
-  		COUNT=$(COUNT); \
-  	fi; \
-  	for i in `seq 1 $${COUNT}`; do \
-  		echo "Running test $${i} / $${COUNT}"; \
-  		make test 2>&1 | tee out-test-$${i}.log; \
-  		echo; \
-  		grep -H FAIL out-test-$${i}.log; \
-  		echo; \
-  	done; \
-  	grep FAIL out-test-*.log;
-
+		COUNT=50; \
+	else \
+		COUNT=$(COUNT); \
+	fi; \
+	for i in `seq 1 $${COUNT}`; do \
+		echo "Running test $${i} / $${COUNT}"; \
+		rm -rfv out-test-$${i}.log; \
+		make test 2>&1 | tee out-test-$${i}.log; \
+		echo; \
+		grep -H FAIL out-test-$${i}.log; \
+		echo; \
+	done; \
+	echo "Grep for FAIL"; \
+	! grep -H FAIL out-test-*.log; \
+	echo "Always succeed"
 
 .PHONY: coverage
 coverage: coverage-all
@@ -80,7 +82,6 @@ coverage: coverage-all
 coverage-unit:
 	$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE) ./...
 	$(GOCMD) tool cover -html=coverage.txt -o coverage.html
-
 
 .PHONY: coverage-all
 coverage-all:
