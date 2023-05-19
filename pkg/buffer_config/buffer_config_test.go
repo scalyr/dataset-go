@@ -16,37 +16,13 @@
 package buffer_config
 
 import (
-	"os"
 	"testing"
 	"time"
 
-	"github.com/maxatome/go-testdeep/helpers/tdsuite"
-	"github.com/maxatome/go-testdeep/td"
+	"github.com/stretchr/testify/assert"
 )
 
-type SuiteBufferSettings struct{}
-
-func (s *SuiteBufferSettings) PreTest(t *td.T, testName string) error {
-	os.Clearenv()
-	return nil
-}
-
-func (s *SuiteBufferSettings) PostTest(t *td.T, testName string) error {
-	os.Clearenv()
-	return nil
-}
-
-func (s *SuiteBufferSettings) Destroy(t *td.T) error {
-	os.Clearenv()
-	return nil
-}
-
-func TestSuiteBufferSettings(t *testing.T) {
-	td.NewT(t)
-	tdsuite.Run(t, &SuiteBufferSettings{})
-}
-
-func (s *SuiteBufferSettings) TestConfigWithOptions(assert, require *td.T) {
+func TestConfigWithOptions(t *testing.T) {
 	bufCfg, errB := New(
 		WithMaxLifetime(3*time.Second),
 		WithMaxSize(12345),
@@ -56,19 +32,19 @@ func (s *SuiteBufferSettings) TestConfigWithOptions(assert, require *td.T) {
 		WithRetryMaxElapsedTime(10*time.Minute),
 	)
 
-	assert.CmpNoError(errB)
+	assert.Nil(t, errB)
 
-	assert.Cmp(*bufCfg, DataSetBufferSettings{
+	assert.Equal(t, DataSetBufferSettings{
 		MaxLifetime:          3 * time.Second,
 		MaxSize:              12345,
 		GroupBy:              []string{"aaa", "bbb"},
 		RetryInitialInterval: 8 * time.Second,
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
-	})
+	}, *bufCfg)
 }
 
-func (s *SuiteBufferSettings) TestDataConfigUpdate(assert, require *td.T) {
+func TestDataConfigUpdate(t *testing.T) {
 	bufCfg, errB := New(
 		WithMaxLifetime(3*time.Second),
 		WithMaxSize(12345),
@@ -77,16 +53,16 @@ func (s *SuiteBufferSettings) TestDataConfigUpdate(assert, require *td.T) {
 		WithRetryMaxInterval(30*time.Second),
 		WithRetryMaxElapsedTime(10*time.Minute),
 	)
-	assert.CmpNoError(errB)
+	assert.Nil(t, errB)
 
-	assert.Cmp(*bufCfg, DataSetBufferSettings{
+	assert.Equal(t, DataSetBufferSettings{
 		MaxLifetime:          3 * time.Second,
 		MaxSize:              12345,
 		GroupBy:              []string{"aaa", "bbb"},
 		RetryInitialInterval: 8 * time.Second,
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
-	})
+	}, *bufCfg)
 
 	bufCfg2, err := bufCfg.Update(
 		WithMaxLifetime(23*time.Second),
@@ -96,35 +72,35 @@ func (s *SuiteBufferSettings) TestDataConfigUpdate(assert, require *td.T) {
 		WithRetryMaxInterval(230*time.Second),
 		WithRetryMaxElapsedTime(210*time.Minute),
 	)
-	assert.CmpNoError(err)
+	assert.Nil(t, err)
 
 	// original config is unchanged
-	assert.Cmp(*bufCfg, DataSetBufferSettings{
+	assert.Equal(t, DataSetBufferSettings{
 		MaxLifetime:          3 * time.Second,
 		MaxSize:              12345,
 		GroupBy:              []string{"aaa", "bbb"},
 		RetryInitialInterval: 8 * time.Second,
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
-	})
+	}, *bufCfg)
 
 	// new config is changed
-	assert.Cmp(*bufCfg2, DataSetBufferSettings{
+	assert.Equal(t, DataSetBufferSettings{
 		MaxLifetime:          23 * time.Second,
 		MaxSize:              212345,
 		GroupBy:              []string{"2aaa", "2bbb"},
 		RetryInitialInterval: 28 * time.Second,
 		RetryMaxInterval:     230 * time.Second,
 		RetryMaxElapsedTime:  210 * time.Minute,
-	})
+	}, *bufCfg2)
 }
 
-func (s *SuiteBufferSettings) TestDataConfigNewDefaultToString(assert, require *td.T) {
+func TestDataConfigNewDefaultToString(t *testing.T) {
 	cfg := NewDefaultDataSetBufferSettings()
-	assert.Cmp(cfg.String(), "MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s")
+	assert.Equal(t, "MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s", cfg.String())
 }
 
-func (s *SuiteBufferSettings) TestDataConfigNewDefaultIsValid(assert, require *td.T) {
+func TestDataConfigNewDefaultIsValid(t *testing.T) {
 	cfg := NewDefaultDataSetBufferSettings()
-	assert.Nil(cfg.Validate())
+	assert.Nil(t, cfg.Validate())
 }

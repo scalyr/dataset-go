@@ -19,28 +19,20 @@ package add_events
 import (
 	"testing"
 
-	"github.com/maxatome/go-testdeep/helpers/tdsuite"
-	"github.com/maxatome/go-testdeep/td"
+	"github.com/stretchr/testify/assert"
 )
 
-type SuiteAddEvents struct{}
-
-func TestSuiteAddEvents(t *testing.T) {
-	td.NewT(t)
-	tdsuite.Run(t, &SuiteAddEvents{})
-}
-
-func (s *SuiteAddEvents) TestTrimAttrsKeepEverything(assert, require *td.T) {
+func TestTrimAttrsKeepEverything(t *testing.T) {
 	attrs := map[string]interface{}{
 		"foo": "aaaaaa",
 		"bar": "bbbb",
 		"baz": "cc",
 	}
 
-	assert.Cmp(TrimAttrs(attrs, 10000), attrs)
+	assert.Equal(t, attrs, TrimAttrs(attrs, 10000))
 }
 
-func (s *SuiteAddEvents) TestTrimAttrsTrimLongest(assert, require *td.T) {
+func TestTrimAttrsTrimLongest(t *testing.T) {
 	attrs := map[string]interface{}{
 		"foo": "aaaaaa",
 		"bar": "bbbb",
@@ -53,10 +45,10 @@ func (s *SuiteAddEvents) TestTrimAttrsTrimLongest(assert, require *td.T) {
 		"baz": "cc",
 	}
 
-	assert.Cmp(TrimAttrs(attrs, 44), expected)
+	assert.Equal(t, expected, TrimAttrs(attrs, 44))
 }
 
-func (s *SuiteAddEvents) TestTrimAttrsSkipLongest(assert, require *td.T) {
+func TestTrimAttrsSkipLongest(t *testing.T) {
 	attrs := map[string]interface{}{
 		"foo": "aaaaaa",
 		"bar": "bbbb",
@@ -68,10 +60,10 @@ func (s *SuiteAddEvents) TestTrimAttrsSkipLongest(assert, require *td.T) {
 		"baz": "cc",
 	}
 
-	assert.Cmp(TrimAttrs(attrs, 36), expected)
+	assert.Equal(t, expected, TrimAttrs(attrs, 36))
 }
 
-func (s *SuiteAddEvents) TestTrimAttrsSkipLongestAndTrim(assert, require *td.T) {
+func TestTrimAttrsSkipLongestAndTrim(t *testing.T) {
 	attrs := map[string]interface{}{
 		"foo": "aaaaaa",
 		"bar": "bbbb",
@@ -83,10 +75,10 @@ func (s *SuiteAddEvents) TestTrimAttrsSkipLongestAndTrim(assert, require *td.T) 
 		"baz": "cc",
 	}
 
-	assert.Cmp(TrimAttrs(attrs, 26), expected)
+	assert.Equal(t, expected, TrimAttrs(attrs, 26))
 }
 
-func (s *SuiteAddEvents) TestTrimAttrsSkipLongestAndTrimFully(assert, require *td.T) {
+func TestTrimAttrsSkipLongestAndTrimFully(t *testing.T) {
 	attrs := map[string]interface{}{
 		"foo": "aaaaaa",
 		"bar": "bbbb",
@@ -98,10 +90,10 @@ func (s *SuiteAddEvents) TestTrimAttrsSkipLongestAndTrimFully(assert, require *t
 		"baz": "cc",
 	}
 
-	assert.Cmp(TrimAttrs(attrs, 24), expected)
+	assert.Equal(t, expected, TrimAttrs(attrs, 24))
 }
 
-func (s *SuiteAddEvents) TestTrimAttrsSkipAll(assert, require *td.T) {
+func TestTrimAttrsSkipAll(t *testing.T) {
 	attrs := map[string]interface{}{
 		"foo": "aaaaaa",
 		"bar": "bbbb",
@@ -110,5 +102,5 @@ func (s *SuiteAddEvents) TestTrimAttrsSkipAll(assert, require *td.T) {
 
 	expected := map[string]interface{}{}
 
-	assert.Cmp(TrimAttrs(attrs, 1), expected)
+	assert.Equal(t, expected, TrimAttrs(attrs, 1))
 }

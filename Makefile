@@ -72,8 +72,7 @@ test-many-times:
 		echo; \
 	done; \
 	echo "Grep for FAIL"; \
-	! grep -H FAIL out-test-*.log; \
-	echo "Always succeed"
+	! grep -H FAIL out-test-*.log;
 
 .PHONY: coverage
 coverage: coverage-all

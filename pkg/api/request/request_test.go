@@ -19,48 +19,39 @@ package request
 import (
 	"testing"
 
-	"github.com/maxatome/go-testdeep/helpers/tdsuite"
-	"github.com/maxatome/go-testdeep/td"
-
 	"github.com/scalyr/dataset-go/pkg/config"
+	"github.com/stretchr/testify/assert"
 )
 
-type SuiteRequest struct{}
-
-func TestSuiteRequest(t *testing.T) {
-	td.NewT(t)
-	tdsuite.Run(t, &SuiteRequest{})
-}
-
-func (s *SuiteRequest) TestMissingAuthJSONResponse(assert, require *td.T) {
+func TestMissingAuthJSONResponse(t *testing.T) {
 	tokens := config.DataSetTokens{}
 	r := NewRequest("GET", "/meh").WithWriteConfig(tokens).WithReadConfig(tokens).WithReadLog(tokens).WithWriteLog(tokens)
 	_, err2 := r.HttpRequest()
-	assert.NotNil(err2, "Should of gotten an error about missing authentication, got %s", r.supportedKeys)
+	assert.NotNil(t, err2, "Should of gotten an error about missing authentication, got %s", r.supportedKeys)
 
 	expectedAuthMethods := []string{"WriteConfig", "ReadConfig", "ReadLog", "WriteLog"}
-	assert.Cmp(r.supportedKeys, expectedAuthMethods)
+	assert.Equal(t, expectedAuthMethods, r.supportedKeys)
 }
 
-func (s *SuiteRequest) TestAuthOrderJSONResponse(assert, require *td.T) {
+func TestAuthOrderJSONResponse(t *testing.T) {
 	tokens := config.DataSetTokens{WriteLog: "writeLog", ReadLog: "readLog", WriteConfig: "writeConfig", ReadConfig: "readConfig"}
 	r := NewRequest("GET", "/meh").WithWriteConfig(tokens).WithReadConfig(tokens).WithReadLog(tokens).WithWriteLog(tokens)
 	_, err := r.HttpRequest()
-	assert.Nil(err, "Should not have gotten an error about missing authentication")
-	assert.Cmp(r.apiKey, "writeConfig", "WriteConfig API Key should have been used")
+	assert.Nil(t, err, "Should not have gotten an error about missing authentication")
+	assert.Equal(t, "writeConfig", r.apiKey, "WriteConfig API Key should have been used")
 
 	r = NewRequest("GET", "/meh").WithReadConfig(tokens).WithReadLog(tokens).WithWriteLog(tokens)
 	_, err2 := r.HttpRequest()
-	assert.Nil(err2)
-	assert.Cmp(r.apiKey, "readConfig", "ReadConfig API Key should have been used")
+	assert.Nil(t, err2)
+	assert.Equal(t, "readConfig", r.apiKey, "ReadConfig API Key should have been used")
 
 	r = NewRequest("GET", "/meh").WithReadLog(tokens).WithWriteLog(tokens)
 	_, err3 := r.HttpRequest()
-	assert.Nil(err3)
-	assert.Cmp(r.apiKey, "readLog", "ReadLog API Key should have been used")
+	assert.Nil(t, err3)
+	assert.Equal(t, "readLog", r.apiKey, "ReadLog API Key should have been used")
 
 	r = NewRequest("GET", "/meh").WithWriteLog(tokens)
 	_, err4 := r.HttpRequest()
-	assert.Nil(err4)
-	assert.Cmp(r.apiKey, "writeLog", "WriteLog API Key should have been used")
+	assert.Nil(t, err4)
+	assert.Equal(t, "writeLog", r.apiKey, "WriteLog API Key should have been used")
 }

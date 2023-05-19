@@ -18,43 +18,19 @@ package util
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/maxatome/go-testdeep/helpers/tdsuite"
-	"github.com/maxatome/go-testdeep/td"
+	"github.com/stretchr/testify/assert"
 )
 
-type SuiteUtil struct{}
-
-func (s *SuiteUtil) PreTest(t *td.T, testName string) error {
-	os.Clearenv()
-	return nil
-}
-
-func (s *SuiteUtil) PostTest(t *td.T, testName string) error {
-	os.Clearenv()
-	return nil
-}
-
-func (s *SuiteUtil) Destroy(t *td.T) error {
-	os.Clearenv()
-	return nil
-}
-
-func TestSuiteUtil(t *testing.T) {
-	td.NewT(t)
-	tdsuite.Run(t, &SuiteUtil{})
-}
-
-func (s *SuiteUtil) TestGetEnvWithDefaultIsSet(assert, require *td.T) {
+func TestGetEnvWithDefaultIsSet(t *testing.T) {
 	key := fmt.Sprintf("ENV_VARIABLE_%d", time.Now().Nanosecond())
-	assert.Setenv(key, "foo")
-	assert.Cmp(GetEnvWithDefault(key, "bar"), "foo")
+	t.Setenv(key, "foo")
+	assert.Equal(t, "foo", GetEnvWithDefault(key, "bar"))
 }
 
-func (s *SuiteUtil) TestGetEnvWithDefaultUseDefault(assert, require *td.T) {
+func TestGetEnvWithDefaultUseDefault(t *testing.T) {
 	key := fmt.Sprintf("ENV_VARIABLE_%d", time.Now().Nanosecond())
-	assert.Cmp(GetEnvWithDefault(key, "bar"), "bar")
+	assert.Equal(t, "bar", GetEnvWithDefault(key, "bar"))
 }
