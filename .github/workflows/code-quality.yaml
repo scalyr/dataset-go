@@ -74,7 +74,7 @@ jobs:
         run: |
           ( cd examples/client; go build )
           ( cd examples/readme; go build )
-      - name: Check SSH validation
+      - name: Check SSL Certificates
         run: |
           cd scripts
           ./test-ssl-certificates.sh

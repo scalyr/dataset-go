@@ -193,7 +193,6 @@ func (client *DataSetClient) Finish() error {
 	client.finished.Store(true)
 
 	var lastError error = nil
-	// do wait for all events to be processed
 	expBackoff := backoff.ExponentialBackOff{
 		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
 		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
@@ -205,8 +204,18 @@ func (client *DataSetClient) Finish() error {
 	}
 	expBackoff.Reset()
 
+	// first we wait until all the events in buffers are added into buffers
+	// then we are waiting until all the buffers are processed
+	// if some progress is made we restart the waiting times
+
+	// do wait for all events to be processed
 	retryNum := 0
+	lastProcessed := client.eventsProcessed.Load()
 	for client.IsProcessingEvents() {
+		if client.eventsProcessed.Load() != lastProcessed {
+			expBackoff.Reset()
+		}
+		lastProcessed = client.eventsProcessed.Load()
 		backoffDelay := expBackoff.NextBackOff()
 		client.Logger.Info(
 			"Not all events has been processed",
@@ -229,8 +238,15 @@ func (client *DataSetClient) Finish() error {
 	// do wait for all buffers to be processed
 	retryNum = 0
 	expBackoff.Reset()
-	droppedBefore := client.buffersDropped.Load()
+	lastProcessed = client.buffersProcessed.Load()
+	lastDropped := client.buffersDropped.Load()
+	initialDropped := lastDropped
 	for client.IsProcessingBuffers() {
+		if client.buffersProcessed.Load()+lastDropped != lastProcessed+client.buffersDropped.Load() {
+			expBackoff.Reset()
+		}
+		lastProcessed = client.buffersProcessed.Load()
+		lastDropped = client.buffersDropped.Load()
 		backoffDelay := expBackoff.NextBackOff()
 		client.Logger.Info(
 			"Not all buffers has been processed",
@@ -248,7 +264,7 @@ func (client *DataSetClient) Finish() error {
 		retryNum++
 	}
 
-	buffersDropped := client.buffersDropped.Load() - droppedBefore
+	buffersDropped := client.buffersDropped.Load() - initialDropped
 	if buffersDropped > 0 {
 		lastError = fmt.Errorf(
 			"some buffers were dropped during finishing - %d",
@@ -260,7 +276,9 @@ func (client *DataSetClient) Finish() error {
 		client.Logger.Info("Finishing with success")
 	} else {
 		client.Logger.Error("Finishing with error", zap.Error(lastError))
-		return lastError
+		if client.LastError() == nil {
+			return lastError
+		}
 	}
 
 	return client.LastError()
