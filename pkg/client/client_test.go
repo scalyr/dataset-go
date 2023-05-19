@@ -24,6 +24,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
+
 	"github.com/maxatome/go-testdeep/helpers/tdsuite"
 	"github.com/maxatome/go-testdeep/td"
 
@@ -61,8 +63,10 @@ func (s *SuiteClient) TestNewClient(assert, require *td.T) {
 	assert.Setenv("SCALYR_READLOG_TOKEN", "readlog")
 	assert.Setenv("SCALYR_WRITECONFIG_TOKEN", "writeconfig")
 	assert.Setenv("SCALYR_READCONFIG_TOKEN", "readconfig")
-	sc4, err := NewClient(&config.DataSetConfig{}, nil, zap.Must(zap.NewDevelopment()))
+	cfg, err := config.New(config.FromEnv())
 	assert.Nil(err)
+	sc4, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
 	assert.Cmp(sc4.Config.Tokens.ReadLog, "readlog")
 	assert.Cmp(sc4.Config.Tokens.WriteLog, "writelog")
 	assert.Cmp(sc4.Config.Tokens.ReadConfig, "readconfig")
@@ -77,10 +81,11 @@ func (s *SuiteClient) TestClientBuffer(assert, require *td.T) {
 
 	token := "token-test"
 	sc, err := NewClient(&config.DataSetConfig{
-		Endpoint: ts.URL,
-		Tokens:   config.DataSetTokens{WriteLog: token},
+		Endpoint:       ts.URL,
+		Tokens:         config.DataSetTokens{WriteLog: token},
+		BufferSettings: buffer_config.NewDefaultDataSetBufferSettings(),
 	}, &http.Client{}, zap.Must(zap.NewDevelopment()))
-	assert.Nil(err)
+	require.Nil(err)
 
 	sessionInfo := add_events.SessionInfo{
 		ServerId:   "serverId",

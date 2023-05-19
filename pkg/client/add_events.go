@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+
 	"github.com/scalyr/dataset-go/pkg/api/response"
 
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
@@ -186,44 +188,100 @@ func (client *DataSetClient) IsProcessingEvents() bool {
 
 // Finish stops processing of new events and waits until all the data that are
 // being processed are really processed.
-func (client *DataSetClient) Finish() {
+func (client *DataSetClient) Finish() error {
 	// mark as finished
 	client.finished.Store(true)
 
+	var lastError error = nil
+	expBackoff := backoff.ExponentialBackOff{
+		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
+		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
+		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
+		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
+		MaxElapsedTime:      client.Config.BufferSettings.RetryMaxElapsedTime,
+		Stop:                backoff.Stop,
+		Clock:               backoff.SystemClock,
+	}
+	expBackoff.Reset()
+
+	// first we wait until all the events in buffers are added into buffers
+	// then we are waiting until all the buffers are processed
+	// if some progress is made we restart the waiting times
+
 	// do wait for all events to be processed
-	i := 1
+	retryNum := 0
+	lastProcessed := client.eventsProcessed.Load()
 	for client.IsProcessingEvents() {
+		if client.eventsProcessed.Load() != lastProcessed {
+			expBackoff.Reset()
+		}
+		lastProcessed = client.eventsProcessed.Load()
+		backoffDelay := expBackoff.NextBackOff()
 		client.Logger.Info(
 			"Not all events has been processed",
+			zap.Int("retryNum", retryNum),
+			zap.Duration("backoffDelay", backoffDelay),
 			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
 			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
 		)
-		time.Sleep(client.Config.BufferSettings.RetryInitialInterval)
-		i++
-		if i > 50 {
+		if backoffDelay == expBackoff.Stop {
+			lastError = fmt.Errorf("not all events has been processed")
 			break
 		}
+		time.Sleep(backoffDelay)
+		retryNum++
 	}
 
 	// send all buffers
 	client.SendAllAddEventsBuffers()
 
 	// do wait for all buffers to be processed
-	j := 0
+	retryNum = 0
+	expBackoff.Reset()
+	lastProcessed = client.buffersProcessed.Load()
+	lastDropped := client.buffersDropped.Load()
+	initialDropped := lastDropped
 	for client.IsProcessingBuffers() {
+		if client.buffersProcessed.Load()+lastDropped != lastProcessed+client.buffersDropped.Load() {
+			expBackoff.Reset()
+		}
+		lastProcessed = client.buffersProcessed.Load()
+		lastDropped = client.buffersDropped.Load()
+		backoffDelay := expBackoff.NextBackOff()
 		client.Logger.Info(
 			"Not all buffers has been processed",
+			zap.Int("retryNum", retryNum),
+			zap.Duration("backoffDelay", backoffDelay),
 			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
 			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
+			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
 		)
-		time.Sleep(client.Config.BufferSettings.RetryInitialInterval)
-		j++
-		if j > 50 {
+		if backoffDelay == expBackoff.Stop {
+			lastError = fmt.Errorf("not all buffers has been processed")
 			break
+		}
+		time.Sleep(backoffDelay)
+		retryNum++
+	}
+
+	buffersDropped := client.buffersDropped.Load() - initialDropped
+	if buffersDropped > 0 {
+		lastError = fmt.Errorf(
+			"some buffers were dropped during finishing - %d",
+			buffersDropped,
+		)
+	}
+
+	if lastError == nil {
+		client.Logger.Info("Finishing with success")
+	} else {
+		client.Logger.Error("Finishing with error", zap.Error(lastError))
+		if client.LastError() == nil {
+			return lastError
 		}
 	}
 
-	client.Logger.Info("All buffers have been processed")
+	return client.LastError()
 }
 
 func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, error) {

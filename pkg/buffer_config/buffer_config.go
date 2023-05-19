@@ -17,14 +17,20 @@
 package buffer_config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 )
 
 const (
-	ShouldSentBufferSize = 5 * 1024 * 1024
-	LimitBufferSize      = 5*1024*1024 + 960*1024
+	ShouldSentBufferSize       = 5 * 1024 * 1024
+	LimitBufferSize            = 5*1024*1024 + 960*1024
+	MinimalMaxElapsedTime      = time.Second
+	MinimalMaxInterval         = time.Second
+	MinimalInitialInterval     = 50 * time.Millisecond
+	MinimalMultiplier          = 0.0
+	MinimalRandomizationFactor = 0.0
 )
 
 type DataSetBufferSettings struct {
@@ -127,4 +133,70 @@ func (cfg *DataSetBufferSettings) Update(opts ...DataSetBufferSettingsOption) (*
 		}
 	}
 	return &newCfg, nil
+}
+
+func (cfg *DataSetBufferSettings) String() string {
+	return fmt.Sprintf(
+		"MaxLifetime: %s, MaxSize: %d, GroupBy: %s, RetryRandomizationFactor: %f, RetryMultiplier: %f, RetryInitialInterval: %s, RetryMaxInterval: %s, RetryMaxElapsedTime: %s",
+		cfg.MaxLifetime,
+		cfg.MaxSize,
+		cfg.GroupBy,
+		cfg.RetryRandomizationFactor,
+		cfg.RetryMultiplier,
+		cfg.RetryInitialInterval,
+		cfg.RetryMaxInterval,
+		cfg.RetryMaxElapsedTime,
+	)
+}
+
+func (cfg *DataSetBufferSettings) Validate() error {
+	if cfg.MaxSize > LimitBufferSize {
+		return fmt.Errorf(
+			"MaxSize has value %d which is more than %d",
+			cfg.MaxSize,
+			LimitBufferSize,
+		)
+	}
+
+	if cfg.RetryInitialInterval < MinimalInitialInterval {
+		return fmt.Errorf(
+			"RetryInitialInterval has value %s which is less than %s",
+			cfg.RetryInitialInterval,
+			MinimalInitialInterval,
+		)
+	}
+
+	if cfg.RetryMaxInterval < MinimalMaxInterval {
+		return fmt.Errorf(
+			"RetryMaxInterval has value %s which is less than %s",
+			cfg.RetryMaxInterval,
+			MinimalMaxInterval,
+		)
+	}
+
+	if cfg.RetryMaxElapsedTime < MinimalMaxElapsedTime {
+		return fmt.Errorf(
+			"RetryMaxElapsedTime has value %s which is less than %s",
+			cfg.RetryMaxElapsedTime,
+			MinimalMaxElapsedTime,
+		)
+	}
+
+	if cfg.RetryMultiplier <= MinimalMultiplier {
+		return fmt.Errorf(
+			"RetryMultiplier has value %f which is less or equal than %f",
+			cfg.RetryMultiplier,
+			MinimalMultiplier,
+		)
+	}
+
+	if cfg.RetryRandomizationFactor <= MinimalRandomizationFactor {
+		return fmt.Errorf(
+			"RetryMaxElapsedTime has value %f which is less or equal  than %f",
+			cfg.RetryRandomizationFactor,
+			MinimalRandomizationFactor,
+		)
+	}
+
+	return nil
 }

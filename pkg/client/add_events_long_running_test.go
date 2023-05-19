@@ -70,12 +70,17 @@ func (s *SuiteAddEventsLongRunning) TestAddEventsManyLogsShouldSucceed(assert, r
 		Endpoint: "https://example.com",
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:              1000,
-			MaxLifetime:          time.Duration(MaxDelayMs) * time.Millisecond,
-			RetryInitialInterval: RetryBase,
+			MaxSize:                  1000,
+			MaxLifetime:              time.Duration(MaxDelayMs) * time.Millisecond,
+			RetryRandomizationFactor: 1.0,
+			RetryMultiplier:          1.0,
+			RetryInitialInterval:     RetryBase,
+			RetryMaxInterval:         RetryBase,
+			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
