@@ -118,3 +118,13 @@ func (s *SuiteBufferSettings) TestDataConfigUpdate(assert, require *td.T) {
 		RetryMaxElapsedTime:  210 * time.Minute,
 	})
 }
+
+func (s *SuiteBufferSettings) TestDataConfigNewDefaultToString(assert, require *td.T) {
+	cfg := NewDefaultDataSetBufferSettings()
+	assert.Cmp(cfg.String(), "MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s")
+}
+
+func (s *SuiteBufferSettings) TestDataConfigNewDefaultIsValid(assert, require *td.T) {
+	cfg := NewDefaultDataSetBufferSettings()
+	assert.Nil(cfg.Validate())
+}

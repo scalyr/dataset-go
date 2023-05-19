@@ -120,18 +120,23 @@ func (s *SuiteAddEvents) TestAddEventsRetry(assert, require *td.T) {
 		Endpoint: "https://example.com",
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:              20,
-			MaxLifetime:          0,
-			RetryInitialInterval: RetryBase,
+			MaxSize:                  20,
+			MaxLifetime:              0,
+			RetryRandomizationFactor: 1.0,
+			RetryMultiplier:          1.0,
+			RetryInitialInterval:     RetryBase,
+			RetryMaxInterval:         RetryBase,
+			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
-	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.CmpNoError(err)
 	err = sc.Finish()
 	assert.CmpNoError(err)
@@ -196,12 +201,17 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterSec(assert, require *td.T) {
 		Endpoint: "https://example.com",
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:              20,
-			MaxLifetime:          0,
-			RetryInitialInterval: RetryBase,
+			MaxSize:                  20,
+			MaxLifetime:              0,
+			RetryRandomizationFactor: 1.0,
+			RetryMultiplier:          1.0,
+			RetryInitialInterval:     RetryBase,
+			RetryMaxInterval:         RetryBase,
+			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
@@ -286,18 +296,23 @@ func (s *SuiteAddEvents) TestAddEventsRetryAfterTime(assert, require *td.T) {
 		Endpoint: "https://example.com",
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:              20,
-			MaxLifetime:          0,
-			RetryInitialInterval: RetryBase,
+			MaxSize:                  20,
+			MaxLifetime:              0,
+			RetryRandomizationFactor: 1.0,
+			RetryMultiplier:          1.0,
+			RetryInitialInterval:     RetryBase,
+			RetryMaxInterval:         RetryBase,
+			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
-	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.CmpNoError(err)
 	err = sc.Finish()
 	assert.CmpNoError(err)
@@ -377,18 +392,23 @@ func (s *SuiteAddEvents) TestAddEventsLargeEvent(assert, require *td.T) {
 		Endpoint: "https://example.com",
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:              20,
-			MaxLifetime:          0,
-			RetryInitialInterval: RetryBase,
+			MaxSize:                  20,
+			MaxLifetime:              0,
+			RetryRandomizationFactor: 1.0,
+			RetryMultiplier:          1.0,
+			RetryInitialInterval:     RetryBase,
+			RetryMaxInterval:         RetryBase,
+			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
-	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.CmpNoError(err)
 	err = sc.Finish()
 	assert.CmpNoError(err)
@@ -461,18 +481,23 @@ func (s *SuiteAddEvents) TestAddEventsLargeEventThatNeedEscaping(assert, require
 		Endpoint: "https://example.com",
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:              20,
-			MaxLifetime:          0,
-			RetryInitialInterval: RetryBase,
+			MaxSize:                  20,
+			MaxLifetime:              0,
+			RetryRandomizationFactor: 1.0,
+			RetryMultiplier:          1.0,
+			RetryInitialInterval:     RetryBase,
+			RetryMaxInterval:         RetryBase,
+			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
-	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.CmpNoError(err)
 	err = sc.Finish()
 	assert.CmpNoError(err)
@@ -488,13 +513,18 @@ func (s *SuiteAddEvents) TestAddEventsRejectAfterFinish(assert, require *td.T) {
 		Endpoint: "https://example.com",
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:              20,
-			MaxLifetime:          0,
-			RetryInitialInterval: RetryBase,
+			MaxSize:                  20,
+			MaxLifetime:              0,
+			RetryRandomizationFactor: 1.0,
+			RetryMultiplier:          1.0,
+			RetryInitialInterval:     RetryBase,
+			RetryMaxInterval:         RetryBase,
+			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
-	err := sc.Finish()
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
+	err = sc.Finish()
 	assert.CmpNoError(err)
 
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
@@ -528,12 +558,17 @@ func (s *SuiteAddEvents) TestAddEventsWithBufferSweeper(assert, require *td.T) {
 		Endpoint: "https://example.com",
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:              1000,
-			MaxLifetime:          2 * sentDelay,
-			RetryInitialInterval: RetryBase,
+			MaxSize:                  1000,
+			MaxLifetime:              2 * sentDelay,
+			RetryRandomizationFactor: 1.0,
+			RetryMultiplier:          1.0,
+			RetryInitialInterval:     RetryBase,
+			RetryMaxInterval:         RetryBase,
+			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
@@ -586,16 +621,19 @@ func (s *SuiteAddEvents) TestAddEventsDoNotRetryForever(assert, require *td.T) {
 			RetryRandomizationFactor: 1.0,
 		},
 	}
-	sc, _ := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
-	err := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
-	sc.Finish()
-
+	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.CmpNoError(err)
+	err = sc.Finish()
+
+	assert.NotNil(err)
+	assert.Cmp(err.Error(), "some buffers were dropped during finishing - 1")
 	info := httpmock.GetCallCountInfo()
 	assert.Gte(info["POST https://example.com/api/addEvents"], 3)
 }

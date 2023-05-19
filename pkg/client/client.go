@@ -60,6 +60,7 @@ type DataSetClient struct {
 	buffersAllMutex   sync.Mutex
 	buffersEnqueued   atomic.Uint64
 	buffersProcessed  atomic.Uint64
+	buffersDropped    atomic.Uint64
 	BuffersPubSub     *pubsub.PubSub
 	LastHttpStatus    atomic.Uint32
 	lastError         error
@@ -76,29 +77,11 @@ type DataSetClient struct {
 }
 
 func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
-	cfg, err := cfg.Update(config.FromEnv())
-	if err != nil {
-		return nil, fmt.Errorf("it was not possible to update config from env: %w", err)
-	}
-	logger.Info(
-		"Using config",
-		zap.String("endpoint", cfg.Endpoint),
-		zap.Bool("hasTokenWriteLog", len(cfg.Tokens.WriteLog) > 0),
-		zap.Bool("hasTokenReadLog", len(cfg.Tokens.ReadLog) > 0),
-		zap.Bool("hasTokenWriteConfig", len(cfg.Tokens.WriteConfig) > 0),
-		zap.Bool("hasTokenReadConfig", len(cfg.Tokens.ReadConfig) > 0),
-		zap.Duration("bufferMaxDelay", cfg.BufferSettings.MaxLifetime),
-		zap.Int("bufferMaxSize", cfg.BufferSettings.MaxSize),
-		zap.Strings("bufferGroupBy", cfg.BufferSettings.GroupBy),
-		zap.Duration("bufferRetryInitialInterval", cfg.BufferSettings.RetryInitialInterval),
-	)
+	logger.Info("Using config: ", zap.String("config", cfg.String()))
 
-	if cfg.BufferSettings.MaxSize > buffer.LimitBufferSize {
-		return nil, fmt.Errorf(
-			"maxPayloadB has value %d which is more than %d",
-			cfg.BufferSettings.MaxSize,
-			buffer.LimitBufferSize,
-		)
+	validationErr := cfg.Validate()
+	if validationErr != nil {
+		return nil, validationErr
 	}
 
 	id, err := uuid.NewRandom()
@@ -112,6 +95,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		buffer:            make(map[string]*buffer.Buffer),
 		buffersEnqueued:   atomic.Uint64{},
 		buffersProcessed:  atomic.Uint64{},
+		buffersDropped:    atomic.Uint64{},
 		buffersAllMutex:   sync.Mutex{},
 		BuffersPubSub:     pubsub.New(0),
 		LastHttpStatus:    atomic.Uint32{},
@@ -128,14 +112,14 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 	}
 
 	if cfg.BufferSettings.MaxLifetime > 0 {
-		dataClient.Logger.Info("MaxBufferDelay is positive => send buffers regularly",
-			zap.Int64("maxDelayMs", cfg.BufferSettings.MaxLifetime.Milliseconds()),
+		dataClient.Logger.Info("Buffer.MaxLifetime is positive => send buffers regularly",
+			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
 		)
 		go dataClient.bufferSweeper(cfg.BufferSettings.MaxLifetime)
 	} else {
 		dataClient.Logger.Warn(
-			"MaxBufferDelay is not positive => do NOT send buffers regularly",
-			zap.Duration("maxDelay", cfg.BufferSettings.MaxLifetime),
+			"Buffer.MaxLifetime is not positive => do NOT send buffers regularly",
+			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
 		)
 	}
 
@@ -196,6 +180,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				zap.Int("processedMsgCnt", processedMsgCnt),
 				zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
 				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
+				zap.Uint64("buffersDropped", client.buffersDropped.Load()),
 			)
 			buf, ok := msg.(*buffer.Buffer)
 			if ok {
@@ -482,6 +467,7 @@ func (client *DataSetClient) setRetryAfter(t time.Time) {
 }
 
 func (client *DataSetClient) onBufferDrop(buf *buffer.Buffer, status uint32, err error) {
+	client.buffersDropped.Add(1)
 	client.Logger.Error("Dropping buffer",
 		buf.ZapStats(
 			zap.Uint32("httpStatus", status),

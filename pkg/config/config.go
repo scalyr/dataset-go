@@ -17,6 +17,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/scalyr/dataset-go/internal/pkg/util"
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
@@ -28,10 +30,28 @@ type DataSetTokens struct {
 	ReadConfig  string
 }
 
+func (tokens DataSetTokens) String() string {
+	return fmt.Sprintf(
+		"WriteLog: %t, ReadLog: %t, WriteConfig: %t, ReadConfig: %t",
+		tokens.WriteLog != "",
+		tokens.WriteLog != "",
+		tokens.WriteLog != "",
+		tokens.WriteLog != "",
+	)
+}
+
 type DataSetConfig struct {
 	Endpoint       string
 	Tokens         DataSetTokens
 	BufferSettings buffer_config.DataSetBufferSettings
+}
+
+func NewDefaultDataSetConfig() DataSetConfig {
+	return DataSetConfig{
+		Endpoint:       "https://app.scalyr.com",
+		Tokens:         DataSetTokens{},
+		BufferSettings: buffer_config.NewDefaultDataSetBufferSettings(),
+	}
 }
 
 type DataSetConfigOption func(*DataSetConfig) error
@@ -74,6 +94,7 @@ func FromEnv() DataSetConfigOption {
 		if c.Endpoint == "" {
 			c.Endpoint = util.GetEnvWithDefault("SCALYR_SERVER", "")
 		}
+		c.BufferSettings = buffer_config.NewDefaultDataSetBufferSettings()
 
 		return nil
 	}
@@ -97,4 +118,24 @@ func (cfg *DataSetConfig) Update(opts ...DataSetConfigOption) (*DataSetConfig, e
 		}
 	}
 	return &newCfg, nil
+}
+
+func (cfg *DataSetConfig) String() string {
+	return fmt.Sprintf(
+		"Endpoint: %s, Tokens: (%s), BufferSettings: (%s)",
+		cfg.Endpoint,
+		cfg.Tokens.String(),
+		cfg.BufferSettings.String(),
+	)
+}
+
+func (cfg *DataSetConfig) Validate() error {
+	if cfg.Endpoint == "" {
+		return fmt.Errorf("endpoint cannot be empty")
+	}
+	bufferErr := cfg.BufferSettings.Validate()
+	if bufferErr != nil {
+		return fmt.Errorf("buffer settings are invalid: %w", bufferErr)
+	}
+	return nil
 }

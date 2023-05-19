@@ -171,3 +171,13 @@ func (s *SuiteConfig) TestDataConfigUpdate(assert, require *td.T) {
 		RetryMaxElapsedTime:  210 * time.Minute,
 	})
 }
+
+func (s *SuiteConfig) TestDataConfigNewDefaultToString(assert, require *td.T) {
+	cfg := NewDefaultDataSetConfig()
+	assert.Cmp(cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s)")
+}
+
+func (s *SuiteConfig) TestDataConfigNewDefaultIsValid(assert, require *td.T) {
+	cfg := NewDefaultDataSetConfig()
+	assert.Nil(cfg.Validate())
+}

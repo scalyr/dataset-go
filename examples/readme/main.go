@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
+
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/scalyr/dataset-go/pkg/client"
 	"github.com/scalyr/dataset-go/pkg/config"
@@ -62,7 +64,18 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	bufferCfg, err := cfg.BufferSettings.Update(
+		buffer_config.WithMaxLifetime(time.Second),
+		buffer_config.WithRetryInitialInterval(time.Second),
+		buffer_config.WithRetryMaxInterval(2*time.Second),
+		buffer_config.WithRetryMaxElapsedTime(10*time.Second),
+	)
+	cfg, err = cfg.Update(
+		config.WithBufferSettings(*bufferCfg),
+	)
+	if err != nil {
+		panic(err)
+	}
 	// build client
 	cl, err := client.NewClient(cfg, &http.Client{}, logger)
 	if err != nil {
