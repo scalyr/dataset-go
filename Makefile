@@ -57,7 +57,7 @@ test-all:
 
 .PHONY: test-many-times
 test-many-times:
-	set -e; \
+	# set -e;
 	if [ "x$(COUNT)" == "x" ]; then \
 		COUNT=50; \
 	else \
@@ -73,6 +73,9 @@ test-many-times:
 	done; \
 	echo "Grep for FAIL"; \
 	! grep -H FAIL out-test-*.log;
+
+foo:
+	! false
 
 .PHONY: coverage
 coverage: coverage-all
