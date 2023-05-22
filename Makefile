@@ -71,7 +71,7 @@ test-many-times:
 		grep -H FAIL out-test-$${i}.log; \
 		echo; \
 	done; \
-	echo "Grep for FAIL"; \
+	echo "Grep for FAIL - no lines should be found"; \
 	! grep -H FAIL out-test-*.log;
 
 foo:

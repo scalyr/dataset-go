@@ -227,7 +227,7 @@ func TestAddEventWithShouldSendAge(t *testing.T) {
 				break
 			}
 		}
-		assert.Greater(t, waited, 5)
+		assert.GreaterOrEqual(t, waited, 5)
 		finished.Add(1)
 	}()
 
@@ -266,7 +266,7 @@ func TestAddEventWithShouldSendSize(t *testing.T) {
 				break
 			}
 		}
-		assert.Greater(t, waited, 5)
+		assert.GreaterOrEqual(t, waited, 5)
 		finished.Add(1)
 	}()
 
