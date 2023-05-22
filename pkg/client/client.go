@@ -43,10 +43,12 @@ const (
 	HttpErrorHasErrorMessage = 499
 )
 
-func isOkStatus(status uint32) bool {
+// IsOkStatus returns true if status code is 200, false otherwise.
+func IsOkStatus(status uint32) bool {
 	return status == http.StatusOK
 }
 
+// IsRetryableStatus returns true if status code is 401, 403, 429, or any 5xx, false otherwise.
 func IsRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
@@ -246,7 +248,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 						zaps...,
 					)
 
-					if isOkStatus(lastHttpStatus) {
+					if IsOkStatus(lastHttpStatus) {
 						// everything was fine, there is no need for retries
 						break
 					}
