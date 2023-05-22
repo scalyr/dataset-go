@@ -111,6 +111,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		addEventsChannels: make(map[string]chan interface{}),
 	}
 
+	// run buffer sweeper if requested
 	if cfg.BufferSettings.MaxLifetime > 0 {
 		dataClient.Logger.Info("Buffer.MaxLifetime is positive => send buffers regularly",
 			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
@@ -122,6 +123,9 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
 		)
 	}
+
+	// run statistics sweeper
+	go dataClient.statisticsSweeper()
 
 	dataClient.Logger.Info("DataSetClient was created",
 		zap.String("id", dataClient.Id.String()),
@@ -287,6 +291,35 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 			client.buffersProcessed.Add(1)
 			break
 		}
+	}
+}
+
+func (client *DataSetClient) statisticsSweeper() {
+	for i := uint64(0); ; i++ {
+		// log buffer stats
+		bProcessed := client.buffersProcessed.Load()
+		bEnqueued := client.buffersEnqueued.Load()
+		bDropped := client.buffersDropped.Load()
+		client.Logger.Info(
+			"Buffers' Queue Stats:",
+			zap.Uint64("processed", bProcessed),
+			zap.Uint64("enqueued", bEnqueued),
+			zap.Uint64("dropped", bDropped),
+			zap.Uint64("waiting", bEnqueued-bProcessed),
+		)
+
+		// log events stats
+		eProcessed := client.eventsProcessed.Load()
+		eEnqueued := client.eventsEnqueued.Load()
+		client.Logger.Info(
+			"Events' Queue Stats:",
+			zap.Uint64("processed", eProcessed),
+			zap.Uint64("enqueued", eEnqueued),
+			zap.Uint64("waiting", eEnqueued-eProcessed),
+		)
+
+		// wait for some time before new sweep
+		time.Sleep(time.Minute)
 	}
 }
 
