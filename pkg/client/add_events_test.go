@@ -577,6 +577,7 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		attempt.Add(1)
 
+		w.WriteHeader(503)
 		payload, err := json.Marshal(map[string]interface{}{
 			"status":       "success",
 			"bytesCharged": 42,
@@ -612,7 +613,7 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 	assert.Nil(t, err)
 	err = sc.Finish()
 
-	assert.Nil(t, err)
-	// info := httpmock.GetCallCountInfo()
-	// assert.Gte(info["POST https://example.com/api/addEvents"], 3)
+	assert.NotNil(t, err)
+	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
+	assert.GreaterOrEqual(t, attempt.Load(), int32(2))
 }

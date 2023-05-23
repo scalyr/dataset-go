@@ -122,3 +122,69 @@ func TestClientBuffer(t *testing.T) {
 	assert.Equal(t, (params1.Events)[0].Ts, "1")
 	assert.Equal(t, (params2.Events)[0].Ts, "2")
 }
+
+func TestHttpStatusCodes(t *testing.T) {
+	tests := []struct {
+		statusCode  uint32
+		isOk        bool
+		isRetryable bool
+	}{
+		// 200
+		{
+			statusCode:  http.StatusOK,
+			isOk:        true,
+			isRetryable: false,
+		},
+		{
+			statusCode:  http.StatusCreated,
+			isOk:        false,
+			isRetryable: false,
+		},
+		{
+			statusCode:  http.StatusAccepted,
+			isOk:        false,
+			isRetryable: false,
+		},
+		// 300
+		{
+			statusCode:  http.StatusMovedPermanently,
+			isOk:        false,
+			isRetryable: false,
+		},
+		// 400
+		{
+			statusCode:  http.StatusUnauthorized,
+			isOk:        false,
+			isRetryable: true,
+		},
+		{
+			statusCode:  http.StatusForbidden,
+			isOk:        false,
+			isRetryable: true,
+		},
+		{
+			statusCode:  http.StatusTooManyRequests,
+			isOk:        false,
+			isRetryable: true,
+		},
+		// 500
+		{
+			statusCode:  http.StatusInternalServerError,
+			isOk:        false,
+			isRetryable: true,
+		},
+		{
+			statusCode:  http.StatusNotImplemented,
+			isOk:        false,
+			isRetryable: true,
+		},
+	}
+
+	for _, tt := range tests {
+		name := fmt.Sprintf("HTTP Status code: %d", tt.statusCode)
+		t.Run(name, func(*testing.T) {
+			assert.Equal(t, tt.isOk, IsOkStatus(tt.statusCode), name)
+			assert.Equal(t, tt.isRetryable, IsRetryableStatus(tt.statusCode), name)
+		})
+	}
+}
