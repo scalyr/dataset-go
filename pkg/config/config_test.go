@@ -150,7 +150,7 @@ func TestDataConfigUpdate(t *testing.T) {
 
 func TestDataConfigNewDefaultToString(t *testing.T) {
 	cfg := NewDefaultDataSetConfig()
-	assert.Equal(t, cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s)")
+	assert.Equal(t, cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s), MetadataSettings: (UserAgent: map[], Interval: 1m0s)")
 }
 
 func TestDataConfigNewDefaultIsValid(t *testing.T) {

@@ -19,6 +19,8 @@ package config
 import (
 	"fmt"
 
+	"github.com/scalyr/dataset-go/pkg/metadata_config"
+
 	"github.com/scalyr/dataset-go/internal/pkg/util"
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
@@ -41,16 +43,18 @@ func (tokens DataSetTokens) String() string {
 }
 
 type DataSetConfig struct {
-	Endpoint       string
-	Tokens         DataSetTokens
-	BufferSettings buffer_config.DataSetBufferSettings
+	Endpoint         string
+	Tokens           DataSetTokens
+	BufferSettings   buffer_config.DataSetBufferSettings
+	MetadataSettings metadata_config.DataSetMetadataSettings
 }
 
 func NewDefaultDataSetConfig() DataSetConfig {
 	return DataSetConfig{
-		Endpoint:       "https://app.scalyr.com",
-		Tokens:         DataSetTokens{},
-		BufferSettings: buffer_config.NewDefaultDataSetBufferSettings(),
+		Endpoint:         "https://app.scalyr.com",
+		Tokens:           DataSetTokens{},
+		BufferSettings:   buffer_config.NewDefaultDataSetBufferSettings(),
+		MetadataSettings: metadata_config.NewDefaultDataSetMetadataSettings(),
 	}
 }
 
@@ -95,6 +99,7 @@ func FromEnv() DataSetConfigOption {
 			c.Endpoint = util.GetEnvWithDefault("SCALYR_SERVER", "")
 		}
 		c.BufferSettings = buffer_config.NewDefaultDataSetBufferSettings()
+		c.MetadataSettings = metadata_config.NewDefaultDataSetMetadataSettings()
 
 		return nil
 	}
@@ -122,10 +127,11 @@ func (cfg *DataSetConfig) Update(opts ...DataSetConfigOption) (*DataSetConfig, e
 
 func (cfg *DataSetConfig) String() string {
 	return fmt.Sprintf(
-		"Endpoint: %s, Tokens: (%s), BufferSettings: (%s)",
+		"Endpoint: %s, Tokens: (%s), BufferSettings: (%s), MetadataSettings: (%s)",
 		cfg.Endpoint,
 		cfg.Tokens.String(),
 		cfg.BufferSettings.String(),
+		cfg.MetadataSettings.String(),
 	)
 }
 
@@ -136,6 +142,10 @@ func (cfg *DataSetConfig) Validate() error {
 	bufferErr := cfg.BufferSettings.Validate()
 	if bufferErr != nil {
 		return fmt.Errorf("buffer settings are invalid: %w", bufferErr)
+	}
+	metadataErr := cfg.BufferSettings.Validate()
+	if metadataErr != nil {
+		return fmt.Errorf("metadata settings are invalid: %w", metadataErr)
 	}
 	return nil
 }

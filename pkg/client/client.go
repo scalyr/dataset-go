@@ -19,11 +19,14 @@ package client
 import (
 	"fmt"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/scalyr/dataset-go/pkg/version"
 
 	"github.com/cenkalti/backoff/v4"
 
@@ -76,6 +79,7 @@ type DataSetClient struct {
 	addEventsMutex    sync.Mutex
 	addEventsPubSub   *pubsub.PubSub
 	addEventsChannels map[string]chan interface{}
+	userAgent         string
 }
 
 func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
@@ -111,7 +115,10 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		addEventsMutex:    sync.Mutex{},
 		addEventsPubSub:   pubsub.New(0),
 		addEventsChannels: make(map[string]chan interface{}),
+		userAgent:         "",
 	}
+
+	dataClient.constructUserAgent()
 
 	// run buffer sweeper if requested
 	if cfg.BufferSettings.MaxLifetime > 0 {
@@ -320,8 +327,36 @@ func (client *DataSetClient) statisticsSweeper() {
 			zap.Uint64("waiting", eEnqueued-eProcessed),
 		)
 
+		err := client.AddEvents([]*add_events.EventBundle{{
+			Event: &add_events.Event{
+				Ts:     fmt.Sprintf("%d", time.Now().UnixNano()),
+				Sev:    9,
+				Thread: "metadata",
+				Attrs: map[string]interface{}{
+					"id":                    client.Id.String(),
+					"library.version":       version.Version,
+					"library.released_data": version.ReleasedDate,
+					"config":                client.Config.String(),
+					"buffers.enqueued":      bEnqueued,
+					"buffers.processed":     bProcessed,
+					"buffers.dropped":       bDropped,
+					"buffers.waiting":       bEnqueued - bProcessed,
+					"events.enqueued":       eEnqueued,
+					"events.processed":      eProcessed,
+				},
+			},
+			Thread: &add_events.Thread{
+				Id:   "metadata",
+				Name: "metadata",
+			},
+			Log: nil,
+		}})
+		if err != nil {
+			client.Logger.Warn("unable to add metadata", zap.Error(err))
+		}
+
 		// wait for some time before new sweep
-		time.Sleep(time.Minute)
+		time.Sleep(client.Config.MetadataSettings.Interval)
 	}
 }
 
@@ -508,5 +543,23 @@ func (client *DataSetClient) onBufferDrop(buf *buffer.Buffer, status uint32, err
 			zap.Uint32("httpStatus", status),
 			zap.Error(err),
 		)...,
+	)
+}
+
+func (client *DataSetClient) constructUserAgent() {
+	client.userAgent = fmt.Sprintf(
+		"id: %s, "+
+			"lib: {version: %s, released: %s}, "+
+			"sessionInfo: {%v}, "+
+			"config: {%s}, "+
+			"runtime: {os: %s, arch: %s, cpu: %d}",
+		client.Id.String(),
+		version.Version,
+		version.ReleasedDate,
+		client.SessionInfo,
+		client.Config.String(),
+		runtime.GOOS,
+		runtime.GOARCH,
+		runtime.NumCPU(),
 	)
 }

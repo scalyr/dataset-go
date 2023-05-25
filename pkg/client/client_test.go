@@ -21,7 +21,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
+
+	"github.com/scalyr/dataset-go/pkg/version"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,10 +47,25 @@ func TestNewClient(t *testing.T) {
 	assert.Nil(t, err)
 	sc4, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
+	sc4.SessionInfo = &add_events.SessionInfo{
+		ServerId:   "AAA",
+		ServerType: "BBB",
+		Region:     "US",
+	}
 	assert.Equal(t, sc4.Config.Tokens.ReadLog, "readlog")
 	assert.Equal(t, sc4.Config.Tokens.WriteLog, "writelog")
 	assert.Equal(t, sc4.Config.Tokens.ReadConfig, "readconfig")
 	assert.Equal(t, sc4.Config.Tokens.WriteConfig, "writeconfig")
+	expectedUserAgent := fmt.Sprintf(
+		"id: %s, lib: {version: %s, released: %s}, sessionInfo: {<nil>}, config: {Endpoint: test, Tokens: (WriteLog: true, ReadLog: true, WriteConfig: true, ReadConfig: true), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s), MetadataSettings: (UserAgent: map[], Interval: 1m0s)}, runtime: {os: %s, arch: %s, cpu: %d}",
+		sc4.Id.String(),
+		version.Version,
+		version.ReleasedDate,
+		runtime.GOOS,
+		runtime.GOARCH,
+		runtime.NumCPU(),
+	)
+	assert.Equal(t, expectedUserAgent, sc4.userAgent)
 }
 
 func TestClientBuffer(t *testing.T) {

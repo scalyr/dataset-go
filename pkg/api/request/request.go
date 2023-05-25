@@ -29,6 +29,7 @@ type APIRequest interface {
 
 type Request struct {
 	requestType   string
+	userAgent     string
 	payload       []byte
 	request       interface{}
 	uri           string
@@ -37,8 +38,8 @@ type Request struct {
 	err           error
 }
 
-func NewRequest(requestType string, uri string) *Request {
-	return &Request{requestType: requestType, uri: uri}
+func NewRequest(requestType string, uri string, userAgent string) *Request {
+	return &Request{requestType: requestType, uri: uri, userAgent: userAgent}
 }
 
 func (r *Request) WithWriteLog(tokens config.DataSetTokens) *Request {
@@ -147,7 +148,7 @@ func (r *Request) HttpRequest() (*http.Request, error) {
 	}
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Content-Encoding", "gzip")
-	req.Header.Add("User-Agent", UserAgent)
+	req.Header.Add("User-Agent", r.userAgent)
 
 	return req, nil
 }

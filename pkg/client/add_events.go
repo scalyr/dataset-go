@@ -301,7 +301,7 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 	resp := &add_events.AddEventsResponse{}
 
 	httpRequest, err := request.NewRequest(
-		"POST", client.Config.Endpoint+"/api/addEvents",
+		"POST", client.Config.Endpoint+"/api/addEvents", "userAgent",
 	).WithWriteLog(client.Config.Tokens).RawRequest(payload).HttpRequest()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create request: %w", err)
