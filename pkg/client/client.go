@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/version"
+
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
@@ -74,13 +76,21 @@ type DataSetClient struct {
 	Logger            *zap.Logger
 	eventsEnqueued    atomic.Uint64
 	eventsProcessed   atomic.Uint64
+	bytesAPISent      atomic.Uint64
+	bytesAPIAccepted  atomic.Uint64
 	addEventsMutex    sync.Mutex
 	addEventsPubSub   *pubsub.PubSub
 	addEventsChannels map[string]chan interface{}
+	startedAt         time.Time
 }
 
 func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
-	logger.Info("Using config: ", zap.String("config", cfg.String()))
+	logger.Info(
+		"Using config: ",
+		zap.String("config", cfg.String()),
+		zap.String("version", version.Version),
+		zap.String("ReleaseDate", version.ReleasedDate),
+	)
 
 	validationErr := cfg.Validate()
 	if validationErr != nil {
@@ -109,9 +119,12 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		finished:          atomic.Bool{},
 		eventsEnqueued:    atomic.Uint64{},
 		eventsProcessed:   atomic.Uint64{},
+		bytesAPIAccepted:  atomic.Uint64{},
+		bytesAPISent:      atomic.Uint64{},
 		addEventsMutex:    sync.Mutex{},
 		addEventsPubSub:   pubsub.New(0),
 		addEventsChannels: make(map[string]chan interface{}),
+		startedAt:         time.Now(),
 	}
 
 	// run buffer sweeper if requested
@@ -214,7 +227,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				expBackoff.Reset()
 				retryNum := int64(0)
 				for {
-					response, err := client.SendAddEventsBuffer(buf)
+					response, payloadLen, err := client.SendAddEventsBuffer(buf)
 					client.setLastError(err)
 					lastHttpStatus := uint32(0)
 					if err != nil {
@@ -251,6 +264,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 
 					if IsOkStatus(lastHttpStatus) {
 						// everything was fine, there is no need for retries
+						client.bytesAPIAccepted.Add(uint64(payloadLen))
 						break
 					}
 
@@ -299,31 +313,51 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 
 func (client *DataSetClient) statisticsSweeper() {
 	for i := uint64(0); ; i++ {
-		// log buffer stats
-		bProcessed := client.buffersProcessed.Load()
-		bEnqueued := client.buffersEnqueued.Load()
-		bDropped := client.buffersDropped.Load()
-		client.Logger.Info(
-			"Buffers' Queue Stats:",
-			zap.Uint64("processed", bProcessed),
-			zap.Uint64("enqueued", bEnqueued),
-			zap.Uint64("dropped", bDropped),
-			zap.Uint64("waiting", bEnqueued-bProcessed),
-		)
-
-		// log events stats
-		eProcessed := client.eventsProcessed.Load()
-		eEnqueued := client.eventsEnqueued.Load()
-		client.Logger.Info(
-			"Events' Queue Stats:",
-			zap.Uint64("processed", eProcessed),
-			zap.Uint64("enqueued", eEnqueued),
-			zap.Uint64("waiting", eEnqueued-eProcessed),
-		)
-
+		client.logStatistics()
 		// wait for some time before new sweep
 		time.Sleep(time.Minute)
 	}
+}
+
+func (client *DataSetClient) logStatistics() {
+	mb := float64(1024 * 1024)
+	// log buffer stats
+	bProcessed := client.buffersProcessed.Load()
+	bEnqueued := client.buffersEnqueued.Load()
+	bDropped := client.buffersDropped.Load()
+	client.Logger.Info(
+		"Buffers' Queue Stats:",
+		zap.Uint64("processed", bProcessed),
+		zap.Uint64("enqueued", bEnqueued),
+		zap.Uint64("dropped", bDropped),
+		zap.Uint64("waiting", bEnqueued-bProcessed),
+	)
+
+	// log events stats
+	eProcessed := client.eventsProcessed.Load()
+	eEnqueued := client.eventsEnqueued.Load()
+	client.Logger.Info(
+		"Events' Queue Stats:",
+		zap.Uint64("processed", eProcessed),
+		zap.Uint64("enqueued", eEnqueued),
+		zap.Uint64("waiting", eEnqueued-eProcessed),
+	)
+
+	// log transferred stats
+	bAPISent := float64(client.bytesAPISent.Load())
+	bAPIAccepted := float64(client.bytesAPIAccepted.Load())
+	uptimeInSec := time.Since(client.startedAt).Seconds()
+	throughput := bAPIAccepted / mb / uptimeInSec
+	successRate := (bAPIAccepted + 1) / (bAPISent + 1)
+	perBuffer := (bAPIAccepted) / float64(bProcessed)
+	client.Logger.Info(
+		"Transfer Stats:",
+		zap.Float64("bytesSentMB", bAPISent/mb),
+		zap.Float64("bytesAcceptedMB", bAPIAccepted/mb),
+		zap.Float64("throughputMBpS", throughput),
+		zap.Float64("perBufferMB", perBuffer/mb),
+		zap.Float64("successRate", successRate),
+	)
 }
 
 func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {

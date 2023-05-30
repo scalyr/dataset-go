@@ -272,6 +272,9 @@ func (client *DataSetClient) Finish() error {
 		)
 	}
 
+	// print final statistics
+	client.logStatistics()
+
 	if lastError == nil {
 		client.Logger.Info("Finishing with success")
 	} else {
@@ -284,13 +287,13 @@ func (client *DataSetClient) Finish() error {
 	return client.LastError()
 }
 
-func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, error) {
+func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, int, error) {
 	client.Logger.Debug("Sending buf", buf.ZapStats()...)
 
 	payload, err := buf.Payload()
 	if err != nil {
 		client.Logger.Warn("Cannot create payload", buf.ZapStats(zap.Error(err))...)
-		return nil, fmt.Errorf("cannot create payload: %w", err)
+		return nil, 0, fmt.Errorf("cannot create payload: %w", err)
 	}
 	client.Logger.Debug("Created payload",
 		buf.ZapStats(
@@ -304,10 +307,11 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 		"POST", client.Config.Endpoint+"/api/addEvents",
 	).WithWriteLog(client.Config.Tokens).RawRequest(payload).HttpRequest()
 	if err != nil {
-		return nil, fmt.Errorf("cannot create request: %w", err)
+		return nil, len(payload), fmt.Errorf("cannot create request: %w", err)
 	}
 
 	err = client.apiCall(httpRequest, resp)
+	client.bytesAPISent.Add(uint64(len(payload)))
 
 	if strings.HasPrefix(resp.Status, "error") {
 		client.Logger.Error(
@@ -318,7 +322,7 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 		)
 	}
 
-	return resp, err
+	return resp, len(payload), err
 }
 
 //func (client *DataSetClient) groupBundles(bundles []*add_events.EventBundle) map[string][]*add_events.EventBundle {
