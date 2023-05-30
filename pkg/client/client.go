@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/version"
+
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
@@ -82,7 +84,12 @@ type DataSetClient struct {
 }
 
 func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
-	logger.Info("Using config: ", zap.String("config", cfg.String()))
+	logger.Info(
+		"Using config: ",
+		zap.String("config", cfg.String()),
+		zap.String("version", version.Version),
+		zap.String("ReleaseDate", version.ReleasedDate),
+	)
 
 	validationErr := cfg.Validate()
 	if validationErr != nil {
