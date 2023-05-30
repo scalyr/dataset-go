@@ -272,6 +272,9 @@ func (client *DataSetClient) Finish() error {
 		)
 	}
 
+	// print final statistics
+	client.logStatistics()
+
 	if lastError == nil {
 		client.Logger.Info("Finishing with success")
 	} else {
