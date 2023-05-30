@@ -53,6 +53,7 @@ func IsRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
+// DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
 	Id                uuid.UUID
 	Config            *config.DataSetConfig

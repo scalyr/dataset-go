@@ -24,25 +24,28 @@ import (
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
 
-func TestDataConfigEmptyEnv(t *testing.T) {
+func TestNewConfigFromEnvUsesDefaultsIfNotSet(t *testing.T) {
 	cfg1, err := New(FromEnv())
 	assert.Nil(t, err)
 	assert.Equal(t, "", cfg1.Endpoint)
 }
 
-func TestDataConfigFromEnvEndpoint(t *testing.T) {
+func TestNewConfigFromEnvUsingEnvServer(t *testing.T) {
 	t.Setenv("SCALYR_SERVER", "http://test")
 	cfg2, err := New(FromEnv())
 	assert.Nil(t, err)
 	assert.Equal(t, cfg2.Endpoint, "http://test")
 }
 
-func TestDataConfigFromEnvTokens(t *testing.T) {
+func TestNewConfigFromEnvUsingEnvTokens(t *testing.T) {
+	// GIVEN
 	t.Setenv("SCALYR_WRITELOG_TOKEN", "writelog")
 	t.Setenv("SCALYR_READLOG_TOKEN", "readlog")
 	t.Setenv("SCALYR_WRITECONFIG_TOKEN", "writeconfig")
 	t.Setenv("SCALYR_READCONFIG_TOKEN", "readconfig")
+	// WHEN
 	cfg4, err := New(FromEnv())
+	// THEN
 	assert.Nil(t, err)
 	assert.Equal(t, "readlog", cfg4.Tokens.ReadLog)
 	assert.Equal(t, "writelog", cfg4.Tokens.WriteLog)
@@ -50,7 +53,8 @@ func TestDataConfigFromEnvTokens(t *testing.T) {
 	assert.Equal(t, "writeconfig", cfg4.Tokens.WriteConfig)
 }
 
-func TestDataConfigWithOptions(t *testing.T) {
+func TestNewConfigWithProvidedOptions(t *testing.T) {
+	// GIVEN
 	bufCfg, errB := buffer_config.New(
 		buffer_config.WithMaxLifetime(3*time.Second),
 		buffer_config.WithMaxSize(12345),
@@ -60,11 +64,13 @@ func TestDataConfigWithOptions(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*time.Minute),
 	)
 	assert.Nil(t, errB)
+	// WHEN
 	cfg5, err := New(
 		WithEndpoint("https://fooOpt"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt"}),
 		WithBufferSettings(*bufCfg),
 	)
+	// THEN
 	assert.Nil(t, err)
 	assert.Equal(t, "https://fooOpt", cfg5.Endpoint)
 	assert.Equal(t, DataSetTokens{WriteLog: "writeLogOpt"}, cfg5.Tokens)
@@ -78,8 +84,9 @@ func TestDataConfigWithOptions(t *testing.T) {
 	}, cfg5.BufferSettings)
 }
 
-func TestDataConfigUpdate(t *testing.T) {
-	bufCfg, errB := buffer_config.New(
+func TestNewConfigBasedOnExistingWithNewConfigOptions(t *testing.T) {
+	// GIVEN
+	bufCfg, _ := buffer_config.New(
 		buffer_config.WithMaxLifetime(3*time.Second),
 		buffer_config.WithMaxSize(12345),
 		buffer_config.WithGroupBy([]string{"aaa", "bbb"}),
@@ -87,26 +94,13 @@ func TestDataConfigUpdate(t *testing.T) {
 		buffer_config.WithRetryMaxInterval(30*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(10*time.Minute),
 	)
-	assert.Nil(t, errB)
-
-	cfg5, err := New(
+	cfg5, _ := New(
 		WithEndpoint("https://fooOpt1"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt1"}),
 		WithBufferSettings(*bufCfg),
 	)
-	assert.Nil(t, err)
-	assert.Equal(t, "https://fooOpt1", cfg5.Endpoint)
-	assert.Equal(t, DataSetTokens{WriteLog: "writeLogOpt1"}, cfg5.Tokens)
-	assert.Equal(t, buffer_config.DataSetBufferSettings{
-		MaxLifetime:          3 * time.Second,
-		MaxSize:              12345,
-		GroupBy:              []string{"aaa", "bbb"},
-		RetryInitialInterval: 8 * time.Second,
-		RetryMaxInterval:     30 * time.Second,
-		RetryMaxElapsedTime:  10 * time.Minute,
-	}, cfg5.BufferSettings)
-
-	bufCfg2, errB := buffer_config.New(
+	// AND
+	bufCfg2, _ := buffer_config.New(
 		buffer_config.WithMaxLifetime(23*time.Second),
 		buffer_config.WithMaxSize(212345),
 		buffer_config.WithGroupBy([]string{"2aaa", "2bbb"}),
@@ -114,16 +108,13 @@ func TestDataConfigUpdate(t *testing.T) {
 		buffer_config.WithRetryMaxInterval(230*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(210*time.Minute),
 	)
-	assert.Nil(t, errB)
-
-	cfg6, err := cfg5.Update(
+	// WHEN
+	cfg6, _ := cfg5.WithOptions(
 		WithEndpoint("https://fooOpt2"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt2"}),
 		WithBufferSettings(*bufCfg2),
 	)
-	assert.Nil(t, err)
-
-	// original config is unchanged
+	// THEN original config is unchanged
 	assert.Equal(t, "https://fooOpt1", cfg5.Endpoint)
 	assert.Equal(t, DataSetTokens{WriteLog: "writeLogOpt1"}, cfg5.Tokens)
 	assert.Equal(t, buffer_config.DataSetBufferSettings{
@@ -135,7 +126,7 @@ func TestDataConfigUpdate(t *testing.T) {
 		RetryMaxElapsedTime:  10 * time.Minute,
 	}, cfg5.BufferSettings)
 
-	// new config is changed
+	// AND new config is changed
 	assert.Equal(t, "https://fooOpt2", cfg6.Endpoint)
 	assert.Equal(t, DataSetTokens{WriteLog: "writeLogOpt2"}, cfg6.Tokens)
 	assert.Equal(t, buffer_config.DataSetBufferSettings{
@@ -148,12 +139,23 @@ func TestDataConfigUpdate(t *testing.T) {
 	}, cfg6.BufferSettings)
 }
 
-func TestDataConfigNewDefaultToString(t *testing.T) {
+func TestNewDefaultDataSetConfigToString(t *testing.T) {
 	cfg := NewDefaultDataSetConfig()
 	assert.Equal(t, cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s)")
 }
 
-func TestDataConfigNewDefaultIsValid(t *testing.T) {
+func TestNewDefaultDataSetConfigIsValid(t *testing.T) {
 	cfg := NewDefaultDataSetConfig()
 	assert.Nil(t, cfg.Validate())
+}
+
+func TestDataSetConfigValidationEmptyEndpoint(t *testing.T) {
+	cfg := DataSetConfig{
+		Endpoint:       "",
+		Tokens:         DataSetTokens{},
+		BufferSettings: buffer_config.NewDefaultDataSetBufferSettings(),
+	}
+	err := cfg.Validate()
+	assert.NotNil(t, err)
+	assert.Equal(t, "endpoint cannot be empty", err.Error())
 }

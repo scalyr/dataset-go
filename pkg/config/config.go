@@ -19,10 +19,11 @@ package config
 import (
 	"fmt"
 
-	"github.com/scalyr/dataset-go/internal/pkg/util"
+	"github.com/scalyr/dataset-go/internal/pkg/os_util"
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
 
+// DataSetTokens wrap DataSet access tokens
 type DataSetTokens struct {
 	WriteLog    string
 	ReadLog     string
@@ -40,6 +41,7 @@ func (tokens DataSetTokens) String() string {
 	)
 }
 
+// DataSetConfig wraps DataSet endpoint configuration (host, tokens, etc.)
 type DataSetConfig struct {
 	Endpoint       string
 	Tokens         DataSetTokens
@@ -80,19 +82,19 @@ func WithBufferSettings(bufferSettings buffer_config.DataSetBufferSettings) Data
 func FromEnv() DataSetConfigOption {
 	return func(c *DataSetConfig) error {
 		if c.Tokens.WriteLog == "" {
-			c.Tokens.WriteLog = util.GetEnvWithDefault("SCALYR_WRITELOG_TOKEN", "")
+			c.Tokens.WriteLog = os_util.GetEnvVariableOrDefault("SCALYR_WRITELOG_TOKEN", "")
 		}
 		if c.Tokens.ReadLog == "" {
-			c.Tokens.ReadLog = util.GetEnvWithDefault("SCALYR_READLOG_TOKEN", "")
+			c.Tokens.ReadLog = os_util.GetEnvVariableOrDefault("SCALYR_READLOG_TOKEN", "")
 		}
 		if c.Tokens.ReadConfig == "" {
-			c.Tokens.ReadConfig = util.GetEnvWithDefault("SCALYR_READCONFIG_TOKEN", "")
+			c.Tokens.ReadConfig = os_util.GetEnvVariableOrDefault("SCALYR_READCONFIG_TOKEN", "")
 		}
 		if c.Tokens.WriteConfig == "" {
-			c.Tokens.WriteConfig = util.GetEnvWithDefault("SCALYR_WRITECONFIG_TOKEN", "")
+			c.Tokens.WriteConfig = os_util.GetEnvVariableOrDefault("SCALYR_WRITECONFIG_TOKEN", "")
 		}
 		if c.Endpoint == "" {
-			c.Endpoint = util.GetEnvWithDefault("SCALYR_SERVER", "")
+			c.Endpoint = os_util.GetEnvVariableOrDefault("SCALYR_SERVER", "")
 		}
 		c.BufferSettings = buffer_config.NewDefaultDataSetBufferSettings()
 
@@ -110,7 +112,7 @@ func New(opts ...DataSetConfigOption) (*DataSetConfig, error) {
 	return cfg, nil
 }
 
-func (cfg *DataSetConfig) Update(opts ...DataSetConfigOption) (*DataSetConfig, error) {
+func (cfg *DataSetConfig) WithOptions(opts ...DataSetConfigOption) (*DataSetConfig, error) {
 	newCfg := *cfg
 	for _, opt := range opts {
 		if err := opt(&newCfg); err != nil {
