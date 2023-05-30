@@ -96,3 +96,9 @@ compliance with the License. You may obtain a copy of the License in the [LICENS
 By contributing you agree that these contributions are your own (or approved by your employer) and you
 grant a full, complete, irrevocable copyright license to all users and developers of the project,
 present and future, pursuant to the license of the project.
+
+## Architecture
+
+TODO
+  - add explanation why we have this architecture - pub/sub, events, buffers, grouping, sessions, DataSet addEvents session limitations, etc.
+  - convert existing diagram into PlantUML (/docs/img/overview.puml) and embed generated image (/docs/img/overview.png) here

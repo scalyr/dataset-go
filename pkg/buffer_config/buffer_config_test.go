@@ -64,7 +64,7 @@ func TestDataConfigUpdate(t *testing.T) {
 		RetryMaxElapsedTime:  10 * time.Minute,
 	}, *bufCfg)
 
-	bufCfg2, err := bufCfg.Update(
+	bufCfg2, err := bufCfg.WithOptions(
 		WithMaxLifetime(23*time.Second),
 		WithMaxSize(212345),
 		WithGroupBy([]string{"2aaa", "2bbb"}),

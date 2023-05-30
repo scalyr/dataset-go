@@ -14,16 +14,23 @@
  * limitations under the License.
  */
 
-package util
+package os_util
 
 import (
-	"os"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func GetEnvWithDefault(envKey string, defaultValue string) string {
-	v := os.Getenv(envKey)
-	if v != "" {
-		return v
-	}
-	return defaultValue
+func TestGetEnvWithDefaultIsSet(t *testing.T) {
+	key := fmt.Sprintf("ENV_VARIABLE_%d", time.Now().Nanosecond())
+	t.Setenv(key, "foo")
+	assert.Equal(t, "foo", GetEnvVariableOrDefault(key, "bar"))
+}
+
+func TestGetEnvWithDefaultUseDefault(t *testing.T) {
+	key := fmt.Sprintf("ENV_VARIABLE_%d", time.Now().Nanosecond())
+	assert.Equal(t, "bar", GetEnvVariableOrDefault(key, "bar"))
 }

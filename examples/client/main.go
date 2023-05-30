@@ -43,11 +43,11 @@ func main() {
 	}
 
 	// manually adjust delay between sending buffers
-	bufCfg, err := cfg.BufferSettings.Update(buffer_config.WithMaxLifetime(3 * BatchDelay))
+	bufCfg, err := cfg.BufferSettings.WithOptions(buffer_config.WithMaxLifetime(3 * BatchDelay))
 	if err != nil {
 		panic(err)
 	}
-	cfg, err = cfg.Update(config.WithBufferSettings(*bufCfg))
+	cfg, err = cfg.WithOptions(config.WithBufferSettings(*bufCfg))
 	if err != nil {
 		panic(err)
 	}
