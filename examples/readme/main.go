@@ -64,13 +64,13 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	bufferCfg, err := cfg.BufferSettings.Update(
+	bufferCfg, err := cfg.BufferSettings.WithOptions(
 		buffer_config.WithMaxLifetime(time.Second),
 		buffer_config.WithRetryInitialInterval(time.Second),
 		buffer_config.WithRetryMaxInterval(2*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(10*time.Second),
 	)
-	cfg, err = cfg.Update(
+	cfg, err = cfg.WithOptions(
 		config.WithBufferSettings(*bufferCfg),
 	)
 	if err != nil {

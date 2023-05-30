@@ -125,7 +125,7 @@ func New(opts ...DataSetBufferSettingsOption) (*DataSetBufferSettings, error) {
 	return cfg, nil
 }
 
-func (cfg *DataSetBufferSettings) Update(opts ...DataSetBufferSettingsOption) (*DataSetBufferSettings, error) {
+func (cfg *DataSetBufferSettings) WithOptions(opts ...DataSetBufferSettingsOption) (*DataSetBufferSettings, error) {
 	newCfg := *cfg
 	for _, opt := range opts {
 		if err := opt(&newCfg); err != nil {
