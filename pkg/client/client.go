@@ -332,6 +332,11 @@ func (client *DataSetClient) logStatistics() {
 	processingDur := lastAt.Sub(firstAt)
 	processingInSec := processingDur.Seconds()
 
+	// if nothing was processed, do not log statistics
+	if processingInSec <= 0 {
+		return
+	}
+
 	// log buffer stats
 	bProcessed := client.buffersProcessed.Load()
 	bEnqueued := client.buffersEnqueued.Load()
