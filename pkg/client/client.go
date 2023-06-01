@@ -81,7 +81,8 @@ type DataSetClient struct {
 	addEventsMutex    sync.Mutex
 	addEventsPubSub   *pubsub.PubSub
 	addEventsChannels map[string]chan interface{}
-	startedAt         time.Time
+	firstReceivedAt   atomic.Int64
+	lastAcceptedAt    atomic.Int64
 }
 
 func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
@@ -124,7 +125,8 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		addEventsMutex:    sync.Mutex{},
 		addEventsPubSub:   pubsub.New(0),
 		addEventsChannels: make(map[string]chan interface{}),
-		startedAt:         time.Now(),
+		firstReceivedAt:   atomic.Int64{},
+		lastAcceptedAt:    atomic.Int64{},
 	}
 
 	// run buffer sweeper if requested
@@ -304,8 +306,10 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
 			}
 			client.buffersProcessed.Add(1)
+			client.lastAcceptedAt.Store(time.Now().UnixNano())
 		} else {
 			client.buffersProcessed.Add(1)
+			client.lastAcceptedAt.Store(time.Now().UnixNano())
 			break
 		}
 	}
@@ -315,12 +319,19 @@ func (client *DataSetClient) statisticsSweeper() {
 	for i := uint64(0); ; i++ {
 		client.logStatistics()
 		// wait for some time before new sweep
-		time.Sleep(time.Minute)
+		time.Sleep(15 * time.Second)
 	}
 }
 
 func (client *DataSetClient) logStatistics() {
 	mb := float64(1024 * 1024)
+
+	// for how long are events being processed
+	firstAt := time.Unix(0, client.firstReceivedAt.Load())
+	lastAt := time.Unix(0, client.lastAcceptedAt.Load())
+	processingDur := lastAt.Sub(firstAt)
+	processingInSec := processingDur.Seconds()
+
 	// log buffer stats
 	bProcessed := client.buffersProcessed.Load()
 	bEnqueued := client.buffersEnqueued.Load()
@@ -331,6 +342,7 @@ func (client *DataSetClient) logStatistics() {
 		zap.Uint64("enqueued", bEnqueued),
 		zap.Uint64("dropped", bDropped),
 		zap.Uint64("waiting", bEnqueued-bProcessed),
+		zap.Float64("processingS", processingInSec),
 	)
 
 	// log events stats
@@ -341,13 +353,13 @@ func (client *DataSetClient) logStatistics() {
 		zap.Uint64("processed", eProcessed),
 		zap.Uint64("enqueued", eEnqueued),
 		zap.Uint64("waiting", eEnqueued-eProcessed),
+		zap.Float64("processingS", processingInSec),
 	)
 
 	// log transferred stats
 	bAPISent := float64(client.bytesAPISent.Load())
 	bAPIAccepted := float64(client.bytesAPIAccepted.Load())
-	uptimeInSec := time.Since(client.startedAt).Seconds()
-	throughput := bAPIAccepted / mb / uptimeInSec
+	throughput := bAPIAccepted / mb / processingInSec
 	successRate := (bAPIAccepted + 1) / (bAPISent + 1)
 	perBuffer := (bAPIAccepted) / float64(bProcessed)
 	client.Logger.Info(
@@ -357,6 +369,8 @@ func (client *DataSetClient) logStatistics() {
 		zap.Float64("throughputMBpS", throughput),
 		zap.Float64("perBufferMB", perBuffer/mb),
 		zap.Float64("successRate", successRate),
+		zap.Float64("processingS", processingInSec),
+		zap.Duration("processing", processingDur),
 	)
 }
 

@@ -59,6 +59,11 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		seenKeys[key] = true
 	}
 
+	// update time when the first batch was received
+	if client.firstReceivedAt.Load() == 0 {
+		client.firstReceivedAt.Store(time.Now().UnixNano())
+	}
+
 	// then create all subscribers
 	// add subscriber for events by key
 	// add subscriber for buffer by key
@@ -192,6 +197,9 @@ func (client *DataSetClient) Finish() error {
 	// mark as finished
 	client.finished.Store(true)
 
+	// log statistics when finish was called
+	client.logStatistics()
+
 	var lastError error = nil
 	expBackoff := backoff.ExponentialBackOff{
 		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
@@ -212,6 +220,10 @@ func (client *DataSetClient) Finish() error {
 	retryNum := 0
 	lastProcessed := client.eventsProcessed.Load()
 	for client.IsProcessingEvents() {
+		// log statistics
+		client.logStatistics()
+
+		// if some events were processed restart retry interval
 		if client.eventsProcessed.Load() != lastProcessed {
 			expBackoff.Reset()
 		}
@@ -242,6 +254,10 @@ func (client *DataSetClient) Finish() error {
 	lastDropped := client.buffersDropped.Load()
 	initialDropped := lastDropped
 	for client.IsProcessingBuffers() {
+		// log statistics
+		client.logStatistics()
+
+		// if some buffers were processed restart retry interval
 		if client.buffersProcessed.Load()+lastDropped != lastProcessed+client.buffersDropped.Load() {
 			expBackoff.Reset()
 		}
