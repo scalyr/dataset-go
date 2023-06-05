@@ -656,6 +656,8 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	assert.Nil(t, err)
 	err = sc.Finish()
 
+	// TODO: Figure out how to assert on the message logged by the client (may be easiest to test apiCall() directly.
+
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
 	assert.GreaterOrEqual(t, attempt.Load(), int32(0))
