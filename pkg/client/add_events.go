@@ -392,7 +392,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 
 	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
-		return fmt.Errorf("unable to parse response body: %w", err)
+		return fmt.Errorf("unable to parse response body: %w, response: %s", err, truncateText(string(responseBody), 1000))
 	}
 
 	response.SetResponseObj(resp)
@@ -416,4 +416,13 @@ func (client *DataSetClient) getBuffers() []*buffer.Buffer {
 		buffers = append(buffers, buf)
 	}
 	return buffers
+}
+
+// Truncate provided text to the provided length
+func truncateText(text string, length int) string {
+	if len(text) > length {
+		text = string([]byte(text)[:length]) + "..."
+	}
+
+	return text
 }
