@@ -320,7 +320,7 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 	resp := &add_events.AddEventsResponse{}
 
 	httpRequest, err := request.NewRequest(
-		"POST", client.Config.Endpoint+"/api/addEvents",
+		"POST", client.addEventsEndpointUrl,
 	).WithWriteLog(client.Config.Tokens).RawRequest(payload).HttpRequest()
 	if err != nil {
 		return nil, len(payload), fmt.Errorf("cannot create request: %w", err)
@@ -392,7 +392,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 
 	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
-		return fmt.Errorf("unable to parse response body: %w, response: %s", err, truncateText(string(responseBody), 1000))
+		return fmt.Errorf("unable to parse response body: %w, url: %s, response: %s", err, client.addEventsEndpointUrl, truncateText(string(responseBody), 500))
 	}
 
 	response.SetResponseObj(resp)

@@ -83,6 +83,9 @@ type DataSetClient struct {
 	addEventsChannels map[string]chan interface{}
 	firstReceivedAt   atomic.Int64
 	lastAcceptedAt    atomic.Int64
+	// Stores sanitized complete URL to the addEvents API endpoint, e.g.
+	// https://app.scalyr.com/api/addEvents
+	addEventsEndpointUrl string
 }
 
 func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
@@ -102,31 +105,40 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 	if err != nil {
 		return nil, fmt.Errorf("it was not possible to generate UUID: %w", err)
 	}
+
+	addEventsEndpointUrl := cfg.Endpoint
+	if strings.HasSuffix(addEventsEndpointUrl, "/") {
+		addEventsEndpointUrl += "api/addEvents"
+	} else {
+		addEventsEndpointUrl += "/api/addEvents"
+	}
+
 	dataClient := &DataSetClient{
-		Id:                id,
-		Config:            cfg,
-		Client:            client,
-		buffer:            make(map[string]*buffer.Buffer),
-		buffersEnqueued:   atomic.Uint64{},
-		buffersProcessed:  atomic.Uint64{},
-		buffersDropped:    atomic.Uint64{},
-		buffersAllMutex:   sync.Mutex{},
-		BuffersPubSub:     pubsub.New(0),
-		LastHttpStatus:    atomic.Uint32{},
-		retryAfter:        time.Now(),
-		retryAfterMu:      sync.RWMutex{},
-		lastErrorMu:       sync.RWMutex{},
-		Logger:            logger,
-		finished:          atomic.Bool{},
-		eventsEnqueued:    atomic.Uint64{},
-		eventsProcessed:   atomic.Uint64{},
-		bytesAPIAccepted:  atomic.Uint64{},
-		bytesAPISent:      atomic.Uint64{},
-		addEventsMutex:    sync.Mutex{},
-		addEventsPubSub:   pubsub.New(0),
-		addEventsChannels: make(map[string]chan interface{}),
-		firstReceivedAt:   atomic.Int64{},
-		lastAcceptedAt:    atomic.Int64{},
+		Id:                   id,
+		Config:               cfg,
+		Client:               client,
+		buffer:               make(map[string]*buffer.Buffer),
+		buffersEnqueued:      atomic.Uint64{},
+		buffersProcessed:     atomic.Uint64{},
+		buffersDropped:       atomic.Uint64{},
+		buffersAllMutex:      sync.Mutex{},
+		BuffersPubSub:        pubsub.New(0),
+		LastHttpStatus:       atomic.Uint32{},
+		retryAfter:           time.Now(),
+		retryAfterMu:         sync.RWMutex{},
+		lastErrorMu:          sync.RWMutex{},
+		Logger:               logger,
+		finished:             atomic.Bool{},
+		eventsEnqueued:       atomic.Uint64{},
+		eventsProcessed:      atomic.Uint64{},
+		bytesAPIAccepted:     atomic.Uint64{},
+		bytesAPISent:         atomic.Uint64{},
+		addEventsMutex:       sync.Mutex{},
+		addEventsPubSub:      pubsub.New(0),
+		addEventsChannels:    make(map[string]chan interface{}),
+		firstReceivedAt:      atomic.Int64{},
+		lastAcceptedAt:       atomic.Int64{},
+		addEventsEndpointUrl: addEventsEndpointUrl,
 	}
 
 	// run buffer sweeper if requested
