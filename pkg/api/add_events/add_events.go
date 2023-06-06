@@ -87,6 +87,7 @@ func (response *AddEventsResponse) SetResponseObj(resp *http.Response) {
 	response.ResponseObj = resp
 }
 
+// TODO document what this function does
 func TrimAttrs(attrs map[string]interface{}, remaining int) map[string]interface{} {
 	keys := make([]string, 0, len(attrs))
 	lengths := make(map[string]int)
