@@ -45,8 +45,8 @@ const (
 	HttpErrorHasErrorMessage = 499
 )
 
-// IsOkStatus returns true if status code is 200, false otherwise.
-func IsOkStatus(status uint32) bool {
+// isOkStatus returns true if status code is 200, false otherwise.
+func isOkStatus(status uint32) bool {
 	return status == http.StatusOK
 }
 
@@ -277,7 +277,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 						zaps...,
 					)
 
-					if IsOkStatus(lastHttpStatus) {
+					if isOkStatus(lastHttpStatus) {
 						// everything was fine, there is no need for retries
 						client.bytesAPIAccepted.Add(uint64(payloadLen))
 						break
@@ -483,7 +483,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 
 func (client *DataSetClient) shouldRejectNextBatch() error {
 	if isRetryableStatus(client.LastHttpStatus.Load()) {
-		err := client.LastError()
+		err := client.getLastError()
 		if err != nil {
 			return fmt.Errorf("rejecting - Last HTTP request contains an error: %w", err)
 		} else {
@@ -544,7 +544,7 @@ func (client *DataSetClient) sleep(retryAfter time.Time, buffer *buffer.Buffer) 
 	time.Sleep(sleepFor)
 }
 
-func (client *DataSetClient) LastError() error {
+func (client *DataSetClient) getLastError() error {
 	client.lastErrorMu.RLock()
 	defer client.lastErrorMu.RUnlock()
 	return client.lastError

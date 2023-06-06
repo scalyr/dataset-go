@@ -91,7 +91,7 @@ func (client *DataSetClient) newChannelForEvents(key string) {
 	ch := client.addEventsPubSub.Sub(key)
 	client.addEventsChannels[key] = ch
 	go (func(session string, ch chan interface{}) {
-		client.ListenAndSendBundlesForKey(key, ch)
+		client.listenAndSendBundlesForKey(key, ch)
 	})(key, ch)
 }
 
@@ -108,7 +108,7 @@ func (client *DataSetClient) newBufferForEvents(key string) {
 	client.addEventsSubscriber(session)
 }
 
-func (client *DataSetClient) ListenAndSendBundlesForKey(key string, ch chan interface{}) {
+func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan interface{}) {
 	client.Logger.Info("Listening to events with key",
 		zap.String("key", key),
 	)
@@ -178,15 +178,15 @@ func (client *DataSetClient) ListenAndSendBundlesForKey(key string, ch chan inte
 	}
 }
 
-// IsProcessingBuffers returns True if there are still some unprocessed buffers.
+// isProcessingBuffers returns True if there are still some unprocessed buffers.
 // False otherwise.
-func (client *DataSetClient) IsProcessingBuffers() bool {
+func (client *DataSetClient) isProcessingBuffers() bool {
 	return client.buffersEnqueued.Load() > client.buffersProcessed.Load()
 }
 
-// IsProcessingEvents returns True if there are still some unprocessed events.
+// isProcessingEvents returns True if there are still some unprocessed events.
 // False otherwise.
-func (client *DataSetClient) IsProcessingEvents() bool {
+func (client *DataSetClient) isProcessingEvents() bool {
 	return client.eventsEnqueued.Load() > client.eventsProcessed.Load()
 }
 
@@ -218,7 +218,7 @@ func (client *DataSetClient) Shutdown() error {
 	// do wait for all events to be processed
 	retryNum := 0
 	lastProcessed := client.eventsProcessed.Load()
-	for client.IsProcessingEvents() {
+	for client.isProcessingEvents() {
 		// log statistics
 		client.logStatistics()
 
@@ -252,7 +252,7 @@ func (client *DataSetClient) Shutdown() error {
 	lastProcessed = client.buffersProcessed.Load()
 	lastDropped := client.buffersDropped.Load()
 	initialDropped := lastDropped
-	for client.IsProcessingBuffers() {
+	for client.isProcessingBuffers() {
 		// log statistics
 		client.logStatistics()
 
@@ -294,12 +294,12 @@ func (client *DataSetClient) Shutdown() error {
 		client.Logger.Info("Finishing with success")
 	} else {
 		client.Logger.Error("Finishing with error", zap.Error(lastError))
-		if client.LastError() == nil {
+		if client.getLastError() == nil {
 			return lastError
 		}
 	}
 
-	return client.LastError()
+	return client.getLastError()
 }
 
 func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, int, error) {

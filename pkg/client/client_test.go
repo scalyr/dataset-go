@@ -183,7 +183,7 @@ func TestHttpStatusCodes(t *testing.T) {
 	for _, tt := range tests {
 		name := fmt.Sprintf("HTTP Status code: %d", tt.statusCode)
 		t.Run(name, func(*testing.T) {
-			assert.Equal(t, tt.isOk, IsOkStatus(tt.statusCode), name)
+			assert.Equal(t, tt.isOk, isOkStatus(tt.statusCode), name)
 			assert.Equal(t, tt.isRetryable, isRetryableStatus(tt.statusCode), name)
 		})
 	}
