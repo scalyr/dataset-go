@@ -399,6 +399,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 	return nil
 }
 
+// TODO make this private
 func (client *DataSetClient) SendAllAddEventsBuffers() {
 	buffers := client.getBuffers()
 	client.Logger.Debug("Send all AddEvents buffers")

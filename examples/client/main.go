@@ -63,7 +63,7 @@ func main() {
 	}
 
 	// send all buffers when we want to finish
-	defer cl.SendAllAddEventsBuffers()
+	defer cl.SendAllAddEventsBuffers() // TODO use cl.Shutdown() instead
 
 	// build some bundles
 	bundles := make([]*add_events.EventBundle, 0)
