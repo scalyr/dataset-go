@@ -50,8 +50,8 @@ func IsOkStatus(status uint32) bool {
 	return status == http.StatusOK
 }
 
-// IsRetryableStatus returns true if status code is 401, 403, 429, or any 5xx, false otherwise.
-func IsRetryableStatus(status uint32) bool {
+// isRetryableStatus returns true if status code is 401, 403, 429, or any 5xx, false otherwise.
+func isRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
@@ -292,7 +292,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 						break
 					}
 
-					if IsRetryableStatus(lastHttpStatus) {
+					if isRetryableStatus(lastHttpStatus) {
 						// check whether header is specified and get its value
 						retryAfter, specified := client.getRetryAfter(
 							response.ResponseObj,
@@ -482,7 +482,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 }
 
 func (client *DataSetClient) shouldRejectNextBatch() error {
-	if IsRetryableStatus(client.LastHttpStatus.Load()) {
+	if isRetryableStatus(client.LastHttpStatus.Load()) {
 		err := client.LastError()
 		if err != nil {
 			return fmt.Errorf("rejecting - Last HTTP request contains an error: %w", err)
