@@ -242,7 +242,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				expBackoff.Reset()
 				retryNum := int64(0)
 				for {
-					response, payloadLen, err := client.SendAddEventsBuffer(buf)
+					response, payloadLen, err := client.sendAddEventsBuffer(buf)
 					client.setLastError(err)
 					lastHttpStatus := uint32(0)
 					if err != nil {

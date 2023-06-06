@@ -302,7 +302,7 @@ func (client *DataSetClient) Shutdown() error {
 	return client.getLastError()
 }
 
-func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, int, error) {
+func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, int, error) {
 	client.Logger.Debug("Sending buf", buf.ZapStats()...)
 
 	payload, err := buf.Payload()
