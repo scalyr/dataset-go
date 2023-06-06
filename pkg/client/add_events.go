@@ -40,9 +40,8 @@ import (
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
 
-// AddEvents enqueues all the events for processing.
-// It returns an error if the batch was not accepted.
-// When you want to finish processing, call Finish method.
+// AddEvents enqueues given events for processing (sending to Dataset).
+// It returns an error if the batch was not accepted (eg: client is being shutdown).
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
@@ -191,9 +190,9 @@ func (client *DataSetClient) IsProcessingEvents() bool {
 	return client.eventsEnqueued.Load() > client.eventsProcessed.Load()
 }
 
-// Finish stops processing of new events and waits until all the data that are
-// being processed are really processed.
-func (client *DataSetClient) Finish() error {
+// Shutdown stops processing of new events and waits until all the events that are
+// being processed are really processed (sent to DataSet).
+func (client *DataSetClient) Shutdown() error {
 	// mark as finished
 	client.finished.Store(true)
 

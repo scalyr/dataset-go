@@ -89,7 +89,7 @@ func main() {
 	}
 
 	// send all buffers when we want to finish
-	err = cl.Finish()
+	err = cl.Shutdown()
 	if err != nil {
 		panic(err)
 	}

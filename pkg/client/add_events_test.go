@@ -109,7 +109,7 @@ func TestAddEventsRetry(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	assert.True(t, wasSuccessful.Load())
@@ -213,7 +213,7 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	eventBundle2 := &add_events.EventBundle{Event: event2, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err2 := sc.AddEvents([]*add_events.EventBundle{eventBundle2})
 	assert.Nil(t, err2)
-	err3 := sc.Finish()
+	err3 := sc.Shutdown()
 	assert.Nil(t, err3)
 
 	assert.True(t, wasSuccessful.Load())
@@ -286,7 +286,7 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	assert.True(t, wasSuccessful.Load())
@@ -384,7 +384,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	assert.True(t, wasSuccessful.Load())
@@ -475,7 +475,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	assert.True(t, wasSuccessful.Load())
@@ -500,7 +500,7 @@ func TestAddEventsRejectAfterFinish(t *testing.T) {
 	}
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
@@ -611,7 +611,7 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
