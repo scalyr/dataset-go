@@ -318,7 +318,7 @@ func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 	)
 	resp := &add_events.AddEventsResponse{}
 
-	httpRequest, err := request.NewRequest(
+	httpRequest, err := request.NewApiRequest(
 		"POST", client.addEventsEndpointUrl,
 	).WithWriteLog(client.Config.Tokens).RawRequest(payload).HttpRequest()
 	if err != nil {

@@ -79,7 +79,7 @@ type AddEventsRequest struct {
 }
 
 type AddEventsResponse struct {
-	response.APIResponse
+	response.ApiResponse
 	BytesCharged int64 `json:"bytesCharged"`
 }
 

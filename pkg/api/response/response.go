@@ -5,14 +5,14 @@ import (
 	"net/http"
 )
 
-// TODO document this struct
-type APIResponse struct {
+// ApiResponse represents a generic DataSet REST API response
+type ApiResponse struct {
 	Message     string `json:"message"`
 	Status      string `json:"status"`
 	ResponseObj *http.Response
 }
 
-func (response *APIResponse) SetResponseObj(resp *http.Response) {
+func (response *ApiResponse) SetResponseObj(resp *http.Response) {
 	response.ResponseObj = resp
 }
 
@@ -25,7 +25,8 @@ type APITokenForDelegatingAccountRequest struct {
 	TokenType         string `json:"logRead"`
 }
 
-func ValidateAPIResponse(response *APIResponse, message string) error {
+// TODO why is this public? Where is it used?
+func ValidateAPIResponse(response *ApiResponse, message string) error {
 	if response.Status != "success" {
 		return fmt.Errorf("API Failure: %v - %v", message, response.Message)
 	}

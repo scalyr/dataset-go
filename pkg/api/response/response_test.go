@@ -7,16 +7,16 @@ import (
 )
 
 func TestAPIResponseSuccess(t *testing.T) {
-	success := &APIResponse{Status: "success"}
+	success := &ApiResponse{Status: "success"}
 	assert.Nil(t, ValidateAPIResponse(success, ""))
 }
 
 func TestAPIResponseFailed(t *testing.T) {
-	success := &APIResponse{Status: "meh"}
+	success := &ApiResponse{Status: "meh"}
 	assert.NotNil(t, ValidateAPIResponse(success, ""))
 }
 
 func TestAPIResponseSuccessWithMessage(t *testing.T) {
-	success := &APIResponse{Status: "success", Message: "meh"}
+	success := &ApiResponse{Status: "success", Message: "meh"}
 	assert.Nil(t, ValidateAPIResponse(success, ""))
 }
