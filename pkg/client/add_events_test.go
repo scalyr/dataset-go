@@ -204,7 +204,7 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	assert.True(t, wasSuccessful.Load())
 	assert.Equal(t, attempt.Load(), int32(2))
 	assert.Nil(t, err1)
-	assert.Nil(t, sc.getLastError())
+	assert.Nil(t, sc.LastError())
 	// info1 := httpmock.GetCallCountInfo()
 	// assert.CmpDeeply(info1, map[string]int{"POST https://example.com/api/addEvents": 2})
 
@@ -220,7 +220,7 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	assert.Equal(t, attempt.Load(), int32(3))
 	wasSuccessful.Store(false)
 	assert.Nil(t, err2)
-	assert.Nil(t, sc.getLastError())
+	assert.Nil(t, sc.LastError())
 	// info2 := httpmock.GetCallCountInfo()
 	// assert.CmpDeeply(info2, map[string]int{"POST https://example.com/api/addEvents": 3})
 }
@@ -291,7 +291,7 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 
 	assert.True(t, wasSuccessful.Load())
 	assert.Nil(t, err)
-	assert.Nil(t, sc.getLastError())
+	assert.Nil(t, sc.LastError())
 	// info := httpmock.GetCallCountInfo()
 	// assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 2})
 }
@@ -389,7 +389,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 
 	assert.True(t, wasSuccessful.Load())
 	assert.Nil(t, err)
-	assert.Nil(t, sc.getLastError())
+	assert.Nil(t, sc.LastError())
 	// info := httpmock.GetCallCountInfo()
 	// assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 1})
 }
@@ -479,7 +479,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 	assert.Nil(t, err)
 
 	assert.True(t, wasSuccessful.Load())
-	assert.Nil(t, sc.getLastError())
+	assert.Nil(t, sc.LastError())
 	// info := httpmock.GetCallCountInfo()
 	// assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 1})
 }

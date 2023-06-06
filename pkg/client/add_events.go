@@ -294,12 +294,12 @@ func (client *DataSetClient) Shutdown() error {
 		client.Logger.Info("Finishing with success")
 	} else {
 		client.Logger.Error("Finishing with error", zap.Error(lastError))
-		if client.getLastError() == nil {
+		if client.LastError() == nil {
 			return lastError
 		}
 	}
 
-	return client.getLastError()
+	return client.LastError()
 }
 
 func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, int, error) {

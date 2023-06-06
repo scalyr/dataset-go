@@ -483,7 +483,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 
 func (client *DataSetClient) shouldRejectNextBatch() error {
 	if isRetryableStatus(client.LastHttpStatus.Load()) {
-		err := client.getLastError()
+		err := client.LastError()
 		if err != nil {
 			return fmt.Errorf("rejecting - Last HTTP request contains an error: %w", err)
 		} else {
@@ -544,7 +544,7 @@ func (client *DataSetClient) sleep(retryAfter time.Time, buffer *buffer.Buffer) 
 	time.Sleep(sleepFor)
 }
 
-func (client *DataSetClient) getLastError() error {
+func (client *DataSetClient) LastError() error {
 	client.lastErrorMu.RLock()
 	defer client.lastErrorMu.RUnlock()
 	return client.lastError
