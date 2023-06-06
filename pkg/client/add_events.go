@@ -193,7 +193,7 @@ func (client *DataSetClient) IsProcessingEvents() bool {
 // Shutdown stops processing of new events and waits until all the events that are
 // being processed are really processed (sent to DataSet).
 func (client *DataSetClient) Shutdown() error {
-	// mark as finished
+	// mark as finished to prevent processing of further events
 	client.finished.Store(true)
 
 	// log statistics when finish was called

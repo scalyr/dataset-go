@@ -57,21 +57,22 @@ func IsRetryableStatus(status uint32) bool {
 
 // DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
-	Id                uuid.UUID
-	Config            *config.DataSetConfig
-	Client            *http.Client
-	SessionInfo       *add_events.SessionInfo
-	buffer            map[string]*buffer.Buffer
-	buffersAllMutex   sync.Mutex
-	buffersEnqueued   atomic.Uint64
-	buffersProcessed  atomic.Uint64
-	buffersDropped    atomic.Uint64
-	BuffersPubSub     *pubsub.PubSub
-	LastHttpStatus    atomic.Uint32
-	lastError         error
-	lastErrorMu       sync.RWMutex
-	retryAfter        time.Time
-	retryAfterMu      sync.RWMutex
+	Id               uuid.UUID
+	Config           *config.DataSetConfig
+	Client           *http.Client
+	SessionInfo      *add_events.SessionInfo
+	buffer           map[string]*buffer.Buffer
+	buffersAllMutex  sync.Mutex
+	buffersEnqueued  atomic.Uint64
+	buffersProcessed atomic.Uint64
+	buffersDropped   atomic.Uint64
+	BuffersPubSub    *pubsub.PubSub
+	LastHttpStatus   atomic.Uint32
+	lastError        error
+	lastErrorMu      sync.RWMutex
+	retryAfter       time.Time
+	retryAfterMu     sync.RWMutex
+	// indicates that client has been shut down and no further interaction is possible
 	finished          atomic.Bool
 	Logger            *zap.Logger
 	eventsEnqueued    atomic.Uint64
