@@ -358,7 +358,7 @@ func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 //	return grouped
 //}
 
-func (client *DataSetClient) apiCall(req *http.Request, response response.ResponseSetter) error {
+func (client *DataSetClient) apiCall(req *http.Request, response response.ResponseObjSetter) error {
 	resp, err := client.Client.Do(req)
 	if err != nil {
 		return fmt.Errorf("unable to send request: %w", err)
@@ -393,7 +393,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.Respon
 		return fmt.Errorf("unable to parse response body: %w, url: %s, response: %s", err, client.addEventsEndpointUrl, truncateText(string(responseBody), 1000))
 	}
 
-	response.SetResponse(resp)
+	response.SetResponseObj(resp)
 
 	return nil
 }

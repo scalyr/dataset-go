@@ -83,7 +83,7 @@ type AddEventsResponse struct {
 	BytesCharged int64 `json:"bytesCharged"`
 }
 
-func (response *AddEventsResponse) SetResponse(resp *http.Response) {
+func (response *AddEventsResponse) SetResponseObj(resp *http.Response) {
 	response.ResponseObj = resp
 }
 
