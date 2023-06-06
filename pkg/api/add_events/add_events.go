@@ -26,11 +26,7 @@ import (
 	"github.com/scalyr/dataset-go/pkg/api/response"
 )
 
-/**
-Wrapper around: https://app.scalyr.com/help/api#addEvents
-
-*/
-
+// Event represents DataSet REST API event structure (see https://app.scalyr.com/help/api#addEvents)
 type Event struct {
 	Thread string                 `json:"thread,omitempty"`
 	Sev    int                    `json:"sev,omitempty"`
@@ -49,11 +45,15 @@ func (event *Event) CloneWithoutAttrs() *Event {
 	}
 }
 
+// Thread represents a key-value definition of a thread.
+// This lets you create a readable name for each thread used in Event.
 type Thread struct {
 	Id   string `json:"id,omitempty"`
 	Name string `json:"name,omitempty"`
 }
 
+// Log represents a shared attributes reused in multiple Event in EventBundle.
+// This decreases redundant data, and improves throughput.
 type Log struct {
 	Id    string                 `json:"id,omitempty"`
 	Attrs map[string]interface{} `json:"attrs"`

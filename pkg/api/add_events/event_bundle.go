@@ -22,6 +22,10 @@ import (
 	"fmt"
 )
 
+// EventBundle represents a DataSet REST API event wrapper structure (see https://app.scalyr.com/help/api#addEvents)
+// Event - Zero or more events (log messages) to upload.
+// Thread - Optional. Lets you create a readable name for each thread in Event.
+// Log - Optional. Lets you set constant metadata, whose value does not change in multiple events in the request.
 type EventBundle struct {
 	Event  *Event
 	Thread *Thread
