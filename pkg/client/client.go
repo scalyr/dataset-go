@@ -72,7 +72,7 @@ type DataSetClient struct {
 	lastErrorMu      sync.RWMutex
 	retryAfter       time.Time
 	retryAfterMu     sync.RWMutex
-	// indicates that client has been shut down and no further interaction is possible
+	// indicates that client has been shut down and no further processing is possible
 	finished          atomic.Bool
 	Logger            *zap.Logger
 	eventsEnqueued    atomic.Uint64
@@ -211,7 +211,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 	)
 
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
-		if msg, ok := <-ch; ok {
+		if msg, ok := <-ch; ok { // TODO lets use Guard clause if possible to improve readability
 			client.Logger.Debug("Received buffer from channel",
 				zap.String("session", session),
 				zap.Int("processedMsgCnt", processedMsgCnt),
@@ -219,8 +219,10 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 				zap.Uint64("buffersDropped", client.buffersDropped.Load()),
 			)
-			buf, ok := msg.(*buffer.Buffer)
+			buf, ok := msg.(*buffer.Buffer) // TODO do not shadow ok which is previously used, rename isXySuccessful
 			if ok {
+				// TODO following block has ±100 lines, lets extract it to separate methods
+				// sleep until retry time
 				for client.RetryAfter().After(time.Now()) {
 					client.sleep(client.RetryAfter(), buf)
 				}
