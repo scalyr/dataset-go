@@ -19,7 +19,7 @@ package config
 import (
 	"fmt"
 
-	"github.com/scalyr/dataset-go/internal/pkg/os_util"
+	osUtil "github.com/scalyr/dataset-go/internal/pkg/os/util"
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
 
@@ -82,19 +82,19 @@ func WithBufferSettings(bufferSettings buffer_config.DataSetBufferSettings) Data
 func FromEnv() DataSetConfigOption {
 	return func(c *DataSetConfig) error {
 		if c.Tokens.WriteLog == "" {
-			c.Tokens.WriteLog = os_util.GetEnvVariableOrDefault("SCALYR_WRITELOG_TOKEN", "")
+			c.Tokens.WriteLog = osUtil.GetEnvVariableOrDefault("SCALYR_WRITELOG_TOKEN", "")
 		}
 		if c.Tokens.ReadLog == "" {
-			c.Tokens.ReadLog = os_util.GetEnvVariableOrDefault("SCALYR_READLOG_TOKEN", "")
+			c.Tokens.ReadLog = osUtil.GetEnvVariableOrDefault("SCALYR_READLOG_TOKEN", "")
 		}
 		if c.Tokens.ReadConfig == "" {
-			c.Tokens.ReadConfig = os_util.GetEnvVariableOrDefault("SCALYR_READCONFIG_TOKEN", "")
+			c.Tokens.ReadConfig = osUtil.GetEnvVariableOrDefault("SCALYR_READCONFIG_TOKEN", "")
 		}
 		if c.Tokens.WriteConfig == "" {
-			c.Tokens.WriteConfig = os_util.GetEnvVariableOrDefault("SCALYR_WRITECONFIG_TOKEN", "")
+			c.Tokens.WriteConfig = osUtil.GetEnvVariableOrDefault("SCALYR_WRITECONFIG_TOKEN", "")
 		}
 		if c.Endpoint == "" {
-			c.Endpoint = os_util.GetEnvVariableOrDefault("SCALYR_SERVER", "")
+			c.Endpoint = osUtil.GetEnvVariableOrDefault("SCALYR_SERVER", "")
 		}
 		c.BufferSettings = buffer_config.NewDefaultDataSetBufferSettings()
 
