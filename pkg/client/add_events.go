@@ -370,7 +370,6 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 		}
 	}()
 
-	// foo
 	client.Logger.Debug("Received response",
 		zap.Int("statusCode", resp.StatusCode),
 		zap.String("status", resp.Status),
