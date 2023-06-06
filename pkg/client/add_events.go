@@ -46,8 +46,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
 	}
-	errR := client.shouldRejectNextBatch()
-	if errR != nil {
+	if errR := client.shouldRejectNextBatch(); errR != nil { // TODO rename to client.prevBatchError(), should indicates return boolean type
 		return fmt.Errorf("AddEvents - reject batch: %w", errR)
 	}
 
