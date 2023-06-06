@@ -65,6 +65,7 @@ type SessionInfo struct {
 	Region     string `json:"region,omitempty"`
 }
 
+// AddEventsRequestParams represents a represents a AddEvent DataSet REST API request parameters, see https://app.scalyr.com/help/api#addEvents.
 type AddEventsRequestParams struct {
 	Session     string       `json:"session,omitempty"`
 	SessionInfo *SessionInfo `json:"sessionInfo,omitempty"`
@@ -73,11 +74,13 @@ type AddEventsRequestParams struct {
 	Logs        []*Log       `json:"logs,omitempty"`
 }
 
+// AddEventsRequest represents a AddEvent DataSet REST API request.
 type AddEventsRequest struct {
 	request.AuthParams
 	AddEventsRequestParams
 }
 
+// AddEventsResponse represents a AddEvent DataSet REST API response.
 type AddEventsResponse struct {
 	response.ApiResponse
 	BytesCharged int64 `json:"bytesCharged"`
