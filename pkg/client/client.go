@@ -82,8 +82,10 @@ type DataSetClient struct {
 	addEventsMutex    sync.Mutex
 	addEventsPubSub   *pubsub.PubSub
 	addEventsChannels map[string]chan interface{}
-	firstReceivedAt   atomic.Int64
-	lastAcceptedAt    atomic.Int64
+	// timestamp of first event processed by client
+	firstReceivedAt atomic.Int64
+	// timestamp of last event so far processed by client
+	lastAcceptedAt atomic.Int64
 	// Stores sanitized complete URL to the addEvents API endpoint, e.g.
 	// https://app.scalyr.com/api/addEvents
 	addEventsEndpointUrl string
