@@ -27,6 +27,7 @@ type APIRequest interface {
 	setToken(token string)
 }
 
+// TODO document this struct
 type Request struct {
 	requestType   string
 	payload       []byte

@@ -5,6 +5,7 @@ import (
 	"net/http"
 )
 
+// TODO document this struct
 type APIResponse struct {
 	Message     string `json:"message"`
 	Status      string `json:"status"`
