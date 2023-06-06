@@ -11,12 +11,12 @@ type APIResponse struct {
 	ResponseObj *http.Response
 }
 
-func (response *APIResponse) SetResponseObj(resp *http.Response) {
+func (response *APIResponse) SetResponse(resp *http.Response) {
 	response.ResponseObj = resp
 }
 
-type SetResponseObj interface {
-	SetResponseObj(resp *http.Response)
+type ResponseSetter interface {
+	SetResponse(resp *http.Response)
 }
 
 type APITokenForDelegatingAccountRequest struct {
