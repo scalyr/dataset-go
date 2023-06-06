@@ -42,6 +42,7 @@ Wrapper around: https://app.scalyr.com/help/api#addEvents
 
 // AddEvents enqueues given events for processing (sending to Dataset).
 // It returns an error if the batch was not accepted (eg: client is being shutdown).
+// TODO improve docs, this method is synchronous, until previous batch is processed another calls are being rejected (based on shouldRejectNextBatch behaviour). This imho contradicts the first line of this docs "AddEvents enqueues given events"
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
