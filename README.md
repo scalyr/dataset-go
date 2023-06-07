@@ -101,4 +101,37 @@ present and future, pursuant to the license of the project.
 
 TODO
   - add explanation why we have this architecture - pub/sub, events, buffers, grouping, sessions, DataSet addEvents session limitations, etc.
-  - convert existing diagram into PlantUML (/docs/img/overview.puml) and embed generated image (/docs/img/overview.png) here
+```mermaid
+graph TB
+subgraph "DataSet"
+    DataSetApi["/api/addEvents REST endpoint"]
+end
+subgraph Collector[OpenTelemetry collector]
+  collector[Processing data]
+  collector --"consume traces"--> convTraces[Converts OTel structure into events]
+  collector --"consume logs"--> convLogs[Converts OTel structure into events]
+
+  subgraph DataSetExporter
+    Publisher[Publishes events into topic based on group_by]
+    convLogs --> Publisher --propagates errors so that new data are rejected--> convLogs
+    convTraces --> Publisher --propagates errors so that new data are rejected--> convTraces
+
+    subgraph "DataSet Go library"
+      PubSubEvents[Pub/Sub for events - topic based on group_by]
+      EventsConsumer[consumes events, stores them in buffers, publishes buffer in topic based on group_by]
+      PubSubBuffers[Pub/Sub for buffers - topic based on group_by]
+      BufferConsumer[consumes buffers, calls DataSet API, retries in case of error]
+      BufferSweeper[Buffer sweeper - publishes old buffers]
+
+      Publisher -->  PubSubEvents
+      PubSubEvents --"DataSetClient.ListenAndSendBundlesForKey"--> EventsConsumer
+      EventsConsumer --> PubSubBuffers
+      EventsConsumer --> BufferSweeper
+      BufferSweeper --> PubSubBuffers
+      PubSubBuffers --"DataSetClient.SendAddEventsBuffer"--> BufferConsumer
+      BufferConsumer --"propagates errors"--> Publisher
+      BufferConsumer -."use HTTP POST".-> DataSetApi
+    end
+  end
+end
+```
