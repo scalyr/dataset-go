@@ -59,6 +59,11 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		seenKeys[key] = true
 	}
 
+	// update time when the first batch was received
+	if client.firstReceivedAt.Load() == 0 {
+		client.firstReceivedAt.Store(time.Now().UnixNano())
+	}
+
 	// then create all subscribers
 	// add subscriber for events by key
 	// add subscriber for buffer by key
@@ -192,6 +197,9 @@ func (client *DataSetClient) Finish() error {
 	// mark as finished
 	client.finished.Store(true)
 
+	// log statistics when finish was called
+	client.logStatistics()
+
 	var lastError error = nil
 	expBackoff := backoff.ExponentialBackOff{
 		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
@@ -212,6 +220,10 @@ func (client *DataSetClient) Finish() error {
 	retryNum := 0
 	lastProcessed := client.eventsProcessed.Load()
 	for client.IsProcessingEvents() {
+		// log statistics
+		client.logStatistics()
+
+		// if some events were processed restart retry interval
 		if client.eventsProcessed.Load() != lastProcessed {
 			expBackoff.Reset()
 		}
@@ -242,6 +254,10 @@ func (client *DataSetClient) Finish() error {
 	lastDropped := client.buffersDropped.Load()
 	initialDropped := lastDropped
 	for client.IsProcessingBuffers() {
+		// log statistics
+		client.logStatistics()
+
+		// if some buffers were processed restart retry interval
 		if client.buffersProcessed.Load()+lastDropped != lastProcessed+client.buffersDropped.Load() {
 			expBackoff.Reset()
 		}
@@ -272,6 +288,9 @@ func (client *DataSetClient) Finish() error {
 		)
 	}
 
+	// print final statistics
+	client.logStatistics()
+
 	if lastError == nil {
 		client.Logger.Info("Finishing with success")
 	} else {
@@ -284,13 +303,13 @@ func (client *DataSetClient) Finish() error {
 	return client.LastError()
 }
 
-func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, error) {
+func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, int, error) {
 	client.Logger.Debug("Sending buf", buf.ZapStats()...)
 
 	payload, err := buf.Payload()
 	if err != nil {
 		client.Logger.Warn("Cannot create payload", buf.ZapStats(zap.Error(err))...)
-		return nil, fmt.Errorf("cannot create payload: %w", err)
+		return nil, 0, fmt.Errorf("cannot create payload: %w", err)
 	}
 	client.Logger.Debug("Created payload",
 		buf.ZapStats(
@@ -304,10 +323,11 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 		"POST", client.Config.Endpoint+"/api/addEvents",
 	).WithWriteLog(client.Config.Tokens).RawRequest(payload).HttpRequest()
 	if err != nil {
-		return nil, fmt.Errorf("cannot create request: %w", err)
+		return nil, len(payload), fmt.Errorf("cannot create request: %w", err)
 	}
 
 	err = client.apiCall(httpRequest, resp)
+	client.bytesAPISent.Add(uint64(len(payload)))
 
 	if strings.HasPrefix(resp.Status, "error") {
 		client.Logger.Error(
@@ -318,7 +338,7 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 		)
 	}
 
-	return resp, err
+	return resp, len(payload), err
 }
 
 //func (client *DataSetClient) groupBundles(bundles []*add_events.EventBundle) map[string][]*add_events.EventBundle {
