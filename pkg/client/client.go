@@ -51,6 +51,7 @@ func isOkStatus(status uint32) bool {
 }
 
 // isRetryableStatus returns true if status code is 401, 403, 429, or any 5xx, false otherwise.
+// Note from DataSet API request handling perspective 401 and 403 may be considered as retryable, see DSET-2201
 func isRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
