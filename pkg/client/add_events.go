@@ -384,6 +384,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.Respon
 	)
 
 	if resp.StatusCode != http.StatusOK {
+		// TODO improve docs - why dont we return error in this case
 		client.Logger.Warn(
 			"!!!!! PAYLOAD WAS NOT ACCEPTED !!!!",
 			zap.Int("statusCode", resp.StatusCode),
