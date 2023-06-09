@@ -640,7 +640,7 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 			MaxLifetime:              0,
 			RetryInitialInterval:     time.Second,
 			RetryMaxInterval:         time.Second,
-			RetryMaxElapsedTime:      1 * time.Second,
+			RetryMaxElapsedTime:      3 * time.Second,
 			RetryMultiplier:          1.0,
 			RetryRandomizationFactor: 1.0,
 		},
@@ -656,7 +656,10 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	assert.Nil(t, err)
 	err = sc.Finish()
 
-	// TODO: Figure out how to assert on the message logged by the client (may be easiest to test apiCall() directly.
+	lastError := sc.LastError()
+
+	assert.NotNil(t, lastError)
+	assert.Equal(t, fmt.Errorf("unable to parse response body: invalid character '<' looking for beginning of value, url: %s, response: <html>not valid json</html>", sc.addEventsEndpointUrl).Error(), lastError.Error())
 
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
