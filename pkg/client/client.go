@@ -58,11 +58,12 @@ func isRetryableStatus(status uint32) bool {
 
 // DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
-	Id               uuid.UUID
-	Config           *config.DataSetConfig
-	Client           *http.Client
-	SessionInfo      *add_events.SessionInfo
-	buffer           map[string]*buffer.Buffer
+	Id          uuid.UUID
+	Config      *config.DataSetConfig
+	Client      *http.Client
+	SessionInfo *add_events.SessionInfo
+	// map of known Buffer //TODO introduce cleanup
+	buffers          map[string]*buffer.Buffer
 	buffersAllMutex  sync.Mutex
 	buffersEnqueued  atomic.Uint64
 	buffersProcessed atomic.Uint64
@@ -121,7 +122,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		Id:                   id,
 		Config:               cfg,
 		Client:               client,
-		buffer:               make(map[string]*buffer.Buffer),
+		buffers:               make(map[string]*buffer.Buffer),
 		buffersEnqueued:      atomic.Uint64{},
 		buffersProcessed:     atomic.Uint64{},
 		buffersDropped:       atomic.Uint64{},
@@ -177,7 +178,7 @@ func (client *DataSetClient) getBuffer(key string) *buffer.Buffer {
 	session := fmt.Sprintf("%s-%s", client.Id, key)
 	client.buffersAllMutex.Lock()
 	defer client.buffersAllMutex.Unlock()
-	return client.buffer[session]
+	return client.buffers[session]
 }
 
 func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.SessionInfo) {
@@ -478,7 +479,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 		)
 
 		client.initBuffer(newBuf, buf.SessionInfo())
-		client.buffer[buf.Session] = newBuf
+		client.buffers[buf.Session] = newBuf
 	}
 	client.buffersAllMutex.Unlock()
 

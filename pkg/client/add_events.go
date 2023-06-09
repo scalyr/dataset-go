@@ -101,7 +101,7 @@ func (client *DataSetClient) newBufferForEvents(key string) {
 	client.initBuffer(buf, client.SessionInfo)
 
 	client.buffersAllMutex.Lock()
-	client.buffer[session] = buf
+	client.buffers[session] = buf
 	defer client.buffersAllMutex.Unlock()
 
 	// create subscriber, so all the upcoming buffers are processed as well
@@ -412,7 +412,7 @@ func (client *DataSetClient) getBuffers() []*buffer.Buffer {
 	buffers := make([]*buffer.Buffer, 0)
 	client.buffersAllMutex.Lock()
 	defer client.buffersAllMutex.Unlock()
-	for _, buf := range client.buffer {
+	for _, buf := range client.buffers {
 		buffers = append(buffers, buf)
 	}
 	return buffers
