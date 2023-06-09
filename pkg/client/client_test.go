@@ -188,3 +188,21 @@ func TestHttpStatusCodes(t *testing.T) {
 		})
 	}
 }
+
+func TestAddEventsEndpointUrlWithoutTrailingSlash(t *testing.T) {
+	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com")
+	cfg, err := config.New(config.FromEnv())
+	assert.Nil(t, err)
+	sc, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()))
+	require.Nil(t, err)
+	assert.Equal(t, sc.addEventsEndpointUrl, "https://app.scalyr.com/api/addEvents")
+}
+
+func TestAddEventsEndpointUrlWithTrailingSlash(t *testing.T) {
+	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com/")
+	cfg2, err := config.New(config.FromEnv())
+	assert.Nil(t, err)
+	sc2, err := NewClient(cfg2, nil, zap.Must(zap.NewDevelopment()))
+	require.Nil(t, err)
+	assert.Equal(t, sc2.addEventsEndpointUrl, "https://app.scalyr.com/api/addEvents")
+}
