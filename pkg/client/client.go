@@ -212,7 +212,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 	)
 
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
-		if msg, channelReadSuccess := <-ch; channelReadSuccess { // TODO lets use Guard clause if possible to improve readability
+		if msg, channelReceiveSuccess := <-ch; channelReceiveSuccess { // TODO lets use Guard clause if possible to improve readability
 			client.Logger.Debug("Received buffer from channel",
 				zap.String("session", session),
 				zap.Int("processedMsgCnt", processedMsgCnt),
