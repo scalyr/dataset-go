@@ -41,20 +41,13 @@ Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
 
 // AddEvents enqueues given events for processing (sending to Dataset).
-// It returns an error if the batch was not accepted (eg: client is being shutdown).
-// TODO improve docs, this method is synchronous, until previous batch is processed another calls are being rejected (based on shouldRejectNextBatch behaviour). This imho contradicts the first line of this docs "AddEvents enqueues given events"
+// It returns an error if the batch was not accepted (eg. exporter in error state and retrying handle previous batches or client is being shutdown).
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
 	}
-	if errR := client.shouldRejectNextBatch(); errR != nil { // TODO rename to client.lastBatchError(), should indicates return boolean type
-		// TODO document why we prevent of further processing in case of previous Error
-		// What happens in situation where
-		// 1. we enqueue reqA, reqB and reqC
-		// 2. reqA is processed successfully
-		// 3. reqB processing fails
-		// 4. reqD is not enqueued anymore since lastStatus of reqB is failed
-		// what happens to reqC? Do we ignore it? or process it? what if reqC is processed successfully, can be another new request enqueued?
+	shouldReject, errR := client.isInErrorState()
+	if shouldReject {
 		return fmt.Errorf("AddEvents - reject batch: %w", errR)
 	}
 

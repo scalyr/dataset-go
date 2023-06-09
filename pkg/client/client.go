@@ -486,21 +486,24 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	client.BuffersPubSub.Pub(buf, buf.Session)
 }
 
-func (client *DataSetClient) shouldRejectNextBatch() error {
+// Exporter rejects handling of incoming batches if is in error state
+func (client *DataSetClient) isInErrorState() (bool, error) {
+	// In case one of session failed (with retryable status) to send request (batch of event to DataSet), client retries sending this request.
 	if isRetryableStatus(client.LastHttpStatus.Load()) {
 		err := client.LastError()
 		if err != nil {
-			return fmt.Errorf("rejecting - Last HTTP request contains an error: %w", err)
+			return true, fmt.Errorf("rejecting - Last HTTP request contains an error: %w", err)
 		} else {
-			return fmt.Errorf("rejecting - Last HTTP request had retryable status")
+			return true, fmt.Errorf("rejecting - Last HTTP request had retryable status")
 		}
 	}
 
+	// DataSet can limit rate using RetryAfter header. In such case client rejects incoming events
 	if client.RetryAfter().After(time.Now()) {
-		return fmt.Errorf("rejecting - should retry after %s", client.RetryAfter().Format(time.RFC1123))
+		return true, fmt.Errorf("rejecting - should retry after %s", client.RetryAfter().Format(time.RFC1123))
 	}
 
-	return nil
+	return false, nil
 }
 
 func (client *DataSetClient) getRetryAfter(response *http.Response, def time.Duration) (time.Time, bool) {
@@ -537,6 +540,7 @@ func (client *DataSetClient) getRetryAfter(response *http.Response, def time.Dur
 	return time.Now().Add(def), false
 }
 
+// TODO move this function outside of DataSetClient to not misunderstand that shared client is sleeping. It each go routine which is sleeping.
 func (client *DataSetClient) sleep(retryAfter time.Time, buffer *buffer.Buffer) {
 	// truncate current time to wait a little bit longer
 	sleepFor := retryAfter.Sub(time.Now().Truncate(time.Second))

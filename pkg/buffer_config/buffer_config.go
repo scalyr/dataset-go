@@ -24,7 +24,8 @@ import (
 )
 
 const (
-	ShouldSentBufferSize       = 5 * 1024 * 1024
+	ShouldSentBufferSize = 5 * 1024 * 1024
+	// LimitBufferSize defines maximum payload size (before compression) for REST API
 	LimitBufferSize            = 5*1024*1024 + 960*1024
 	MinimalMaxElapsedTime      = time.Second
 	MinimalMaxInterval         = time.Second
