@@ -25,8 +25,7 @@ type APITokenForDelegatingAccountRequest struct {
 	TokenType         string `json:"logRead"`
 }
 
-// TODO why is this public? Where is it used?
-func ValidateAPIResponse(response *ApiResponse, message string) error {
+func validateAPIResponse(response *ApiResponse, message string) error {
 	if response.Status != "success" {
 		return fmt.Errorf("API Failure: %v - %v", message, response.Message)
 	}
