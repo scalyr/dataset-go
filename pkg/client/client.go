@@ -68,22 +68,25 @@ type DataSetClient struct {
 	buffersEnqueued  atomic.Uint64
 	buffersProcessed atomic.Uint64
 	buffersDropped   atomic.Uint64
-	BuffersPubSub    *pubsub.PubSub
-	LastHttpStatus   atomic.Uint32
-	lastError        error
-	lastErrorMu      sync.RWMutex
-	retryAfter       time.Time
-	retryAfterMu     sync.RWMutex
+	// Pub/Sub topics of Buffers based on its session
+	BufferPerSessionTopic *pubsub.PubSub
+	LastHttpStatus        atomic.Uint32
+	lastError             error
+	lastErrorMu           sync.RWMutex
+	retryAfter            time.Time
+	retryAfterMu          sync.RWMutex
 	// indicates that client has been shut down and no further processing is possible
-	finished          atomic.Bool
-	Logger            *zap.Logger
-	eventsEnqueued    atomic.Uint64
-	eventsProcessed   atomic.Uint64
-	bytesAPISent      atomic.Uint64
-	bytesAPIAccepted  atomic.Uint64
-	addEventsMutex    sync.Mutex
-	addEventsPubSub   *pubsub.PubSub
-	addEventsChannels map[string]chan interface{}
+	finished         atomic.Bool
+	Logger           *zap.Logger
+	eventsEnqueued   atomic.Uint64
+	eventsProcessed  atomic.Uint64
+	bytesAPISent     atomic.Uint64
+	bytesAPIAccepted atomic.Uint64
+	addEventsMutex   sync.Mutex
+	// Pub/Sub topics of EventBundles based on its key
+	eventBundlePerKeyTopic *pubsub.PubSub
+	// map of known Subscription channels of eventBundlePerKeyTopic
+	eventBundleSubscriptionChannels map[string]chan interface{}
 	// timestamp of first event processed by client
 	firstReceivedAt atomic.Int64
 	// timestamp of last event so far processed by client
@@ -119,31 +122,31 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 	}
 
 	dataClient := &DataSetClient{
-		Id:                   id,
-		Config:               cfg,
-		Client:               client,
-		buffers:               make(map[string]*buffer.Buffer),
-		buffersEnqueued:      atomic.Uint64{},
-		buffersProcessed:     atomic.Uint64{},
-		buffersDropped:       atomic.Uint64{},
-		buffersAllMutex:      sync.Mutex{},
-		BuffersPubSub:        pubsub.New(0),
-		LastHttpStatus:       atomic.Uint32{},
-		retryAfter:           time.Now(),
-		retryAfterMu:         sync.RWMutex{},
-		lastErrorMu:          sync.RWMutex{},
-		Logger:               logger,
-		finished:             atomic.Bool{},
-		eventsEnqueued:       atomic.Uint64{},
-		eventsProcessed:      atomic.Uint64{},
-		bytesAPIAccepted:     atomic.Uint64{},
-		bytesAPISent:         atomic.Uint64{},
-		addEventsMutex:       sync.Mutex{},
-		addEventsPubSub:      pubsub.New(0),
-		addEventsChannels:    make(map[string]chan interface{}),
-		firstReceivedAt:      atomic.Int64{},
-		lastAcceptedAt:       atomic.Int64{},
-		addEventsEndpointUrl: addEventsEndpointUrl,
+		Id:                              id,
+		Config:                          cfg,
+		Client:                          client,
+		buffers:                         make(map[string]*buffer.Buffer),
+		buffersEnqueued:                 atomic.Uint64{},
+		buffersProcessed:                atomic.Uint64{},
+		buffersDropped:                  atomic.Uint64{},
+		buffersAllMutex:                 sync.Mutex{},
+		BufferPerSessionTopic:           pubsub.New(0),
+		LastHttpStatus:                  atomic.Uint32{},
+		retryAfter:                      time.Now(),
+		retryAfterMu:                    sync.RWMutex{},
+		lastErrorMu:                     sync.RWMutex{},
+		Logger:                          logger,
+		finished:                        atomic.Bool{},
+		eventsEnqueued:                  atomic.Uint64{},
+		eventsProcessed:                 atomic.Uint64{},
+		bytesAPIAccepted:                atomic.Uint64{},
+		bytesAPISent:                    atomic.Uint64{},
+		addEventsMutex:                  sync.Mutex{},
+		eventBundlePerKeyTopic:          pubsub.New(0),
+		eventBundleSubscriptionChannels: make(map[string]chan interface{}),
+		firstReceivedAt:                 atomic.Int64{},
+		lastAcceptedAt:                  atomic.Int64{},
+		addEventsEndpointUrl:            addEventsEndpointUrl,
 	}
 
 	// run buffer sweeper if requested
@@ -200,8 +203,8 @@ func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.Se
 	}
 }
 
-func (client *DataSetClient) addEventsSubscriber(session string) {
-	ch := client.BuffersPubSub.Sub(session)
+func (client *DataSetClient) newBuffersSubscriberRoutine(session string) {
+	ch := client.BufferPerSessionTopic.Sub(session)
 	go (func(session string, ch chan interface{}) {
 		client.listenAndSendBufferForSession(session, ch)
 	})(session, ch)
@@ -487,7 +490,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 
 	// publish buffer so it can be sent
 	client.buffersEnqueued.Add(+1)
-	client.BuffersPubSub.Pub(buf, buf.Session)
+	client.BufferPerSessionTopic.Pub(buf, buf.Session)
 }
 
 // Exporter rejects handling of incoming batches if is in error state

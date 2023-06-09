@@ -69,11 +69,11 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	client.addEventsMutex.Lock()
 	defer client.addEventsMutex.Unlock()
 	for key := range seenKeys {
-		_, found := client.addEventsChannels[key]
+		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
 			client.newBufferForEvents(key)
 
-			client.newChannelForEvents(key)
+			client.newEventBundleSubscriberRoutine(key)
 		}
 	}
 
@@ -81,15 +81,15 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
 		client.eventsEnqueued.Add(1)
-		client.addEventsPubSub.Pub(bundle, key)
+		client.eventBundlePerKeyTopic.Pub(bundle, key)
 	}
 
 	return nil
 }
 
-func (client *DataSetClient) newChannelForEvents(key string) {
-	ch := client.addEventsPubSub.Sub(key)
-	client.addEventsChannels[key] = ch
+func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
+	ch := client.eventBundlePerKeyTopic.Sub(key)
+	client.eventBundleSubscriptionChannels[key] = ch
 	go (func(session string, ch chan interface{}) {
 		client.listenAndSendBundlesForKey(key, ch)
 	})(key, ch)
@@ -105,7 +105,7 @@ func (client *DataSetClient) newBufferForEvents(key string) {
 	defer client.buffersAllMutex.Unlock()
 
 	// create subscriber, so all the upcoming buffers are processed as well
-	client.addEventsSubscriber(session)
+	client.newBuffersSubscriberRoutine(session)
 }
 
 func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan interface{}) {
