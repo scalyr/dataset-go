@@ -212,7 +212,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 	)
 
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
-		if msg, ok := <-ch; ok { // TODO lets use Guard clause if possible to improve readability
+		if msg, channelReadSuccess := <-ch; channelReadSuccess { // TODO lets use Guard clause if possible to improve readability
 			client.Logger.Debug("Received buffer from channel",
 				zap.String("session", session),
 				zap.Int("processedMsgCnt", processedMsgCnt),
@@ -220,8 +220,8 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 				zap.Uint64("buffersDropped", client.buffersDropped.Load()),
 			)
-			buf, ok := msg.(*buffer.Buffer) // TODO do not shadow ok which is previously used, rename isXySuccessful
-			if ok {
+			buf, bufferReadSuccess := msg.(*buffer.Buffer)
+			if bufferReadSuccess {
 				// TODO following block has ±100 lines, lets extract it to separate methods
 				// sleep until retry time
 				for client.RetryAfter().After(time.Now()) {
