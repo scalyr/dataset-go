@@ -236,7 +236,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				client.buffersProcessed.Add(1)
 				continue
 			}
-			client.sendBufferForSession(buf)
+			client.sendBufferWithRetryPolicy(buf)
 		} else {
 			client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
 		}
@@ -245,7 +245,8 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 	}
 }
 
-func (client *DataSetClient) sendBufferForSession(buf *buffer.Buffer) {
+// Sends buffer to DataSet. If not succeeds and try is possible (it retryable), try retry until possible (timeout)
+func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 	// Do not use NewExponentialBackOff since it calls Reset and the code here must
 	// call Reset after changing the InitialInterval (this saves an unnecessary call to Now).
 	expBackoff := backoff.ExponentialBackOff{
