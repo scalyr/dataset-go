@@ -392,7 +392,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 
 	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
-		return fmt.Errorf("unable to parse response body: %w, url: %s, response: %s", err, client.addEventsEndpointUrl, truncateText(string(responseBody), 500))
+		return fmt.Errorf("unable to parse response body: %w, url: %s, response: %s", err, client.addEventsEndpointUrl, truncateText(string(responseBody), 1000))
 	}
 
 	response.SetResponseObj(resp)
