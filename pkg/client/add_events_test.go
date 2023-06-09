@@ -654,7 +654,7 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 
 	lastError := sc.LastError()
 
