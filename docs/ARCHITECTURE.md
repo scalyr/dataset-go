@@ -36,7 +36,7 @@ between brackets points to the previous points):
 
 * `C1` - incoming batch of EventsBundles has to be divided into multiple sessions, in order to increase throughput (`D1`)
 * `C2` - data from multiple input batches should be combined while sending to DataSet, in order to achieve maximum throughput (use maximal batch size) (`D1`, `U1`)
-  * `C2.1` - user has to be able to define the grouping mechanism via specifying fields in config. 
+  * `C2.1` - user has to be able to define the grouping mechanism via specifying fields in config.
     * If more fields are specified, keys are constructed using all of them and events distributed to session with more granularity.
 * `C3` - input and output (DataSet events) has to be decoupled (`D1`, `C1`, `C2`)
 * `C4` - if the downstream returns error, exporter cannot return data that has already accepted, exporter has to handle retries by itself (`U2`, `U3`)
