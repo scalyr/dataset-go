@@ -40,15 +40,14 @@ import (
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
 
-// AddEvents enqueues all the events for processing.
-// It returns an error if the batch was not accepted.
-// When you want to finish processing, call Finish method.
+// AddEvents enqueues given events for processing (sending to Dataset).
+// It returns an error if the batch was not accepted (eg. exporter in error state and retrying handle previous batches or client is being shutdown).
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
 	}
-	errR := client.shouldRejectNextBatch()
-	if errR != nil {
+	shouldReject, errR := client.isInErrorState()
+	if shouldReject {
 		return fmt.Errorf("AddEvents - reject batch: %w", errR)
 	}
 
@@ -70,11 +69,11 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	client.addEventsMutex.Lock()
 	defer client.addEventsMutex.Unlock()
 	for key := range seenKeys {
-		_, found := client.addEventsChannels[key]
+		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
 			client.newBufferForEvents(key)
 
-			client.newChannelForEvents(key)
+			client.newEventBundleSubscriberRoutine(key)
 		}
 	}
 
@@ -82,17 +81,17 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
 		client.eventsEnqueued.Add(1)
-		client.addEventsPubSub.Pub(bundle, key)
+		client.eventBundlePerKeyTopic.Pub(bundle, key)
 	}
 
 	return nil
 }
 
-func (client *DataSetClient) newChannelForEvents(key string) {
-	ch := client.addEventsPubSub.Sub(key)
-	client.addEventsChannels[key] = ch
+func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
+	ch := client.eventBundlePerKeyTopic.Sub(key)
+	client.eventBundleSubscriptionChannels[key] = ch
 	go (func(session string, ch chan interface{}) {
-		client.ListenAndSendBundlesForKey(key, ch)
+		client.listenAndSendBundlesForKey(key, ch)
 	})(key, ch)
 }
 
@@ -102,14 +101,14 @@ func (client *DataSetClient) newBufferForEvents(key string) {
 	client.initBuffer(buf, client.SessionInfo)
 
 	client.buffersAllMutex.Lock()
-	client.buffer[session] = buf
+	client.buffers[session] = buf
 	defer client.buffersAllMutex.Unlock()
 
 	// create subscriber, so all the upcoming buffers are processed as well
-	client.addEventsSubscriber(session)
+	client.newBuffersSubscriberRoutine(session)
 }
 
-func (client *DataSetClient) ListenAndSendBundlesForKey(key string, ch chan interface{}) {
+func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan interface{}) {
 	client.Logger.Info("Listening to events with key",
 		zap.String("key", key),
 	)
@@ -179,22 +178,22 @@ func (client *DataSetClient) ListenAndSendBundlesForKey(key string, ch chan inte
 	}
 }
 
-// IsProcessingBuffers returns True if there are still some unprocessed buffers.
+// isProcessingBuffers returns True if there are still some unprocessed buffers.
 // False otherwise.
-func (client *DataSetClient) IsProcessingBuffers() bool {
+func (client *DataSetClient) isProcessingBuffers() bool {
 	return client.buffersEnqueued.Load() > client.buffersProcessed.Load()
 }
 
-// IsProcessingEvents returns True if there are still some unprocessed events.
+// isProcessingEvents returns True if there are still some unprocessed events.
 // False otherwise.
-func (client *DataSetClient) IsProcessingEvents() bool {
+func (client *DataSetClient) isProcessingEvents() bool {
 	return client.eventsEnqueued.Load() > client.eventsProcessed.Load()
 }
 
-// Finish stops processing of new events and waits until all the data that are
-// being processed are really processed.
-func (client *DataSetClient) Finish() error {
-	// mark as finished
+// Shutdown stops processing of new events and waits until all the events that are
+// being processed are really processed (sent to DataSet).
+func (client *DataSetClient) Shutdown() error {
+	// mark as finished to prevent processing of further events
 	client.finished.Store(true)
 
 	// log statistics when finish was called
@@ -219,7 +218,7 @@ func (client *DataSetClient) Finish() error {
 	// do wait for all events to be processed
 	retryNum := 0
 	lastProcessed := client.eventsProcessed.Load()
-	for client.IsProcessingEvents() {
+	for client.isProcessingEvents() {
 		// log statistics
 		client.logStatistics()
 
@@ -253,7 +252,7 @@ func (client *DataSetClient) Finish() error {
 	lastProcessed = client.buffersProcessed.Load()
 	lastDropped := client.buffersDropped.Load()
 	initialDropped := lastDropped
-	for client.IsProcessingBuffers() {
+	for client.isProcessingBuffers() {
 		// log statistics
 		client.logStatistics()
 
@@ -303,7 +302,7 @@ func (client *DataSetClient) Finish() error {
 	return client.LastError()
 }
 
-func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, int, error) {
+func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_events.AddEventsResponse, int, error) {
 	client.Logger.Debug("Sending buf", buf.ZapStats()...)
 
 	payload, err := buf.Payload()
@@ -319,7 +318,7 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 	)
 	resp := &add_events.AddEventsResponse{}
 
-	httpRequest, err := request.NewRequest(
+	httpRequest, err := request.NewApiRequest(
 		"POST", client.addEventsEndpointUrl,
 	).WithWriteLog(client.Config.Tokens).RawRequest(payload).HttpRequest()
 	if err != nil {
@@ -359,7 +358,7 @@ func (client *DataSetClient) SendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 //	return grouped
 //}
 
-func (client *DataSetClient) apiCall(req *http.Request, response response.SetResponseObj) error {
+func (client *DataSetClient) apiCall(req *http.Request, response response.ResponseObjSetter) error {
 	resp, err := client.Client.Do(req)
 	if err != nil {
 		return fmt.Errorf("unable to send request: %w", err)
@@ -371,7 +370,6 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 		}
 	}()
 
-	// foo
 	client.Logger.Debug("Received response",
 		zap.Int("statusCode", resp.StatusCode),
 		zap.String("status", resp.Status),
@@ -379,6 +377,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 	)
 
 	if resp.StatusCode != http.StatusOK {
+		// TODO improve docs - why dont we return error in this case
 		client.Logger.Warn(
 			"!!!!! PAYLOAD WAS NOT ACCEPTED !!!!",
 			zap.Int("statusCode", resp.StatusCode),
@@ -400,6 +399,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.SetRes
 	return nil
 }
 
+// TODO make this private
 func (client *DataSetClient) SendAllAddEventsBuffers() {
 	buffers := client.getBuffers()
 	client.Logger.Debug("Send all AddEvents buffers")
@@ -412,7 +412,7 @@ func (client *DataSetClient) getBuffers() []*buffer.Buffer {
 	buffers := make([]*buffer.Buffer, 0)
 	client.buffersAllMutex.Lock()
 	defer client.buffersAllMutex.Unlock()
-	for _, buf := range client.buffer {
+	for _, buf := range client.buffers {
 		buffers = append(buffers, buf)
 	}
 	return buffers

@@ -143,7 +143,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		time.Sleep(time.Duration(MaxDelayMs*0.3) * time.Millisecond)
 	}
 
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err, err)
 
 	for {

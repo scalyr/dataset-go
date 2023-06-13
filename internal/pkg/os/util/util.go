@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package os_util
+package util
 
 import (
 	"os"

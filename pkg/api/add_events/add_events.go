@@ -26,11 +26,7 @@ import (
 	"github.com/scalyr/dataset-go/pkg/api/response"
 )
 
-/**
-Wrapper around: https://app.scalyr.com/help/api#addEvents
-
-*/
-
+// Event represents DataSet REST API event structure (see https://app.scalyr.com/help/api#addEvents)
 type Event struct {
 	Thread string                 `json:"thread,omitempty"`
 	Sev    int                    `json:"sev,omitempty"`
@@ -49,11 +45,15 @@ func (event *Event) CloneWithoutAttrs() *Event {
 	}
 }
 
+// Thread represents a key-value definition of a thread.
+// This lets you create a readable name for each thread used in Event.
 type Thread struct {
 	Id   string `json:"id,omitempty"`
 	Name string `json:"name,omitempty"`
 }
 
+// Log represents a shared attributes reused in multiple Event in EventBundle.
+// This decreases redundant data, and improves throughput.
 type Log struct {
 	Id    string                 `json:"id,omitempty"`
 	Attrs map[string]interface{} `json:"attrs"`
@@ -65,6 +65,7 @@ type SessionInfo struct {
 	Region     string `json:"region,omitempty"`
 }
 
+// AddEventsRequestParams represents a represents a AddEvent DataSet REST API request parameters, see https://app.scalyr.com/help/api#addEvents.
 type AddEventsRequestParams struct {
 	Session     string       `json:"session,omitempty"`
 	SessionInfo *SessionInfo `json:"sessionInfo,omitempty"`
@@ -73,13 +74,15 @@ type AddEventsRequestParams struct {
 	Logs        []*Log       `json:"logs,omitempty"`
 }
 
+// AddEventsRequest represents a AddEvent DataSet REST API request.
 type AddEventsRequest struct {
 	request.AuthParams
 	AddEventsRequestParams
 }
 
+// AddEventsResponse represents a AddEvent DataSet REST API response.
 type AddEventsResponse struct {
-	response.APIResponse
+	response.ApiResponse
 	BytesCharged int64 `json:"bytesCharged"`
 }
 
@@ -87,6 +90,7 @@ func (response *AddEventsResponse) SetResponseObj(resp *http.Response) {
 	response.ResponseObj = resp
 }
 
+// TODO document what this function does
 func TrimAttrs(attrs map[string]interface{}, remaining int) map[string]interface{} {
 	keys := make([]string, 0, len(attrs))
 	lengths := make(map[string]int)

@@ -77,6 +77,8 @@ func (e *NotAcceptingError) Error() string {
 	return fmt.Sprintf("Buffer has status %s => not accepting new events", e.status)
 }
 
+// Buffer represent a batch of Events grouped under certain session.
+// Each Buffer (set of events) are send to DataSet once reaches its limit or timeout
 type Buffer struct {
 	Id      uuid.UUID
 	Session string
