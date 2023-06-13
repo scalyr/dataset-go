@@ -69,17 +69,17 @@ subgraph Collector[OpenTelemetry collector]
     convTraces --DataSetClient.AddEvents--> EventsBatchDecomposer --propagates errors so that new data are rejected--> convTraces
 
     subgraph "DataSet Go - Library"
-      PubSubEvents[EventBundlePerKeyTopic Pub/Sub]
-      SessionBatcher[SessionBatcher<br/>- consumes eventBundles<br/>- maps them in buffers<br/>- publishes buffer once batch if full]
-      PubSubBuffers[BufferPerSessionTopic Pub/Sub]
+      PubSubEvents>EventBundlePerKeyTopic Pub/Sub]
+      SessionBatcher[SessionBatcher<br/>- consumes eventBundles<br/>- maps and store them in buffers in memory<br/>]
+      PubSubBuffers>BufferPerSessionTopic Pub/Sub]
       SessionSender[SessionSender<br/>- consumes buffers<br/>- calls DataSet API<br/>- retries in case of error]
       BufferSweeper[BufferSweeper<br/>- publishes old buffers]
 
       EventsBatchDecomposer --> PubSubEvents
       PubSubEvents --"DataSetClient.ListenAndSendBundlesForKey"--> SessionBatcher
       SessionBatcher --"publish full batch"--> PubSubBuffers
-      SessionBatcher --"publish incomplete batch on timeout"--> BufferSweeper
-      BufferSweeper --> PubSubBuffers
+      SessionBatcher --> BufferSweeper
+      BufferSweeper --"publish incomplete batch on timeout"--> PubSubBuffers
       PubSubBuffers --"DataSetClient.SendAddEventsBuffer"--> SessionSender
       SessionSender --"propagates errors"--> EventsBatchDecomposer
       SessionSender -."HTTP POST addEvents".-> DataSetApi
