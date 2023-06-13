@@ -14,7 +14,7 @@ about which I know very little.
 The downstream system is DataSet REST API and its API call [addEvents](https://app.scalyr.com/help/api#addEvents).
 It has the following properties:
 
-* `D1` - only one request for each session could be made
+* `D1` - DataSet does not support parallel requesting per session. Only one request for each session could be made at one time
 * `D2` - when new version is deployed there is few minutes outage
 * `D3` - maximum payload size for the API is 6MB before compression
 
@@ -24,31 +24,34 @@ The upstream system is [open telemetry collector](https://opentelemetry.io/docs/
 where the datasetexporter is one of many exporters that could be used
 (on the right side of the image). It has the following properties:
 
-* `U1` - data are passed in batches
+* `U1` - incoming data (logs, traces & metrics) are passed (collector/exporter contract) in batches
 * `U2` - each batch could be either accepted or rejected, if it's accepted it cannot be returned, if it's rejected, it may be retried
-* `U3` - function for accepting batches could be called in parallel (with different batches)
+  * `U2.1` - collector has data persistence (file system) feature in case exporter rejects batch, in order to be able to resend batch later
+* `U3` - collector/exporter API function for accepting batches can be called in parallel (with different batches)
 
 ### Consequences
 
 As a consequence of the upstream and downstream system following has to happen (codes
 between brackets points to the previous points):
 
-* `C1` - data has to be grouped to be divided into multiple sessions to increase throughput (`D1`)
-* `C2` - data from multiple input batches has to be combined (`D1`, `U1`)
-* `C3` - input and output has to be decoupled (`D1`, `C1`, `C2`)
-* `C4` - if the downstream returns error, system cannot return data that has already accepted, it can only start rejecting new data (`U2`, `U3`)
-* `C5` - since the system cannot return data, it has to handle retries by itself (`C4`)
-* `C6` - user has to be able to define the grouping mechanism to achieve maximum throughput (`C1`)
+* `C1` - incoming batch of EventsBundles has to be divided into multiple sessions, in order to increase throughput (`D1`)
+* `C2` - data from multiple input batches should be combined while sending to DataSet, in order to achieve maximum throughput (use maximal batch size) (`D1`, `U1`)
+  * `C2.1` - user has to be able to define the grouping mechanism via specifying fields in config. 
+    * If more fields are specified, keys are constructed using all of them and events distributed to session with more granularity.
+* `C3` - input and output (DataSet events) has to be decoupled (`D1`, `C1`, `C2`)
+* `C4` - if the downstream returns error, exporter cannot return data that has already accepted, exporter has to handle retries by itself (`U2`, `U3`)
+* `C5` - if the downstream returns error, exporter can rely on exporter retry mechanism (`U2.1`) and reject further incoming batches
 
 ## Implementation
 
 * `I1` - to decouple upstream from downstream we use pub/sub pattern (`C3`)
-* `I2` - there are two levels of pub/sub patterns
-  * `I2.1` - publisher 1 - events from incoming batch are divided based on the grouping into sessions and published into the corresponding topic (`I1`, `C6`)
-  * `I2.2` - subscriber 1 / publisher 2 - reads individual events from the topic and combines them into batches, batches are published into the corresponding topic (`C2`)
+* `I2` - there are two levels of pub/sub patterns, in order to optimize DataSet ingestion efficiency
+  * `I2.1` - publisher 1 - each event from incoming batch is published into EventBundlePerKeyTopic (`I1`, `C2`) using key
+    * keys are constructed based on values of user defined fields (`C2.1`). This results into grouping events to sessions based on defined fields.
+  * `I2.2` - subscriber 1 / publisher 2 - each session batcher reads individual EventBundles from its own (based on key) EventBundlePerKeyTopic and combines them into batches, batches are published into the corresponding BufferPerSessionTopic (`C2`). Note key defines session (client.id + key)
   * `I2.3` - publisher 2 - output batch is published even if it's not full after some time period
-  * `I2.4` - subscriber 2 - reads output batches from the topic and calls DataSet API server (`D1`)
-* `I3` - each session has its own go routine (`I2.1`)
+  * `I2.4` - subscriber 2 - each session sender reads individual Buffers (batched events) from the BufferPerSessionTopic and sends them into DataSet API server (`D1`)
+* `I3` - each session has its own go routine, which has its own thread (`I2.1`)
 
 ### Error Propagation
 
@@ -60,9 +63,9 @@ Error state is shared among all sessions. It works in the following way:
 * when the system is in error mode, then:
   * new incoming batches are rejected so that external retry mechanism is triggered
   * internal retry are still happening
-* error state is cleared when:
-  * some of the internal retries succeeds
-  * it should be cleared after some timeout as well - https://sentinelone.atlassian.net/browse/DSET-4080
+* error state recovery:
+  * some of the internal retries succeeds, see (`KI1`)
+  * NOT YET IMPLEMENTED: system recovers from error state after predefined (refer to config) timeout - https://sentinelone.atlassian.net/browse/DSET-4080
 
 ### Internal Batching
 
@@ -74,3 +77,14 @@ This section describes how internal batching works for data belonging to the sin
 * if the buffer is not full and is older than `max_lifetime` then it's published as well (`I2.3`)
 * if the event is larger than remaining space in current `Buffer`, then the current `Buffer` is published and event is added into the new `Buffer`
 * if the event is larger than the maximum allowed size, then attribute values are trimmed - from the longest to the shortest
+
+### Known issues
+
+* `KI1` - Possible memory issues on error state recovery race condition
+  * exporter implements rejection mechanism (`C5`) to prevent memory issues
+  * exporter may face race condition on lastHttpStatus in following situation
+    * Incoming batch events are distributed into SessionA and SessionB
+    * SessionA request to DataSet fails -> exporter enter an error mode by setting lastHttpStatus. This prevents accepting further incoming batches.
+    * No matter of current lastHttpStatus SessionB sends batch to DataSet and fails as well.
+    * Later on SessionA retries sending previously failed batch and succeeds and sets lastHttpStatus. This enables accepting further incoming batches no matter of SessionB retries.
+    * Collector can pass events (handled by SessionB) which are stored in memory until SessionB retry succeeds. This may result into memory issues.
