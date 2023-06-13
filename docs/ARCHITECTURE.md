@@ -15,7 +15,7 @@ The downstream system is DataSet REST API and its API call [addEvents](https://a
 It has the following properties:
 
 * `D1` - DataSet does not support parallel requesting per session. Only one request for each session could be made at one time
-* `D2` - when new version is deployed there is few minutes outage
+* `D2` - when a new DataSet version is deployed, there could be a short window of unavailability of a particular queue server when it's being restarted in a rolling manner. During the restart / unavailability, sessions which are mapped to a particular queue server may be temporary unavailable and those requests need to be retried. Per queue server unavailability should not last more than a couple of minutes (in real life it's < 120 seconds)
 * `D3` - maximum payload size for the API is 6MB before compression
 
 ### Upstream
