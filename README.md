@@ -99,6 +99,8 @@ present and future, pursuant to the license of the project.
 
 ## Architecture
 
+see detailed [Architecture description](docs/ARCHITECTURE.md)
+
 TODO
   - add explanation why we have this architecture - pub/sub, events, buffers, grouping, sessions, DataSet addEvents session limitations, etc.
 ```mermaid
