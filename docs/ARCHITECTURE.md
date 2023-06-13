@@ -45,13 +45,48 @@ between brackets points to the previous points):
 ## Implementation
 
 * `I1` - to decouple upstream from downstream we use pub/sub pattern (`C3`)
-* `I2` - there are two levels of pub/sub patterns, in order to optimize DataSet ingestion efficiency
+* `I2` - there are two levels of pub/sub patterns, in order to optimize DataSet ingestion efficiency (via grouping events based on keys)
   * `I2.1` - publisher 1 - each event from incoming batch is published into EventBundlePerKeyTopic (`I1`, `C2`) using key
     * keys are constructed based on values of user defined fields (`C2.1`). This results into grouping events to sessions based on defined fields.
   * `I2.2` - subscriber 1 / publisher 2 - each session batcher reads individual EventBundles from its own (based on key) EventBundlePerKeyTopic and combines them into batches, batches are published into the corresponding BufferPerSessionTopic (`C2`). Note key defines session (client.id + key)
   * `I2.3` - publisher 2 - output batch is published even if it's not full after some time period
   * `I2.4` - subscriber 2 - each session sender reads individual Buffers (batched events) from the BufferPerSessionTopic and sends them into DataSet API server (`D1`)
 * `I3` - each session has its own go routine, which has its own thread (`I2.1`)
+
+```mermaid
+graph TB
+subgraph "DataSet API servers"
+    DataSetApi["/api/addEvents REST endpoint"]
+end
+subgraph Collector[OpenTelemetry collector]
+  collector[Processing data]
+  collector --"consume traces"--> convTraces[Converts OTel structure into events]
+  collector --"consume logs"--> convLogs[Converts OTel structure into events]
+
+  subgraph DataSetExporter
+    EventsBatchDecomposer[EventsBatchDecomposer<br/>- constructs key based on group_by config<br/>- publishes events into EventBundlePerKeyTopic using key]
+    convLogs --DataSetClient.AddEvents--> EventsBatchDecomposer --propagates errors so that new data are rejected--> convLogs
+    convTraces --DataSetClient.AddEvents--> EventsBatchDecomposer --propagates errors so that new data are rejected--> convTraces
+
+    subgraph "DataSet Go - Library"
+      PubSubEvents[EventBundlePerKeyTopic Pub/Sub]
+      SessionBatcher[SessionBatcher<br/>- consumes eventBundles<br/>- maps them in buffers<br/>- publishes buffer once batch if full]
+      PubSubBuffers[BufferPerSessionTopic Pub/Sub]
+      SessionSender[SessionSender<br/>- consumes buffers<br/>- calls DataSet API<br/>- retries in case of error]
+      BufferSweeper[BufferSweeper<br/>- publishes old buffers]
+
+      EventsBatchDecomposer --> PubSubEvents
+      PubSubEvents --"DataSetClient.ListenAndSendBundlesForKey"--> SessionBatcher
+      SessionBatcher --"publish full batch"--> PubSubBuffers
+      SessionBatcher --"publish incomplete batch on timeout"--> BufferSweeper
+      BufferSweeper --> PubSubBuffers
+      PubSubBuffers --"DataSetClient.SendAddEventsBuffer"--> SessionSender
+      SessionSender --"propagates errors"--> EventsBatchDecomposer
+      SessionSender -."HTTP POST addEvents".-> DataSetApi
+    end
+  end
+end
+```
 
 ### Error Propagation
 
