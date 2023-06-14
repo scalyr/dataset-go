@@ -109,7 +109,7 @@ func TestAddEventsRetry(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	assert.True(t, wasSuccessful.Load())
@@ -213,7 +213,7 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	eventBundle2 := &add_events.EventBundle{Event: event2, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err2 := sc.AddEvents([]*add_events.EventBundle{eventBundle2})
 	assert.Nil(t, err2)
-	err3 := sc.Finish()
+	err3 := sc.Shutdown()
 	assert.Nil(t, err3)
 
 	assert.True(t, wasSuccessful.Load())
@@ -286,7 +286,7 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	assert.True(t, wasSuccessful.Load())
@@ -384,7 +384,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	assert.True(t, wasSuccessful.Load())
@@ -475,7 +475,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	assert.True(t, wasSuccessful.Load())
@@ -500,7 +500,7 @@ func TestAddEventsRejectAfterFinish(t *testing.T) {
 	}
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 	assert.Nil(t, err)
 
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
@@ -611,9 +611,57 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
-	err = sc.Finish()
+	err = sc.Shutdown()
 
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
 	assert.GreaterOrEqual(t, attempt.Load(), int32(2))
+}
+
+func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
+	attempt := atomic.Int32{}
+	attempt.Store(0)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		attempt.Add(1)
+
+		w.WriteHeader(503)
+		payload := []byte("<html>not valid json</html>")
+		l, err := w.Write(payload)
+		assert.Greater(t, l, 1)
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	config := &config.DataSetConfig{
+		Endpoint: server.URL,
+		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: buffer_config.DataSetBufferSettings{
+			MaxSize:                  20,
+			MaxLifetime:              0,
+			RetryInitialInterval:     time.Second,
+			RetryMaxInterval:         time.Second,
+			RetryMaxElapsedTime:      3 * time.Second,
+			RetryMultiplier:          1.0,
+			RetryRandomizationFactor: 1.0,
+		},
+	}
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(t, err)
+
+	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+	sc.SessionInfo = sessionInfo
+	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	assert.Nil(t, err)
+	err = sc.Shutdown()
+
+	lastError := sc.LastError()
+
+	assert.NotNil(t, lastError)
+	assert.Equal(t, fmt.Errorf("unable to parse response body: invalid character '<' looking for beginning of value, url: %s, response: <html>not valid json</html>", sc.addEventsEndpointUrl).Error(), lastError.Error())
+
+	assert.NotNil(t, err)
+	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
+	assert.GreaterOrEqual(t, attempt.Load(), int32(0))
 }

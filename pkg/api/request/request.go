@@ -23,11 +23,12 @@ type AuthParams struct {
 	Message string `json:"message,omitempty"`
 }
 
-type APIRequest interface {
+type TokenSetter interface {
 	setToken(token string)
 }
 
-type Request struct {
+// ApiRequest represents a generic DataSet REST API request, with all its properties
+type ApiRequest struct {
 	requestType   string
 	payload       []byte
 	request       interface{}
@@ -37,11 +38,11 @@ type Request struct {
 	err           error
 }
 
-func NewRequest(requestType string, uri string) *Request {
-	return &Request{requestType: requestType, uri: uri}
+func NewApiRequest(requestType string, uri string) *ApiRequest {
+	return &ApiRequest{requestType: requestType, uri: uri}
 }
 
-func (r *Request) WithWriteLog(tokens config.DataSetTokens) *Request {
+func (r *ApiRequest) WithWriteLog(tokens config.DataSetTokens) *ApiRequest {
 	if r.apiKey != "" {
 		return r
 	}
@@ -54,7 +55,7 @@ func (r *Request) WithWriteLog(tokens config.DataSetTokens) *Request {
 	return r
 }
 
-func (r *Request) WithReadLog(tokens config.DataSetTokens) *Request {
+func (r *ApiRequest) WithReadLog(tokens config.DataSetTokens) *ApiRequest {
 	if r.apiKey != "" {
 		return r
 	}
@@ -67,7 +68,7 @@ func (r *Request) WithReadLog(tokens config.DataSetTokens) *Request {
 	return r
 }
 
-func (r *Request) WithReadConfig(tokens config.DataSetTokens) *Request {
+func (r *ApiRequest) WithReadConfig(tokens config.DataSetTokens) *ApiRequest {
 	if r.apiKey != "" {
 		return r
 	}
@@ -80,7 +81,7 @@ func (r *Request) WithReadConfig(tokens config.DataSetTokens) *Request {
 	return r
 }
 
-func (r *Request) WithWriteConfig(tokens config.DataSetTokens) *Request {
+func (r *ApiRequest) WithWriteConfig(tokens config.DataSetTokens) *ApiRequest {
 	if r.apiKey != "" {
 		return r
 	}
@@ -93,7 +94,7 @@ func (r *Request) WithWriteConfig(tokens config.DataSetTokens) *Request {
 	return r
 }
 
-func (r *Request) JsonRequest(request APIRequest) *Request {
+func (r *ApiRequest) JsonRequest(request TokenSetter) *ApiRequest {
 	payload, err := json.Marshal(request)
 	r.request = request
 	if err != nil {
@@ -104,16 +105,16 @@ func (r *Request) JsonRequest(request APIRequest) *Request {
 	return r
 }
 
-func (r *Request) RawRequest(payload []byte) *Request {
+func (r *ApiRequest) RawRequest(payload []byte) *ApiRequest {
 	r.payload = payload
 	return r
 }
 
-func (r *Request) emptyRequest() *Request {
-	return r.JsonRequest(APIRequest(&AuthParams{}))
+func (r *ApiRequest) emptyRequest() *ApiRequest {
+	return r.JsonRequest(TokenSetter(&AuthParams{}))
 }
 
-func (r *Request) HttpRequest() (*http.Request, error) {
+func (r *ApiRequest) HttpRequest() (*http.Request, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -125,7 +126,7 @@ func (r *Request) HttpRequest() (*http.Request, error) {
 	if r.apiKey == "" && len(r.supportedKeys) > 0 {
 		return nil, fmt.Errorf("no API Key Found - Supported Tokens for %v are %v", r.uri, r.supportedKeys)
 	} else if r.request != nil {
-		r.request.(APIRequest).setToken(r.apiKey)
+		r.request.(TokenSetter).setToken(r.apiKey)
 	}
 
 	var err error
@@ -142,7 +143,7 @@ func (r *Request) HttpRequest() (*http.Request, error) {
 
 	req, err := http.NewRequest(r.requestType, r.uri, &buf)
 	if err != nil {
-		r.err = fmt.Errorf("failed to create NewRequest: %w", err)
+		r.err = fmt.Errorf("failed to create NewApiRequest: %w", err)
 		return nil, r.err
 	}
 	req.Header.Add("Content-Type", "application/json")

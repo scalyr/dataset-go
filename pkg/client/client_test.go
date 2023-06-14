@@ -183,8 +183,26 @@ func TestHttpStatusCodes(t *testing.T) {
 	for _, tt := range tests {
 		name := fmt.Sprintf("HTTP Status code: %d", tt.statusCode)
 		t.Run(name, func(*testing.T) {
-			assert.Equal(t, tt.isOk, IsOkStatus(tt.statusCode), name)
-			assert.Equal(t, tt.isRetryable, IsRetryableStatus(tt.statusCode), name)
+			assert.Equal(t, tt.isOk, isOkStatus(tt.statusCode), name)
+			assert.Equal(t, tt.isRetryable, isRetryableStatus(tt.statusCode), name)
 		})
 	}
+}
+
+func TestAddEventsEndpointUrlWithoutTrailingSlash(t *testing.T) {
+	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com")
+	cfg, err := config.New(config.FromEnv())
+	assert.Nil(t, err)
+	sc, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()))
+	require.Nil(t, err)
+	assert.Equal(t, sc.addEventsEndpointUrl, "https://app.scalyr.com/api/addEvents")
+}
+
+func TestAddEventsEndpointUrlWithTrailingSlash(t *testing.T) {
+	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com/")
+	cfg2, err := config.New(config.FromEnv())
+	assert.Nil(t, err)
+	sc2, err := NewClient(cfg2, nil, zap.Must(zap.NewDevelopment()))
+	require.Nil(t, err)
+	assert.Equal(t, sc2.addEventsEndpointUrl, "https://app.scalyr.com/api/addEvents")
 }

@@ -99,6 +99,4 @@ present and future, pursuant to the license of the project.
 
 ## Architecture
 
-TODO
-  - add explanation why we have this architecture - pub/sub, events, buffers, grouping, sessions, DataSet addEvents session limitations, etc.
-  - convert existing diagram into PlantUML (/docs/img/overview.puml) and embed generated image (/docs/img/overview.png) here
+see detailed [Architecture description](docs/ARCHITECTURE.md)
