@@ -193,7 +193,7 @@ func (cfg *DataSetBufferSettings) Validate() error {
 
 	if cfg.RetryRandomizationFactor <= MinimalRandomizationFactor {
 		return fmt.Errorf(
-			"RetryMaxElapsedTime has value %f which is less or equal  than %f",
+			"RetryRandomizationFactor has value %f which is less or equal  than %f",
 			cfg.RetryRandomizationFactor,
 			MinimalRandomizationFactor,
 		)
