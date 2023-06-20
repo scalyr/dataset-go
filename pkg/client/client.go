@@ -270,15 +270,14 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 		lastHttpStatus := uint32(0)
 		if err != nil {
 			client.Logger.Error("unable to send addEvents buffers", zap.Error(err))
-			if strings.Contains(err.Error(), "Unable to send request") {
-				lastHttpStatus = HttpErrorCannotConnect
-				client.LastHttpStatus.Store(lastHttpStatus)
-			} else {
+			if !strings.Contains(err.Error(), "Unable to send request") {
 				lastHttpStatus = HttpErrorHasErrorMessage
 				client.LastHttpStatus.Store(lastHttpStatus)
 				client.onBufferDrop(buf, lastHttpStatus, err)
 				break // exit loop (failed to send buffer)
 			}
+			lastHttpStatus = HttpErrorCannotConnect
+			client.LastHttpStatus.Store(lastHttpStatus)
 		}
 		zaps := make([]zap.Field, 0)
 		if response.ResponseObj != nil {
