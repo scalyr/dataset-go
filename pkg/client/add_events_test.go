@@ -87,19 +87,11 @@ func TestAddEventsRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := &config.DataSetConfig{
-		Endpoint: server.URL,
-		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  20,
-			MaxLifetime:              0,
-			RetryRandomizationFactor: 1.0,
-			RetryMultiplier:          1.0,
-			RetryInitialInterval:     RetryBase,
-			RetryMaxInterval:         10 * RetryBase,
-			RetryMaxElapsedTime:      10 * RetryBase,
-		},
-	}
+	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
+		buffer_config.WithRetryInitialInterval(RetryBase),
+		buffer_config.WithRetryMaxInterval(RetryBase),
+	))
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
@@ -169,19 +161,11 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := &config.DataSetConfig{
-		Endpoint: server.URL,
-		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  20,
-			MaxLifetime:              0,
-			RetryRandomizationFactor: 1.0,
-			RetryMultiplier:          1.0,
-			RetryInitialInterval:     RetryBase,
-			RetryMaxInterval:         10 * RetryBase,
-			RetryMaxElapsedTime:      10 * RetryBase,
-		},
-	}
+	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
+		buffer_config.WithRetryInitialInterval(RetryBase),
+		buffer_config.WithRetryMaxInterval(RetryBase),
+	))
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
@@ -264,19 +248,11 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := &config.DataSetConfig{
-		Endpoint: server.URL,
-		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  20,
-			MaxLifetime:              0,
-			RetryRandomizationFactor: 1.0,
-			RetryMultiplier:          1.0,
-			RetryInitialInterval:     RetryBase,
-			RetryMaxInterval:         RetryBase,
-			RetryMaxElapsedTime:      10 * RetryBase,
-		},
-	}
+	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
+		buffer_config.WithRetryInitialInterval(RetryBase),
+		buffer_config.WithRetryMaxInterval(RetryBase),
+	))
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
@@ -362,19 +338,11 @@ func TestAddEventsLargeEvent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := &config.DataSetConfig{
-		Endpoint: server.URL,
-		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  20,
-			MaxLifetime:              0,
-			RetryRandomizationFactor: 1.0,
-			RetryMultiplier:          1.0,
-			RetryInitialInterval:     RetryBase,
-			RetryMaxInterval:         RetryBase,
-			RetryMaxElapsedTime:      10 * RetryBase,
-		},
-	}
+	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
+		buffer_config.WithRetryInitialInterval(RetryBase),
+		buffer_config.WithRetryMaxInterval(RetryBase),
+	))
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
@@ -453,19 +421,11 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := &config.DataSetConfig{
-		Endpoint: server.URL,
-		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  20,
-			MaxLifetime:              0,
-			RetryRandomizationFactor: 1.0,
-			RetryMultiplier:          1.0,
-			RetryInitialInterval:     RetryBase,
-			RetryMaxInterval:         RetryBase,
-			RetryMaxElapsedTime:      10 * RetryBase,
-		},
-	}
+	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
+		buffer_config.WithRetryInitialInterval(RetryBase),
+		buffer_config.WithRetryMaxInterval(RetryBase),
+	))
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
@@ -485,19 +445,11 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 }
 
 func TestAddEventsRejectAfterFinish(t *testing.T) {
-	config := &config.DataSetConfig{
-		Endpoint: "https://example.com",
-		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  20,
-			MaxLifetime:              0,
-			RetryRandomizationFactor: 1.0,
-			RetryMultiplier:          1.0,
-			RetryInitialInterval:     RetryBase,
-			RetryMaxInterval:         RetryBase,
-			RetryMaxElapsedTime:      10 * RetryBase,
-		},
-	}
+	config := newDataSetConfig("https://example.com", *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
+		buffer_config.WithRetryInitialInterval(RetryBase),
+		buffer_config.WithRetryMaxInterval(RetryBase),
+	))
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 	err = sc.Shutdown()
@@ -589,19 +541,9 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := &config.DataSetConfig{
-		Endpoint: server.URL,
-		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  20,
-			MaxLifetime:              0,
-			RetryInitialInterval:     time.Second,
-			RetryMaxInterval:         time.Second,
-			RetryMaxElapsedTime:      5 * time.Second,
-			RetryMultiplier:          1.0,
-			RetryRandomizationFactor: 1.0,
-		},
-	}
+	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(time.Duration(5) * time.Second),
+	))
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
@@ -631,20 +573,9 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 		assert.NoError(t, err)
 	}))
 	defer server.Close()
-
-	config := &config.DataSetConfig{
-		Endpoint: server.URL,
-		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  20,
-			MaxLifetime:              0,
-			RetryInitialInterval:     time.Second,
-			RetryMaxInterval:         time.Second,
-			RetryMaxElapsedTime:      3 * time.Second,
-			RetryMultiplier:          1.0,
-			RetryRandomizationFactor: 1.0,
-		},
-	}
+	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(time.Duration(3) * time.Second),
+	))
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
@@ -664,4 +595,26 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
 	assert.GreaterOrEqual(t, attempt.Load(), int32(0))
+}
+
+func newDataSetConfig(url string, settings buffer_config.DataSetBufferSettings) *config.DataSetConfig {
+	return &config.DataSetConfig{
+		Endpoint:       url,
+		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings: settings,
+	}
+}
+
+func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) *buffer_config.DataSetBufferSettings {
+	defaultOpts := []buffer_config.DataSetBufferSettingsOption{
+		buffer_config.WithMaxSize(20),
+		buffer_config.WithMaxLifetime(0),
+		buffer_config.WithRetryInitialInterval(time.Second),
+		buffer_config.WithRetryMaxInterval(time.Second),
+		buffer_config.WithRetryMaxElapsedTime(time.Duration(1) * time.Second),
+		buffer_config.WithRetryMultiplier(1.0),
+		buffer_config.WithRetryRandomizationFactor(1.0),
+	}
+	bufferSetting, _ := buffer_config.New(append(defaultOpts, customOpts...)...)
+	return bufferSetting
 }
