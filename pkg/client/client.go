@@ -277,7 +277,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 				lastHttpStatus = HttpErrorHasErrorMessage
 				client.LastHttpStatus.Store(lastHttpStatus)
 				client.onBufferDrop(buf, lastHttpStatus, err)
-				break
+				break // exit loop (failed to send buffer)
 			}
 		}
 		zaps := make([]zap.Field, 0)
@@ -303,7 +303,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 		if isOkStatus(lastHttpStatus) {
 			// everything was fine, there is no need for retries
 			client.bytesAPIAccepted.Add(uint64(payloadLen))
-			break
+			break // exit loop (buffer sent)
 		}
 
 		backoffDelay := expBackoff.NextBackOff()
@@ -312,7 +312,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 			// throw away the batch
 			err = fmt.Errorf("max elapsed time expired %w", err)
 			client.onBufferDrop(buf, lastHttpStatus, err)
-			break
+			break // exit loop (failed to send buffer)
 		}
 
 		if isRetryableStatus(lastHttpStatus) {
@@ -334,7 +334,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 		} else {
 			err = fmt.Errorf("non recoverable error %w", err)
 			client.onBufferDrop(buf, lastHttpStatus, err)
-			break
+			break // exit loop (failed to send buffer)
 		}
 		retryNum++
 	}
