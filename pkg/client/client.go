@@ -19,6 +19,7 @@ package client
 import (
 	"fmt"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -95,9 +96,10 @@ type DataSetClient struct {
 	// Stores sanitized complete URL to the addEvents API endpoint, e.g.
 	// https://app.scalyr.com/api/addEvents
 	addEventsEndpointUrl string
+	userAgent            string
 }
 
-func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
+func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger, userAgentSuffix *string) (*DataSetClient, error) {
 	logger.Info(
 		"Using config: ",
 		zap.String("config", cfg.String()),
@@ -120,6 +122,20 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		addEventsEndpointUrl += "api/addEvents"
 	} else {
 		addEventsEndpointUrl += "/api/addEvents"
+	}
+
+	userAgent := fmt.Sprintf(
+		"%s;%s;%s;%s;%s;%s;%d",
+		"datasetexporter",
+		version.Version,
+		version.ReleasedDate,
+		id,
+		runtime.GOOS,
+		runtime.GOARCH,
+		runtime.NumCPU(),
+	)
+	if userAgentSuffix != nil && *userAgentSuffix != "" {
+		userAgent = userAgent + ";" + *userAgentSuffix
 	}
 
 	dataClient := &DataSetClient{
@@ -148,6 +164,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		firstReceivedAt:                 atomic.Int64{},
 		lastAcceptedAt:                  atomic.Int64{},
 		addEventsEndpointUrl:            addEventsEndpointUrl,
+		userAgent:                       userAgent,
 	}
 
 	// run buffer sweeper if requested
