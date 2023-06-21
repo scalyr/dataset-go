@@ -41,6 +41,8 @@ import (
 
 const RetryBase = time.Second
 
+var attempt = atomic.Int32{}
+
 func extract(req *http.Request) (add_events.AddEventsRequest, error) {
 	data, _ := io.ReadAll(req.Body)
 	b := bytes.NewBuffer(data)
@@ -55,7 +57,6 @@ func extract(req *http.Request) (add_events.AddEventsRequest, error) {
 }
 
 func TestAddEventsRetry(t *testing.T) {
-	attempt := atomic.Int32{}
 	attempt.Store(0)
 	wasSuccessful := atomic.Bool{}
 	wasSuccessful.Store(false)
@@ -111,7 +112,6 @@ func TestAddEventsRetry(t *testing.T) {
 }
 
 func TestAddEventsRetryAfterSec(t *testing.T) {
-	attempt := atomic.Int32{}
 	attempt.Store(0)
 	wasSuccessful := atomic.Bool{}
 	wasSuccessful.Store(false)
@@ -210,7 +210,6 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 }
 
 func TestAddEventsRetryAfterTime(t *testing.T) {
-	attempt := atomic.Int32{}
 	attempt.Store(0)
 	wasSuccessful := atomic.Bool{}
 	wasSuccessful.Store(false)
@@ -278,7 +277,6 @@ func TestAddEventsLargeEvent(t *testing.T) {
 		originalAttrs[fmt.Sprintf("%d", i)] = strings.Repeat(fmt.Sprintf("%d", i), 1000000+v)
 	}
 
-	attempt := atomic.Int32{}
 	attempt.Store(0)
 	wasSuccessful := atomic.Bool{}
 	wasSuccessful.Store(false)
@@ -368,7 +366,6 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 		originalAttrs[fmt.Sprintf("%d", i)] = strings.Repeat("\"", 1000000+v)
 	}
 
-	attempt := atomic.Int32{}
 	attempt.Store(0)
 	wasSuccessful := atomic.Bool{}
 	wasSuccessful.Store(false)
@@ -463,7 +460,6 @@ func TestAddEventsRejectAfterFinish(t *testing.T) {
 }
 
 func TestAddEventsWithBufferSweeper(t *testing.T) {
-	attempt := atomic.Int32{}
 	attempt.Store(0)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		attempt.Add(1)
@@ -524,21 +520,8 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 }
 
 func TestAddEventsDoNotRetryForever(t *testing.T) {
-	attempt := atomic.Int32{}
 	attempt.Store(0)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		attempt.Add(1)
-
-		w.WriteHeader(503)
-		payload, err := json.Marshal(map[string]interface{}{
-			"status":       "success",
-			"bytesCharged": 42,
-		})
-		assert.NoError(t, err)
-		l, err := w.Write(payload)
-		assert.Greater(t, l, 1)
-		assert.NoError(t, err)
-	}))
+	server := mockServerDefaultPayload(t, 503)
 	defer server.Close()
 
 	config := newDataSetConfig(server.URL, *newBufferSettings(
@@ -561,17 +544,8 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 }
 
 func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
-	attempt := atomic.Int32{}
 	attempt.Store(0)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		attempt.Add(1)
-
-		w.WriteHeader(503)
-		payload := []byte("<html>not valid json</html>")
-		l, err := w.Write(payload)
-		assert.Greater(t, l, 1)
-		assert.NoError(t, err)
-	}))
+	server := mockServer(t, 503, []byte("<html>not valid json</html>"))
 	defer server.Close()
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(3) * time.Second),
@@ -595,6 +569,25 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
 	assert.GreaterOrEqual(t, attempt.Load(), int32(0))
+}
+
+func mockServerDefaultPayload(t *testing.T, statusCode int) *httptest.Server {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"status":       "success",
+		"bytesCharged": 42,
+	})
+	return mockServer(t, statusCode, payload)
+}
+
+func mockServer(t *testing.T, statusCode int, payload []byte) *httptest.Server {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		attempt.Add(1)
+		w.WriteHeader(statusCode)
+		l, err := w.Write(payload)
+		assert.Greater(t, l, 1)
+		assert.NoError(t, err)
+	}))
+	return server
 }
 
 func newDataSetConfig(url string, settings buffer_config.DataSetBufferSettings) *config.DataSetConfig {
