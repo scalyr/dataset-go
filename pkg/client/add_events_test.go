@@ -571,6 +571,69 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	assert.GreaterOrEqual(t, attempt.Load(), int32(0))
 }
 
+func TestAddEventsAreNotRejectedOncePreviousReqRetriesMaxLifetimeExpired(t *testing.T) {
+	// GIVEN
+	maxElapsedTime := 10
+	lastEventRetriesExpiration := maxElapsedTime + 1
+	attempt.Store(0)
+	server := mockServerDefaultPayload(t, http.StatusOK)
+	defer server.Close()
+	dataSetConfig := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithMaxLifetime(time.Second),
+		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
+		buffer_config.WithRetryRandomizationFactor(0.000000001),
+	))
+	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(t, err)
+
+	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+	client.SessionInfo = sessionInfo
+	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+
+	// GIVEN mock previous event request error
+	client.setLastErrorTimestamp(time.Now().Add(-time.Duration(lastEventRetriesExpiration) * time.Second))
+	client.setLastError(fmt.Errorf("failed to handle previous request"))
+	client.LastHttpStatus.Store(http.StatusTooManyRequests)
+
+	// WHEN
+	err = client.AddEvents([]*add_events.EventBundle{eventBundle1})
+	// THEN event is not rejected
+	assert.Nil(t, err)
+}
+
+func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *testing.T) {
+	// GIVEN
+	maxElapsedTime := 10
+	lastEventRetriesExpiration := maxElapsedTime - 1
+	attempt.Store(0)
+	server := mockServerDefaultPayload(t, http.StatusOK)
+	defer server.Close()
+	dataSetConfig := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithMaxLifetime(time.Second),
+		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
+		buffer_config.WithRetryRandomizationFactor(0.000000001),
+	))
+	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	require.Nil(t, err)
+
+	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+	client.SessionInfo = sessionInfo
+	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+
+	// GIVEN mock previous event request error
+	client.setLastErrorTimestamp(time.Now().Add(-time.Duration(lastEventRetriesExpiration) * time.Second))
+	client.setLastError(fmt.Errorf("failed to handle previous request"))
+	client.LastHttpStatus.Store(http.StatusTooManyRequests)
+
+	// WHEN
+	err = client.AddEvents([]*add_events.EventBundle{eventBundle1})
+	// THEN event is rejected
+	assert.NotNil(t, err)
+	assert.Errorf(t, err, "AddEvents - reject batch: rejecting - Last HTTP request contains an error: failed to handle previous request")
+}
+
 func mockServerDefaultPayload(t *testing.T, statusCode int) *httptest.Server {
 	payload, _ := json.Marshal(map[string]interface{}{
 		"status":       "success",
