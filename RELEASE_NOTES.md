@@ -1,5 +1,15 @@
 # Release Notes
 
+## 0.0.9 Add more retry parameters
+
+* fix: recovery from error mode - when DataSet HTTP req sending fails consuming of additional input events is blocked. Fix issue with rejected input events once retry attempts times out.
+* feat: change the content of User-Agent header in order to send more details. Also allow library consumer to define additional details.
+* Refactoring and documentation
+
+## 0.0.8 Improve logging
+
+* Log amount of transferred bytes to DataSet
+
 ## 0.0.7 Add more retry parameters
 
 * To make OpenTelemetry configuration more stable we have introduced more retry options. We have to propagate them to the library.
