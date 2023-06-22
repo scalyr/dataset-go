@@ -93,7 +93,7 @@ func TestAddEventsRetry(t *testing.T) {
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
 	))
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
@@ -166,7 +166,7 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
 	))
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
@@ -252,7 +252,7 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
 	))
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
@@ -341,7 +341,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
 	))
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
@@ -423,7 +423,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
 	))
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
@@ -447,7 +447,7 @@ func TestAddEventsRejectAfterFinish(t *testing.T) {
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
 	))
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 	err = sc.Shutdown()
 	assert.Nil(t, err)
@@ -493,7 +493,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
@@ -527,7 +527,7 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(5) * time.Second),
 	))
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
@@ -550,7 +550,7 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(3) * time.Second),
 	))
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
@@ -583,7 +583,7 @@ func TestAddEventsAreNotRejectedOncePreviousReqRetriesMaxLifetimeExpired(t *test
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
 	))
-	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
@@ -614,7 +614,7 @@ func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *test
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
 	))
-	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}

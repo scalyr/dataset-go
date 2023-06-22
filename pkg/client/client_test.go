@@ -21,7 +21,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
+
+	"github.com/scalyr/dataset-go/pkg/version"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +45,7 @@ func TestNewClient(t *testing.T) {
 	t.Setenv("SCALYR_READCONFIG_TOKEN", "readconfig")
 	cfg, err := config.New(config.FromEnv())
 	assert.Nil(t, err)
-	sc4, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()))
+	sc4, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 	assert.Equal(t, sc4.Config.Tokens.ReadLog, "readlog")
 	assert.Equal(t, sc4.Config.Tokens.WriteLog, "writelog")
@@ -61,7 +64,7 @@ func TestClientBuffer(t *testing.T) {
 		Endpoint:       ts.URL,
 		Tokens:         config.DataSetTokens{WriteLog: token},
 		BufferSettings: buffer_config.NewDefaultDataSetBufferSettings(),
-	}, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	}, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := add_events.SessionInfo{
@@ -193,7 +196,7 @@ func TestAddEventsEndpointUrlWithoutTrailingSlash(t *testing.T) {
 	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com")
 	cfg, err := config.New(config.FromEnv())
 	assert.Nil(t, err)
-	sc, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 	assert.Equal(t, sc.addEventsEndpointUrl, "https://app.scalyr.com/api/addEvents")
 }
@@ -202,7 +205,30 @@ func TestAddEventsEndpointUrlWithTrailingSlash(t *testing.T) {
 	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com/")
 	cfg2, err := config.New(config.FromEnv())
 	assert.Nil(t, err)
-	sc2, err := NewClient(cfg2, nil, zap.Must(zap.NewDevelopment()))
+	sc2, err := NewClient(cfg2, nil, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 	assert.Equal(t, sc2.addEventsEndpointUrl, "https://app.scalyr.com/api/addEvents")
+}
+
+func TestUserAgent(t *testing.T) {
+	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com/")
+	libraryConsumerUserAgentSuffix := "OtelCollector;0.80.0;traces"
+	numCpu := fmt.Sprint(runtime.NumCPU())
+	cfg, err := config.New(config.FromEnv())
+	assert.Nil(t, err)
+	client, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), &libraryConsumerUserAgentSuffix)
+	clientId := client.Id.String()
+	require.Nil(t, err)
+	assert.Equal(t, client.userAgent, "dataset-go;"+version.Version+";"+version.ReleasedDate+";"+clientId+";"+runtime.GOOS+";"+runtime.GOARCH+";"+numCpu+";"+libraryConsumerUserAgentSuffix)
+}
+
+func TestUserAgentWithoutCollectorAttrs(t *testing.T) {
+	t.Setenv("SCALYR_SERVER", "https://app.scalyr.com/")
+	numCpu := fmt.Sprint(runtime.NumCPU())
+	cfg, err := config.New(config.FromEnv())
+	assert.Nil(t, err)
+	client, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil)
+	clientId := client.Id.String()
+	require.Nil(t, err)
+	assert.Equal(t, client.userAgent, "dataset-go;"+version.Version+";"+version.ReleasedDate+";"+clientId+";"+runtime.GOOS+";"+runtime.GOARCH+";"+numCpu)
 }

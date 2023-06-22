@@ -8,11 +8,7 @@ import (
 	"net/http"
 
 	"github.com/scalyr/dataset-go/pkg/config"
-
-	"github.com/scalyr/dataset-go/pkg/version"
 )
-
-const UserAgent = "datasetexporter/" + version.Version + " (" + version.ReleasedDate + ")"
 
 func (ap *AuthParams) setToken(token string) {
 	ap.Token = token
@@ -29,7 +25,8 @@ type TokenSetter interface {
 
 // ApiRequest represents a generic DataSet REST API request, with all its properties
 type ApiRequest struct {
-	requestType   string
+	httpMethod    string
+	userAgent     string
 	payload       []byte
 	request       interface{}
 	uri           string
@@ -39,7 +36,7 @@ type ApiRequest struct {
 }
 
 func NewApiRequest(requestType string, uri string) *ApiRequest {
-	return &ApiRequest{requestType: requestType, uri: uri}
+	return &ApiRequest{httpMethod: requestType, uri: uri}
 }
 
 func (r *ApiRequest) WithWriteLog(tokens config.DataSetTokens) *ApiRequest {
@@ -94,7 +91,7 @@ func (r *ApiRequest) WithWriteConfig(tokens config.DataSetTokens) *ApiRequest {
 	return r
 }
 
-func (r *ApiRequest) JsonRequest(request TokenSetter) *ApiRequest {
+func (r *ApiRequest) jsonRequest(request TokenSetter) *ApiRequest {
 	payload, err := json.Marshal(request)
 	r.request = request
 	if err != nil {
@@ -105,13 +102,18 @@ func (r *ApiRequest) JsonRequest(request TokenSetter) *ApiRequest {
 	return r
 }
 
-func (r *ApiRequest) RawRequest(payload []byte) *ApiRequest {
+func (r *ApiRequest) WithPayload(payload []byte) *ApiRequest {
 	r.payload = payload
 	return r
 }
 
+func (r *ApiRequest) WithUserAgent(userAgent string) *ApiRequest {
+	r.userAgent = userAgent
+	return r
+}
+
 func (r *ApiRequest) emptyRequest() *ApiRequest {
-	return r.JsonRequest(TokenSetter(&AuthParams{}))
+	return r.jsonRequest(TokenSetter(&AuthParams{}))
 }
 
 func (r *ApiRequest) HttpRequest() (*http.Request, error) {
@@ -141,14 +143,14 @@ func (r *ApiRequest) HttpRequest() (*http.Request, error) {
 		return nil, r.err
 	}
 
-	req, err := http.NewRequest(r.requestType, r.uri, &buf)
+	req, err := http.NewRequest(r.httpMethod, r.uri, &buf)
 	if err != nil {
 		r.err = fmt.Errorf("failed to create NewApiRequest: %w", err)
 		return nil, r.err
 	}
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Content-Encoding", "gzip")
-	req.Header.Add("User-Agent", UserAgent)
+	req.Header.Add("User-Agent", r.userAgent)
 
 	return req, nil
 }

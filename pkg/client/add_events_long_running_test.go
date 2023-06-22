@@ -98,7 +98,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			RetryMaxElapsedTime:      10 * RetryBase,
 		},
 	}
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()))
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
