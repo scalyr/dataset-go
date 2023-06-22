@@ -219,7 +219,7 @@ func TestUserAgent(t *testing.T) {
 	client, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), &libraryConsumerUserAgentSuffix)
 	clientId := client.Id.String()
 	require.Nil(t, err)
-	assert.Equal(t, client.userAgent, "datasetexporter;"+version.Version+";"+version.ReleasedDate+";"+clientId+";"+runtime.GOOS+";"+runtime.GOARCH+";"+numCpu+";"+libraryConsumerUserAgentSuffix)
+	assert.Equal(t, client.userAgent, "dataset-go;"+version.Version+";"+version.ReleasedDate+";"+clientId+";"+runtime.GOOS+";"+runtime.GOARCH+";"+numCpu+";"+libraryConsumerUserAgentSuffix)
 }
 
 func TestUserAgentWithoutCollectorAttrs(t *testing.T) {
@@ -230,5 +230,5 @@ func TestUserAgentWithoutCollectorAttrs(t *testing.T) {
 	client, err := NewClient(cfg, nil, zap.Must(zap.NewDevelopment()), nil)
 	clientId := client.Id.String()
 	require.Nil(t, err)
-	assert.Equal(t, client.userAgent, "datasetexporter;"+version.Version+";"+version.ReleasedDate+";"+clientId+";"+runtime.GOOS+";"+runtime.GOARCH+";"+numCpu)
+	assert.Equal(t, client.userAgent, "dataset-go;"+version.Version+";"+version.ReleasedDate+";"+clientId+";"+runtime.GOOS+";"+runtime.GOARCH+";"+numCpu)
 }

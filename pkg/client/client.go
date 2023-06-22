@@ -126,7 +126,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 
 	userAgent := fmt.Sprintf(
 		"%s;%s;%s;%s;%s;%s;%d",
-		"datasetexporter",
+		"dataset-go",
 		version.Version,
 		version.ReleasedDate,
 		id,
