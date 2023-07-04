@@ -19,12 +19,15 @@ package client
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/exp/slices"
 
 	"github.com/scalyr/dataset-go/pkg/version"
 
@@ -34,11 +37,11 @@ import (
 	"github.com/scalyr/dataset-go/pkg/buffer"
 	"github.com/scalyr/dataset-go/pkg/config"
 
+	_ "net/http/pprof"
+
 	"github.com/cskr/pubsub"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-
-	_ "net/http/pprof"
 )
 
 const (
@@ -97,6 +100,7 @@ type DataSetClient struct {
 	// https://app.scalyr.com/api/addEvents
 	addEventsEndpointUrl string
 	userAgent            string
+	serverHost           string
 }
 
 func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger, userAgentSuffix *string) (*DataSetClient, error) {
@@ -104,12 +108,21 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		"Using config: ",
 		zap.String("config", cfg.String()),
 		zap.String("version", version.Version),
-		zap.String("ReleaseDate", version.ReleasedDate),
+		zap.String("releaseDate", version.ReleasedDate),
 	)
 
 	validationErr := cfg.Validate()
 	if validationErr != nil {
 		return nil, validationErr
+	}
+
+	// update group by, so that logs from the same host
+	// belong to the same session
+	addServerHostIntoGroupBy(cfg)
+
+	serverHost, err := getServerHost(cfg.ServerHostSettings)
+	if err != nil {
+		return nil, fmt.Errorf("it was not get server host: %w", err)
 	}
 
 	id, err := uuid.NewRandom()
@@ -165,6 +178,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		lastAcceptedAt:                  atomic.Int64{},
 		addEventsEndpointUrl:            addEventsEndpointUrl,
 		userAgent:                       userAgent,
+		serverHost:                      serverHost,
 	}
 
 	// run buffer sweeper if requested
@@ -193,6 +207,27 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 	//}()
 
 	return dataClient, nil
+}
+
+func getServerHost(settings config.DataSetServerHostSettings) (string, error) {
+	err := settings.Validate()
+	if err != nil {
+		return "", err
+	}
+	if len(settings.ServerHost) > 0 {
+		return settings.ServerHost, nil
+	}
+	return os.Hostname()
+}
+
+// addServerHostIntoGroupBy adds attributes that indicate from which machine
+// the logs are into the groupBy attribute, so that they are part of the same session
+func addServerHostIntoGroupBy(cfg *config.DataSetConfig) {
+	groupBy := cfg.BufferSettings.GroupBy
+	if !slices.Contains(groupBy, AttrOrigServerHost) {
+		groupBy = append(groupBy, AttrOrigServerHost)
+	}
+	cfg.BufferSettings.GroupBy = groupBy
 }
 
 func (client *DataSetClient) getBuffer(key string) *buffer.Buffer {

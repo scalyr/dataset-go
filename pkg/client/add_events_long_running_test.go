@@ -97,6 +97,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
 		},
+		ServerHostSettings: config.NewDefaultDataSetServerHostSettings(),
 	}
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)

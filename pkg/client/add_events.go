@@ -36,6 +36,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	AttrServerHost     = "serverHost"
+	AttrOrigServerHost = "__origServerHost"
+)
+
 /*
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
@@ -51,7 +56,11 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		return fmt.Errorf("AddEvents - reject batch: %w", errR)
 	}
 
-	// first, figure out which keys are part of the batch
+	// first, we have to adjust server host attributes, since they are
+	// needed for computing the key
+	client.fixServerHostsInBundles(bundles)
+
+	// then, figure out which keys are part of the batch
 	seenKeys := make(map[string]bool)
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
@@ -85,6 +94,26 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	}
 
 	return nil
+}
+
+func (client *DataSetClient) fixServerHostsInBundles(bundles []*add_events.EventBundle) {
+	for _, bundle := range bundles {
+		_, hasOrig := bundle.Event.Attrs[AttrOrigServerHost]
+
+		if hasOrig {
+			// if the orig is set, we are done
+			continue
+		}
+		host, hasHost := bundle.Event.Attrs[AttrServerHost]
+		if hasHost && len(host.(string)) > 0 {
+			// host is set, so lets set is orig as well
+			bundle.Event.Attrs[AttrOrigServerHost] = host
+			continue
+		}
+
+		// as fallback use the value set to the client
+		bundle.Event.Attrs[AttrOrigServerHost] = client.serverHost
+	}
 }
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {

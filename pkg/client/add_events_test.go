@@ -92,7 +92,7 @@ func TestAddEventsRetry(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -165,7 +165,7 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -251,7 +251,7 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -301,28 +301,30 @@ func TestAddEventsLargeEvent(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			"bundle_key": 32,
-			"0":          990000,
-			"7":          995000,
-			"2":          999000,
-			"5":          999900,
-			"4":          1000000,
-			"3":          1000100,
-			"6":          241689,
+			"bundle_key":       32,
+			"__origServerHost": 3,
+			"0":                990000,
+			"7":                995000,
+			"2":                999000,
+			"5":                999900,
+			"4":                1000000,
+			"3":                1000100,
+			"6":                241661,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			"bundle_key": "d41d8cd98f00b204e9800998ecf8427e",
-			"0":          strings.Repeat("0", expectedLengths["0"]),
-			"7":          strings.Repeat("7", expectedLengths["7"]),
-			"2":          strings.Repeat("2", expectedLengths["2"]),
-			"5":          strings.Repeat("5", expectedLengths["5"]),
-			"4":          strings.Repeat("4", expectedLengths["4"]),
-			"3":          strings.Repeat("3", expectedLengths["3"]),
-			"6":          strings.Repeat("6", expectedLengths["6"]),
+			"bundle_key":       "3a8d26251579170a1a04bf5ba194d138",
+			"__origServerHost": "foo",
+			"0":                strings.Repeat("0", expectedLengths["0"]),
+			"7":                strings.Repeat("7", expectedLengths["7"]),
+			"2":                strings.Repeat("2", expectedLengths["2"]),
+			"5":                strings.Repeat("5", expectedLengths["5"]),
+			"4":                strings.Repeat("4", expectedLengths["4"]),
+			"3":                strings.Repeat("3", expectedLengths["3"]),
+			"6":                strings.Repeat("6", expectedLengths["6"]),
 		}
-		assert.Equal(t, wasAttrs, expectedAttrs, wasAttrs)
 		assert.Equal(t, wasLengths, expectedLengths)
+		assert.Equal(t, wasAttrs, expectedAttrs, wasAttrs)
 
 		wasSuccessful.Store(true)
 		payload, err := json.Marshal(map[string]interface{}{
@@ -340,7 +342,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), *newDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -389,22 +391,24 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			"bundle_key": 32,
-			"0":          990000,
-			"7":          995000,
-			"2":          999000,
-			"5":          6,
+			"bundle_key":       32,
+			"__origServerHost": 3,
+			"0":                990000,
+			"7":                995000,
+			"2":                999000,
+			"5":                6,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			"bundle_key": "d41d8cd98f00b204e9800998ecf8427e",
-			"0":          strings.Repeat("\"", expectedLengths["0"]),
-			"7":          strings.Repeat("\"", expectedLengths["7"]),
-			"2":          strings.Repeat("\"", expectedLengths["2"]),
-			"5":          strings.Repeat("\"", expectedLengths["5"]),
+			"bundle_key":       "3a8d26251579170a1a04bf5ba194d138",
+			"__origServerHost": "foo",
+			"0":                strings.Repeat("\"", expectedLengths["0"]),
+			"7":                strings.Repeat("\"", expectedLengths["7"]),
+			"2":                strings.Repeat("\"", expectedLengths["2"]),
+			"5":                strings.Repeat("\"", expectedLengths["5"]),
 		}
-		assert.Equal(t, wasAttrs, expectedAttrs)
 		assert.Equal(t, wasLengths, expectedLengths)
+		assert.Equal(t, wasAttrs, expectedAttrs)
 
 		wasSuccessful.Store(true)
 		payload, err := json.Marshal(map[string]interface{}{
@@ -422,7 +426,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), *newDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -446,7 +450,7 @@ func TestAddEventsRejectAfterFinish(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 	err = sc.Shutdown()
@@ -492,6 +496,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
 		},
+		ServerHostSettings: config.NewDefaultDataSetServerHostSettings(),
 	}
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
@@ -526,7 +531,7 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(5) * time.Second),
-	))
+	), config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -549,7 +554,7 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	defer server.Close()
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(3) * time.Second),
-	))
+	), config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -582,7 +587,7 @@ func TestAddEventsAreNotRejectedOncePreviousReqRetriesMaxLifetimeExpired(t *test
 		buffer_config.WithMaxLifetime(time.Second),
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
-	))
+	), config.NewDefaultDataSetServerHostSettings())
 	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -613,7 +618,7 @@ func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *test
 		buffer_config.WithMaxLifetime(time.Second),
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
-	))
+	), config.NewDefaultDataSetServerHostSettings())
 	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -653,11 +658,12 @@ func mockServer(t *testing.T, statusCode int, payload []byte) *httptest.Server {
 	return server
 }
 
-func newDataSetConfig(url string, settings buffer_config.DataSetBufferSettings) *config.DataSetConfig {
+func newDataSetConfig(url string, bufferSettings buffer_config.DataSetBufferSettings, serverHostSettings config.DataSetServerHostSettings) *config.DataSetConfig {
 	return &config.DataSetConfig{
-		Endpoint:       url,
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: settings,
+		Endpoint:           url,
+		Tokens:             config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings:     bufferSettings,
+		ServerHostSettings: serverHostSettings,
 	}
 }
 
@@ -673,4 +679,11 @@ func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) 
 	}
 	bufferSetting, _ := buffer_config.New(append(defaultOpts, customOpts...)...)
 	return bufferSetting
+}
+
+func newDataSetServerHostSettings() *config.DataSetServerHostSettings {
+	return &config.DataSetServerHostSettings{
+		UseHostName: false,
+		ServerHost:  "foo",
+	}
 }
