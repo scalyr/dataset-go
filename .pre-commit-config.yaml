@@ -34,7 +34,8 @@ repos:
       # - id: go-critic
       #  # args: [-disable=sloppyTypeAssert]
       #  args: ["-v", "-enable='yodaStyleExpr'", "-disable=sloppyTypeAssert"]
-      - id: go-unit-tests
+      # there is timeout of 30s for go-unit-test and we need more
+      # - id: go-unit-tests
       - id: go-build
       - id: go-mod-tidy
       - id: go-mod-vendor
