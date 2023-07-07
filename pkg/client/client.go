@@ -157,6 +157,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		Id:                              id,
 		Config:                          cfg,
 		Client:                          client,
+		SessionInfo:                     &add_events.SessionInfo{},
 		buffers:                         make(map[string]*buffer.Buffer),
 		buffersEnqueued:                 atomic.Uint64{},
 		buffersProcessed:                atomic.Uint64{},

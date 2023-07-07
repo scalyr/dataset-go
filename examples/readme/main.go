@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
+
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
@@ -72,6 +74,7 @@ func main() {
 	)
 	cfg, err = cfg.WithOptions(
 		config.WithBufferSettings(*bufferCfg),
+		config.WithServerHostSettings(server_host_config.NewDefaultDataSetServerHostSettings()),
 	)
 	if err != nil {
 		panic(err)
