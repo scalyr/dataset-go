@@ -89,3 +89,9 @@ coverage-unit:
 coverage-all:
 	$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE_LONG_RUNNING) ./...
 	$(GOCMD) tool cover -html=coverage.txt -o coverage.html
+
+build-examples:
+	for d in examples/*; do \
+  		echo "Build example: $${d}"; \
+		(cd $${d}; go mod tidy && go build && ls -lrt | tail -n 1); \
+	done;
