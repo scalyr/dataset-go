@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
+
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 	"github.com/scalyr/dataset-go/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -97,7 +99,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
 		},
-		ServerHostSettings: config.NewDefaultDataSetServerHostSettings(),
+		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)

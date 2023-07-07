@@ -95,6 +95,9 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	return nil
 }
 
+// fixServerHostsInBundles for each event fills the attribute __origServerHost
+// and removed the attribute serverHost. This is needed to properly associate
+// incoming events with the correct host
 func (client *DataSetClient) fixServerHostsInBundles(bundles []*add_events.EventBundle) {
 	for _, bundle := range bundles {
 		_, hasOrig := bundle.Event.Attrs[add_events.AttrOrigServerHost]

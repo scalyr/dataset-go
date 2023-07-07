@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
+
 	"github.com/stretchr/testify/assert"
 
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
@@ -94,10 +96,15 @@ func TestNewConfigBasedOnExistingWithNewConfigOptions(t *testing.T) {
 		buffer_config.WithRetryMaxInterval(30*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(10*time.Minute),
 	)
+	hostCfg, _ := server_host_config.New(
+		server_host_config.WithServerHost("AAA"),
+		server_host_config.WithUseHostName(false),
+	)
 	cfg5, _ := New(
 		WithEndpoint("https://fooOpt1"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt1"}),
 		WithBufferSettings(*bufCfg),
+		WithServerHostSettings(*hostCfg),
 	)
 	// AND
 	bufCfg2, _ := buffer_config.New(
@@ -108,11 +115,16 @@ func TestNewConfigBasedOnExistingWithNewConfigOptions(t *testing.T) {
 		buffer_config.WithRetryMaxInterval(230*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(210*time.Minute),
 	)
+	hostCfg2, _ := server_host_config.New(
+		server_host_config.WithServerHost("BBB"),
+		server_host_config.WithUseHostName(true),
+	)
 	// WHEN
 	cfg6, _ := cfg5.WithOptions(
 		WithEndpoint("https://fooOpt2"),
 		WithTokens(DataSetTokens{WriteLog: "writeLogOpt2"}),
 		WithBufferSettings(*bufCfg2),
+		WithServerHostSettings(*hostCfg2),
 	)
 	// THEN original config is unchanged
 	assert.Equal(t, "https://fooOpt1", cfg5.Endpoint)
@@ -125,6 +137,10 @@ func TestNewConfigBasedOnExistingWithNewConfigOptions(t *testing.T) {
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
 	}, cfg5.BufferSettings)
+	assert.Equal(t, server_host_config.DataSetServerHostSettings{
+		ServerHost:  "AAA",
+		UseHostName: false,
+	}, cfg5.ServerHostSettings)
 
 	// AND new config is changed
 	assert.Equal(t, "https://fooOpt2", cfg6.Endpoint)
@@ -137,6 +153,10 @@ func TestNewConfigBasedOnExistingWithNewConfigOptions(t *testing.T) {
 		RetryMaxInterval:     230 * time.Second,
 		RetryMaxElapsedTime:  210 * time.Minute,
 	}, cfg6.BufferSettings)
+	assert.Equal(t, server_host_config.DataSetServerHostSettings{
+		ServerHost:  "BBB",
+		UseHostName: true,
+	}, cfg6.ServerHostSettings)
 }
 
 func TestNewDefaultDataSetConfigToString(t *testing.T) {

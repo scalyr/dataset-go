@@ -19,6 +19,8 @@ package config
 import (
 	"fmt"
 
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
+
 	osUtil "github.com/scalyr/dataset-go/internal/pkg/os/util"
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
@@ -46,7 +48,7 @@ type DataSetConfig struct {
 	Endpoint           string
 	Tokens             DataSetTokens
 	BufferSettings     buffer_config.DataSetBufferSettings
-	ServerHostSettings DataSetServerHostSettings
+	ServerHostSettings server_host_config.DataSetServerHostSettings
 }
 
 func NewDefaultDataSetConfig() DataSetConfig {
@@ -54,7 +56,7 @@ func NewDefaultDataSetConfig() DataSetConfig {
 		Endpoint:           "https://app.scalyr.com",
 		Tokens:             DataSetTokens{},
 		BufferSettings:     buffer_config.NewDefaultDataSetBufferSettings(),
-		ServerHostSettings: NewDefaultDataSetServerHostSettings(),
+		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
 }
 
@@ -81,7 +83,7 @@ func WithBufferSettings(bufferSettings buffer_config.DataSetBufferSettings) Data
 	}
 }
 
-func WithServerHostSettings(serverHostSettings DataSetServerHostSettings) DataSetConfigOption {
+func WithServerHostSettings(serverHostSettings server_host_config.DataSetServerHostSettings) DataSetConfigOption {
 	return func(c *DataSetConfig) error {
 		c.ServerHostSettings = serverHostSettings
 		return nil
@@ -106,7 +108,7 @@ func FromEnv() DataSetConfigOption {
 			c.Endpoint = osUtil.GetEnvVariableOrDefault("SCALYR_SERVER", "")
 		}
 		c.BufferSettings = buffer_config.NewDefaultDataSetBufferSettings()
-		c.ServerHostSettings = NewDefaultDataSetServerHostSettings()
+		c.ServerHostSettings = server_host_config.NewDefaultDataSetServerHostSettings()
 		return nil
 	}
 }

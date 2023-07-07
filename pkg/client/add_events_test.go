@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -93,7 +95,7 @@ func TestAddEventsRetry(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	), config.NewDefaultDataSetServerHostSettings())
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -166,7 +168,7 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	), config.NewDefaultDataSetServerHostSettings())
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -252,7 +254,7 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	), config.NewDefaultDataSetServerHostSettings())
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -447,7 +449,7 @@ func TestAddEventsRejectAfterFinish(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	), config.NewDefaultDataSetServerHostSettings())
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 	err = sc.Shutdown()
@@ -493,7 +495,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
 		},
-		ServerHostSettings: config.NewDefaultDataSetServerHostSettings(),
+		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
@@ -528,7 +530,7 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(5) * time.Second),
-	), config.NewDefaultDataSetServerHostSettings())
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -551,7 +553,7 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	defer server.Close()
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(3) * time.Second),
-	), config.NewDefaultDataSetServerHostSettings())
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -584,7 +586,7 @@ func TestAddEventsAreNotRejectedOncePreviousReqRetriesMaxLifetimeExpired(t *test
 		buffer_config.WithMaxLifetime(time.Second),
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
-	), config.NewDefaultDataSetServerHostSettings())
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -615,7 +617,7 @@ func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *test
 		buffer_config.WithMaxLifetime(time.Second),
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
-	), config.NewDefaultDataSetServerHostSettings())
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -799,7 +801,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			config := newDataSetConfig(
 				server.URL,
 				buffer_config.NewDefaultDataSetBufferSettings(),
-				config.DataSetServerHostSettings{
+				server_host_config.DataSetServerHostSettings{
 					UseHostName: false,
 					ServerHost:  configServerHost,
 				})
@@ -841,7 +843,7 @@ func mockServer(t *testing.T, statusCode int, payload []byte) *httptest.Server {
 	return server
 }
 
-func newDataSetConfig(url string, bufferSettings buffer_config.DataSetBufferSettings, serverHostSettings config.DataSetServerHostSettings) *config.DataSetConfig {
+func newDataSetConfig(url string, bufferSettings buffer_config.DataSetBufferSettings, serverHostSettings server_host_config.DataSetServerHostSettings) *config.DataSetConfig {
 	return &config.DataSetConfig{
 		Endpoint:           url,
 		Tokens:             config.DataSetTokens{WriteLog: "AAAA"},
@@ -864,8 +866,8 @@ func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) 
 	return bufferSetting
 }
 
-func newDataSetServerHostSettings() *config.DataSetServerHostSettings {
-	return &config.DataSetServerHostSettings{
+func newDataSetServerHostSettings() *server_host_config.DataSetServerHostSettings {
+	return &server_host_config.DataSetServerHostSettings{
 		UseHostName: false,
 		ServerHost:  "foo",
 	}

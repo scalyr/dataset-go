@@ -27,6 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
+
 	"golang.org/x/exp/slices"
 
 	"github.com/scalyr/dataset-go/pkg/version"
@@ -209,7 +211,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 	return dataClient, nil
 }
 
-func getServerHost(settings config.DataSetServerHostSettings) (string, error) {
+func getServerHost(settings server_host_config.DataSetServerHostSettings) (string, error) {
 	err := settings.Validate()
 	if err != nil {
 		return "", err
