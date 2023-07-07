@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -301,25 +302,25 @@ func TestAddEventsLargeEvent(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			"bundle_key": 32,
-			"0":          990000,
-			"7":          995000,
-			"2":          999000,
-			"5":          999900,
-			"4":          1000000,
-			"3":          1000100,
-			"6":          241670,
+			add_events.AttrBundleKye: 32,
+			"0":                      990000,
+			"7":                      995000,
+			"2":                      999000,
+			"5":                      999900,
+			"4":                      1000000,
+			"3":                      1000100,
+			"6":                      241670,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			"bundle_key": "3a8d26251579170a1a04bf5ba194d138",
-			"0":          strings.Repeat("0", expectedLengths["0"]),
-			"7":          strings.Repeat("7", expectedLengths["7"]),
-			"2":          strings.Repeat("2", expectedLengths["2"]),
-			"5":          strings.Repeat("5", expectedLengths["5"]),
-			"4":          strings.Repeat("4", expectedLengths["4"]),
-			"3":          strings.Repeat("3", expectedLengths["3"]),
-			"6":          strings.Repeat("6", expectedLengths["6"]),
+			add_events.AttrBundleKye: "3a8d26251579170a1a04bf5ba194d138",
+			"0":                      strings.Repeat("0", expectedLengths["0"]),
+			"7":                      strings.Repeat("7", expectedLengths["7"]),
+			"2":                      strings.Repeat("2", expectedLengths["2"]),
+			"5":                      strings.Repeat("5", expectedLengths["5"]),
+			"4":                      strings.Repeat("4", expectedLengths["4"]),
+			"3":                      strings.Repeat("3", expectedLengths["3"]),
+			"6":                      strings.Repeat("6", expectedLengths["6"]),
 		}
 		assert.Equal(t, wasLengths, expectedLengths)
 		assert.Equal(t, wasAttrs, expectedAttrs, wasAttrs)
@@ -389,19 +390,19 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			"bundle_key": 32,
-			"0":          990000,
-			"7":          995000,
-			"2":          999000,
-			"5":          6,
+			add_events.AttrBundleKye: 32,
+			"0":                      990000,
+			"7":                      995000,
+			"2":                      999000,
+			"5":                      6,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			"bundle_key": "3a8d26251579170a1a04bf5ba194d138",
-			"0":          strings.Repeat("\"", expectedLengths["0"]),
-			"7":          strings.Repeat("\"", expectedLengths["7"]),
-			"2":          strings.Repeat("\"", expectedLengths["2"]),
-			"5":          strings.Repeat("\"", expectedLengths["5"]),
+			add_events.AttrBundleKye: "3a8d26251579170a1a04bf5ba194d138",
+			"0":                      strings.Repeat("\"", expectedLengths["0"]),
+			"7":                      strings.Repeat("\"", expectedLengths["7"]),
+			"2":                      strings.Repeat("\"", expectedLengths["2"]),
+			"5":                      strings.Repeat("\"", expectedLengths["5"]),
 		}
 		assert.Equal(t, wasLengths, expectedLengths)
 		assert.Equal(t, wasAttrs, expectedAttrs)
@@ -633,6 +634,191 @@ func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *test
 	// THEN event is rejected
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "AddEvents - reject batch: rejecting - Last HTTP request contains an error: failed to handle previous request")
+}
+
+func TestAddEventsServerHostLogic(t *testing.T) {
+	configServerHost := "global-server-host"
+	ev1ServerHost := "host-1"
+	ev2ServerHost := "host-2"
+	key := "key"
+	ev1Value := "event-1-value"
+	ev2Value := "event-2-value"
+
+	// define new types to make the code shorter
+	type tAttrs = []add_events.EventAttrs
+	type tCalls = map[string]tAttrs
+
+	tests := []struct {
+		name      string
+		wasAttrs1 map[string]interface{}
+		wasAttrs2 map[string]interface{}
+		expCalls  tCalls
+	}{
+		// when nothing is specified, there is just once call
+		{
+			name:      "no server host is specified",
+			wasAttrs1: map[string]interface{}{key: ev1Value},
+			wasAttrs2: map[string]interface{}{key: ev2Value},
+			expCalls: tCalls{
+				configServerHost: tAttrs{
+					{key: ev1Value},
+					{key: ev2Value},
+				},
+			},
+		},
+
+		// when serverHost is specified and is same as global one, there is just once call
+		{
+			name:      "serverHost is same as global",
+			wasAttrs1: map[string]interface{}{add_events.AttrServerHost: configServerHost, key: ev1Value},
+			wasAttrs2: map[string]interface{}{key: ev2Value},
+			expCalls: tCalls{
+				configServerHost: tAttrs{
+					{key: ev1Value},
+					{key: ev2Value},
+				},
+			},
+		},
+		// when __origServerHost is specified and is same as global one, there is just once call
+		{
+			name:      "__origServerHost is same as global",
+			wasAttrs1: map[string]interface{}{add_events.AttrOrigServerHost: configServerHost, key: ev1Value},
+			wasAttrs2: map[string]interface{}{key: ev2Value},
+			expCalls: tCalls{
+				configServerHost: tAttrs{
+					{key: ev1Value},
+					{key: ev2Value},
+				},
+			},
+		},
+
+		// when serverHost is specified and is different from global one, there are two calls
+		{
+			name:      "serverHost is different from global",
+			wasAttrs1: map[string]interface{}{add_events.AttrServerHost: ev1ServerHost, key: ev1Value},
+			wasAttrs2: map[string]interface{}{key: ev2Value},
+			expCalls: tCalls{
+				ev1ServerHost: tAttrs{
+					{key: ev1Value},
+				},
+				configServerHost: tAttrs{
+					{key: ev2Value},
+				},
+			},
+		},
+		// when __origServerHost is specified and is different from global one, there are two calls
+		{
+			name:      "__origServerHost is different from global",
+			wasAttrs1: map[string]interface{}{add_events.AttrOrigServerHost: ev1ServerHost, key: ev1Value},
+			wasAttrs2: map[string]interface{}{key: ev2Value},
+			expCalls: tCalls{
+				ev1ServerHost: tAttrs{
+					{key: ev1Value},
+				},
+				configServerHost: tAttrs{
+					{key: ev2Value},
+				},
+			},
+		},
+
+		// when serverHost are specified and are different, there are two calls
+		{
+			name:      "serverHost is different and in both events from global",
+			wasAttrs1: map[string]interface{}{add_events.AttrServerHost: ev1ServerHost, key: ev1Value},
+			wasAttrs2: map[string]interface{}{add_events.AttrServerHost: ev2ServerHost, key: ev2Value},
+			expCalls: tCalls{
+				ev1ServerHost: tAttrs{
+					{key: ev1Value},
+				},
+				ev2ServerHost: tAttrs{
+					{key: ev2Value},
+				},
+			},
+		},
+
+		// when serverHost are specified and are different, there are two calls
+		{
+			name:      "serverHost and __origServerHost are used",
+			wasAttrs1: map[string]interface{}{add_events.AttrOrigServerHost: ev1ServerHost, key: ev1Value},
+			wasAttrs2: map[string]interface{}{add_events.AttrServerHost: ev2ServerHost, key: ev2Value},
+			expCalls: tCalls{
+				ev1ServerHost: tAttrs{
+					{key: ev1Value},
+				},
+				ev2ServerHost: tAttrs{
+					{key: ev2Value},
+				},
+			},
+		},
+	}
+
+	extractAttrs := func(events []*add_events.Event) []map[string]interface{} {
+		attrs := make([]map[string]interface{}, 0)
+		for _, ev := range events {
+			delete(ev.Attrs, add_events.AttrBundleKye)
+			attrs = append(attrs, ev.Attrs)
+		}
+		return attrs
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			numCalls := atomic.Int32{}
+			lock := sync.Mutex{}
+			calls := make(map[string][]map[string]interface{})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				numCalls.Add(1)
+				cer, err := extract(req)
+
+				assert.Nil(t, err, "Error reading request: %v", err)
+				assert.Equal(t, "b", cer.SessionInfo.ServerType)
+				assert.Equal(t, "a", cer.SessionInfo.ServerId)
+
+				serverHost := cer.SessionInfo.ServerHost
+				lock.Lock()
+				val, ok := calls[serverHost]
+				if ok {
+					val = append(val, extractAttrs(cer.Events)...)
+				} else {
+					val = extractAttrs(cer.Events)
+				}
+				calls[serverHost] = val
+				lock.Unlock()
+
+				payload, err := json.Marshal(map[string]interface{}{
+					"status":       "success",
+					"bytesCharged": 42,
+				})
+				assert.NoError(t, err)
+				l, err := w.Write(payload)
+				assert.Greater(t, l, 1)
+				assert.NoError(t, err)
+			}))
+			defer server.Close()
+
+			config := newDataSetConfig(
+				server.URL,
+				buffer_config.NewDefaultDataSetBufferSettings(),
+				config.DataSetServerHostSettings{
+					UseHostName: false,
+					ServerHost:  configServerHost,
+				})
+			sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
+			require.Nil(t, err)
+			sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+			sc.SessionInfo = sessionInfo
+
+			err = sc.AddEvents([]*add_events.EventBundle{
+				{Event: &add_events.Event{Thread: "5", Sev: 3, Ts: "1", Attrs: tt.wasAttrs1}},
+				{Event: &add_events.Event{Thread: "5", Sev: 3, Ts: "2", Attrs: tt.wasAttrs2}},
+			})
+			assert.Nil(t, err)
+			err = sc.Shutdown()
+			assert.Nil(t, err)
+
+			assert.Equal(t, tt.expCalls, calls, tt.name)
+		})
+	}
 }
 
 func mockServerDefaultPayload(t *testing.T, statusCode int) *httptest.Server {

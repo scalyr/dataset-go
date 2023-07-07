@@ -36,11 +36,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	AttrServerHost     = "serverHost"
-	AttrOrigServerHost = "__origServerHost"
-)
-
 /*
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
@@ -65,7 +60,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	seenKeys := make(map[string]string)
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		seenKeys[key] = bundle.Event.Attrs[AttrOrigServerHost].(string)
+		seenKeys[key] = bundle.Event.Attrs[add_events.AttrOrigServerHost].(string)
 	}
 
 	// update time when the first batch was received
@@ -92,7 +87,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
 		// since it's part of the session, we can remove it
-		delete(bundle.Event.Attrs, AttrOrigServerHost)
+		delete(bundle.Event.Attrs, add_events.AttrOrigServerHost)
 		client.eventBundlePerKeyTopic.Pub(bundle, key)
 		client.eventsEnqueued.Add(1)
 	}
@@ -102,24 +97,25 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 
 func (client *DataSetClient) fixServerHostsInBundles(bundles []*add_events.EventBundle) {
 	for _, bundle := range bundles {
-		attrs := &bundle.Event.Attrs
-		_, hasOrig := (*attrs)[AttrOrigServerHost]
+		_, hasOrig := bundle.Event.Attrs[add_events.AttrOrigServerHost]
 		if hasOrig {
 			// if the orig is set, we are done
 			// we have to only remove AttrServerHost
-			delete(*attrs, AttrServerHost)
+			delete(bundle.Event.Attrs, add_events.AttrServerHost)
 			continue
 		}
 
-		host, hasHost := bundle.Event.Attrs[AttrServerHost]
+		host, hasHost := bundle.Event.Attrs[add_events.AttrServerHost]
 		if hasHost && len(host.(string)) > 0 {
 			// host is set, so lets set is orig as well
-			bundle.Event.Attrs[AttrOrigServerHost] = host
+			bundle.Event.Attrs[add_events.AttrOrigServerHost] = host
+			// and remove it, so it's not messing things up
+			delete(bundle.Event.Attrs, add_events.AttrServerHost)
 			continue
 		}
 
 		// as fallback use the value set to the client
-		bundle.Event.Attrs[AttrOrigServerHost] = client.serverHost
+		bundle.Event.Attrs[add_events.AttrOrigServerHost] = client.serverHost
 	}
 }
 

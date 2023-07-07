@@ -26,13 +26,21 @@ import (
 	"github.com/scalyr/dataset-go/pkg/api/response"
 )
 
+const (
+	AttrBundleKye      = "bundle_key"
+	AttrServerHost     = "serverHost"
+	AttrOrigServerHost = "__origServerHost"
+)
+
+type EventAttrs = map[string]interface{}
+
 // Event represents DataSet REST API event structure (see https://app.scalyr.com/help/api#addEvents)
 type Event struct {
-	Thread string                 `json:"thread,omitempty"`
-	Sev    int                    `json:"sev,omitempty"`
-	Ts     string                 `json:"ts,omitempty"`
-	Log    string                 `json:"log,omitempty"`
-	Attrs  map[string]interface{} `json:"attrs"`
+	Thread string     `json:"thread,omitempty"`
+	Sev    int        `json:"sev,omitempty"`
+	Ts     string     `json:"ts,omitempty"`
+	Log    string     `json:"log,omitempty"`
+	Attrs  EventAttrs `json:"attrs"`
 }
 
 func (event *Event) CloneWithoutAttrs() *Event {
@@ -41,7 +49,7 @@ func (event *Event) CloneWithoutAttrs() *Event {
 		Sev:    event.Sev,
 		Ts:     event.Ts,
 		Log:    event.Ts,
-		Attrs:  make(map[string]interface{}),
+		Attrs:  make(EventAttrs),
 	}
 }
 

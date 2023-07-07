@@ -224,8 +224,8 @@ func getServerHost(settings config.DataSetServerHostSettings) (string, error) {
 // the logs are into the groupBy attribute, so that they are part of the same session
 func addServerHostIntoGroupBy(cfg *config.DataSetConfig) {
 	groupBy := cfg.BufferSettings.GroupBy
-	if !slices.Contains(groupBy, AttrOrigServerHost) {
-		groupBy = append(groupBy, AttrOrigServerHost)
+	if !slices.Contains(groupBy, add_events.AttrOrigServerHost) {
+		groupBy = append(groupBy, add_events.AttrOrigServerHost)
 	}
 	cfg.BufferSettings.GroupBy = groupBy
 }
