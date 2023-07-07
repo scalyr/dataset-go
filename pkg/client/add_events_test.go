@@ -480,7 +480,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sentDelay := 5 * time.Millisecond
+	sentDelay := 50 * time.Millisecond
 	config := &config.DataSetConfig{
 		Endpoint: server.URL,
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
@@ -816,6 +816,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			err = sc.Shutdown()
 			assert.Nil(t, err)
 
+			// check that expected API calls were made with expected values
 			assert.Equal(t, tt.expCalls, calls, tt.name)
 		})
 	}
