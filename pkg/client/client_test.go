@@ -84,7 +84,7 @@ func TestClientBuffer(t *testing.T) {
 		},
 	}
 
-	sc.newBufferForEvents("aaa")
+	sc.newBufferForEvents("aaa", sc.serverHost)
 	buffer1 := sc.getBuffer("aaa")
 	added, err := buffer1.AddBundle(&add_events.EventBundle{Event: event1})
 	assert.Nil(t, err)

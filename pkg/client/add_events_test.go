@@ -301,27 +301,25 @@ func TestAddEventsLargeEvent(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			"bundle_key":       32,
-			"__origServerHost": 3,
-			"0":                990000,
-			"7":                995000,
-			"2":                999000,
-			"5":                999900,
-			"4":                1000000,
-			"3":                1000100,
-			"6":                241661,
+			"bundle_key": 32,
+			"0":          990000,
+			"7":          995000,
+			"2":          999000,
+			"5":          999900,
+			"4":          1000000,
+			"3":          1000100,
+			"6":          241670,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			"bundle_key":       "3a8d26251579170a1a04bf5ba194d138",
-			"__origServerHost": "foo",
-			"0":                strings.Repeat("0", expectedLengths["0"]),
-			"7":                strings.Repeat("7", expectedLengths["7"]),
-			"2":                strings.Repeat("2", expectedLengths["2"]),
-			"5":                strings.Repeat("5", expectedLengths["5"]),
-			"4":                strings.Repeat("4", expectedLengths["4"]),
-			"3":                strings.Repeat("3", expectedLengths["3"]),
-			"6":                strings.Repeat("6", expectedLengths["6"]),
+			"bundle_key": "3a8d26251579170a1a04bf5ba194d138",
+			"0":          strings.Repeat("0", expectedLengths["0"]),
+			"7":          strings.Repeat("7", expectedLengths["7"]),
+			"2":          strings.Repeat("2", expectedLengths["2"]),
+			"5":          strings.Repeat("5", expectedLengths["5"]),
+			"4":          strings.Repeat("4", expectedLengths["4"]),
+			"3":          strings.Repeat("3", expectedLengths["3"]),
+			"6":          strings.Repeat("6", expectedLengths["6"]),
 		}
 		assert.Equal(t, wasLengths, expectedLengths)
 		assert.Equal(t, wasAttrs, expectedAttrs, wasAttrs)
@@ -391,21 +389,19 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			"bundle_key":       32,
-			"__origServerHost": 3,
-			"0":                990000,
-			"7":                995000,
-			"2":                999000,
-			"5":                6,
+			"bundle_key": 32,
+			"0":          990000,
+			"7":          995000,
+			"2":          999000,
+			"5":          6,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			"bundle_key":       "3a8d26251579170a1a04bf5ba194d138",
-			"__origServerHost": "foo",
-			"0":                strings.Repeat("\"", expectedLengths["0"]),
-			"7":                strings.Repeat("\"", expectedLengths["7"]),
-			"2":                strings.Repeat("\"", expectedLengths["2"]),
-			"5":                strings.Repeat("\"", expectedLengths["5"]),
+			"bundle_key": "3a8d26251579170a1a04bf5ba194d138",
+			"0":          strings.Repeat("\"", expectedLengths["0"]),
+			"7":          strings.Repeat("\"", expectedLengths["7"]),
+			"2":          strings.Repeat("\"", expectedLengths["2"]),
+			"5":          strings.Repeat("\"", expectedLengths["5"]),
 		}
 		assert.Equal(t, wasLengths, expectedLengths)
 		assert.Equal(t, wasAttrs, expectedAttrs)
