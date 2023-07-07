@@ -19,6 +19,7 @@ package client
 import (
 	"fmt"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -72,6 +73,7 @@ type DataSetClient struct {
 	BufferPerSessionTopic *pubsub.PubSub
 	LastHttpStatus        atomic.Uint32
 	lastError             error
+	lastErrorTs           time.Time
 	lastErrorMu           sync.RWMutex
 	retryAfter            time.Time
 	retryAfterMu          sync.RWMutex
@@ -94,9 +96,10 @@ type DataSetClient struct {
 	// Stores sanitized complete URL to the addEvents API endpoint, e.g.
 	// https://app.scalyr.com/api/addEvents
 	addEventsEndpointUrl string
+	userAgent            string
 }
 
-func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger) (*DataSetClient, error) {
+func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger, userAgentSuffix *string) (*DataSetClient, error) {
 	logger.Info(
 		"Using config: ",
 		zap.String("config", cfg.String()),
@@ -119,6 +122,20 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		addEventsEndpointUrl += "api/addEvents"
 	} else {
 		addEventsEndpointUrl += "/api/addEvents"
+	}
+
+	userAgent := fmt.Sprintf(
+		"%s;%s;%s;%s;%s;%s;%d",
+		"dataset-go",
+		version.Version,
+		version.ReleasedDate,
+		id,
+		runtime.GOOS,
+		runtime.GOARCH,
+		runtime.NumCPU(),
+	)
+	if userAgentSuffix != nil && *userAgentSuffix != "" {
+		userAgent = userAgent + ";" + *userAgentSuffix
 	}
 
 	dataClient := &DataSetClient{
@@ -147,6 +164,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		firstReceivedAt:                 atomic.Int64{},
 		lastAcceptedAt:                  atomic.Int64{},
 		addEventsEndpointUrl:            addEventsEndpointUrl,
+		userAgent:                       userAgent,
 	}
 
 	// run buffer sweeper if requested
@@ -270,15 +288,15 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 		lastHttpStatus := uint32(0)
 		if err != nil {
 			client.Logger.Error("unable to send addEvents buffers", zap.Error(err))
-			if strings.Contains(err.Error(), "Unable to send request") {
-				lastHttpStatus = HttpErrorCannotConnect
-				client.LastHttpStatus.Store(lastHttpStatus)
-			} else {
+			client.setLastErrorTimestamp(time.Now())
+			if !strings.Contains(err.Error(), "Unable to send request") {
 				lastHttpStatus = HttpErrorHasErrorMessage
 				client.LastHttpStatus.Store(lastHttpStatus)
 				client.onBufferDrop(buf, lastHttpStatus, err)
-				break
+				break // exit loop (failed to send buffer)
 			}
+			lastHttpStatus = HttpErrorCannotConnect
+			client.LastHttpStatus.Store(lastHttpStatus)
 		}
 		zaps := make([]zap.Field, 0)
 		if response.ResponseObj != nil {
@@ -303,7 +321,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 		if isOkStatus(lastHttpStatus) {
 			// everything was fine, there is no need for retries
 			client.bytesAPIAccepted.Add(uint64(payloadLen))
-			break
+			break // exit loop (buffer sent)
 		}
 
 		backoffDelay := expBackoff.NextBackOff()
@@ -312,7 +330,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 			// throw away the batch
 			err = fmt.Errorf("max elapsed time expired %w", err)
 			client.onBufferDrop(buf, lastHttpStatus, err)
-			break
+			break // exit loop (failed to send buffer)
 		}
 
 		if isRetryableStatus(lastHttpStatus) {
@@ -334,7 +352,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 		} else {
 			err = fmt.Errorf("non recoverable error %w", err)
 			client.onBufferDrop(buf, lastHttpStatus, err)
-			break
+			break // exit loop (failed to send buffer)
 		}
 		retryNum++
 	}
@@ -495,8 +513,8 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 
 // Exporter rejects handling of incoming batches if is in error state
 func (client *DataSetClient) isInErrorState() (bool, error) {
-	// In case one of session failed (with retryable status) to send request (batch of event to DataSet), client retries sending this request.
-	if isRetryableStatus(client.LastHttpStatus.Load()) {
+	// In case one of session failed (with retryable status) to send request (batch of event to DataSet), client retries sending this request. Unless retry attempts timed out
+	if isRetryableStatus(client.LastHttpStatus.Load()) && !client.isLastRetryableErrorTimedOut() {
 		err := client.LastError()
 		if err != nil {
 			return true, fmt.Errorf("rejecting - Last HTTP request contains an error: %w", err)
@@ -592,4 +610,20 @@ func (client *DataSetClient) onBufferDrop(buf *buffer.Buffer, status uint32, err
 			zap.Error(err),
 		)...,
 	)
+}
+
+func (client *DataSetClient) setLastErrorTimestamp(timestamp time.Time) {
+	client.lastErrorMu.Lock()
+	defer client.lastErrorMu.Unlock()
+	client.lastErrorTs = timestamp
+}
+
+func (client *DataSetClient) lastErrorTimestamp() time.Time {
+	client.retryAfterMu.RLock()
+	defer client.retryAfterMu.RUnlock()
+	return client.lastErrorTs
+}
+
+func (client *DataSetClient) isLastRetryableErrorTimedOut() bool {
+	return client.lastErrorTimestamp().Add(client.Config.BufferSettings.RetryMaxElapsedTime).Before(time.Now())
 }

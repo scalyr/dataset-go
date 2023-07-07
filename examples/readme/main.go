@@ -76,8 +76,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	libraryConsumerUserAgentSuffix := "OtelCollector;1.2.3"
 	// build client
-	cl, err := client.NewClient(cfg, &http.Client{}, logger)
+	cl, err := client.NewClient(cfg, &http.Client{}, logger, &libraryConsumerUserAgentSuffix)
 	if err != nil {
 		panic(err)
 	}
