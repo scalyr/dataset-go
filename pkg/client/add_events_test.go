@@ -24,10 +24,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,6 +58,30 @@ func extract(req *http.Request) (add_events.AddEventsRequest, error) {
 	cer := &add_events.AddEventsRequest{}
 	err := json.Unmarshal(resB.Bytes(), cer)
 	return *cer, err
+}
+
+type (
+	tAttr  = add_events.EventAttrs
+	tEvent struct {
+		attrs      tAttr
+		serverHost string
+	}
+)
+
+const attributeKey = "key"
+
+type byKey [][]tAttr
+
+func (s byKey) Len() int {
+	return len(s)
+}
+
+func (s byKey) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s byKey) Less(i, j int) bool {
+	return s[i][0][attributeKey].(string) < s[j][0][attributeKey].(string)
 }
 
 func TestAddEventsRetry(t *testing.T) {
@@ -92,7 +120,7 @@ func TestAddEventsRetry(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -165,7 +193,7 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -251,7 +279,7 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -301,28 +329,30 @@ func TestAddEventsLargeEvent(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			"bundle_key": 32,
-			"0":          990000,
-			"7":          995000,
-			"2":          999000,
-			"5":          999900,
-			"4":          1000000,
-			"3":          1000100,
-			"6":          241689,
+			add_events.AttrBundleKey:      32,
+			add_events.AttrOrigServerHost: 3,
+			"0":                           990000,
+			"7":                           995000,
+			"2":                           999000,
+			"5":                           999900,
+			"4":                           1000000,
+			"3":                           1000100,
+			"6":                           241661,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			"bundle_key": "d41d8cd98f00b204e9800998ecf8427e",
-			"0":          strings.Repeat("0", expectedLengths["0"]),
-			"7":          strings.Repeat("7", expectedLengths["7"]),
-			"2":          strings.Repeat("2", expectedLengths["2"]),
-			"5":          strings.Repeat("5", expectedLengths["5"]),
-			"4":          strings.Repeat("4", expectedLengths["4"]),
-			"3":          strings.Repeat("3", expectedLengths["3"]),
-			"6":          strings.Repeat("6", expectedLengths["6"]),
+			add_events.AttrBundleKey:      "d41d8cd98f00b204e9800998ecf8427e",
+			add_events.AttrOrigServerHost: "foo",
+			"0":                           strings.Repeat("0", expectedLengths["0"]),
+			"7":                           strings.Repeat("7", expectedLengths["7"]),
+			"2":                           strings.Repeat("2", expectedLengths["2"]),
+			"5":                           strings.Repeat("5", expectedLengths["5"]),
+			"4":                           strings.Repeat("4", expectedLengths["4"]),
+			"3":                           strings.Repeat("3", expectedLengths["3"]),
+			"6":                           strings.Repeat("6", expectedLengths["6"]),
 		}
-		assert.Equal(t, wasAttrs, expectedAttrs, wasAttrs)
 		assert.Equal(t, wasLengths, expectedLengths)
+		assert.Equal(t, wasAttrs, expectedAttrs, wasAttrs)
 
 		wasSuccessful.Store(true)
 		payload, err := json.Marshal(map[string]interface{}{
@@ -340,7 +370,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), *newDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -389,22 +419,24 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			"bundle_key": 32,
-			"0":          990000,
-			"7":          995000,
-			"2":          999000,
-			"5":          6,
+			add_events.AttrBundleKey:      32,
+			add_events.AttrOrigServerHost: 3,
+			"0":                           990000,
+			"7":                           995000,
+			"2":                           999000,
+			"5":                           6,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			"bundle_key": "d41d8cd98f00b204e9800998ecf8427e",
-			"0":          strings.Repeat("\"", expectedLengths["0"]),
-			"7":          strings.Repeat("\"", expectedLengths["7"]),
-			"2":          strings.Repeat("\"", expectedLengths["2"]),
-			"5":          strings.Repeat("\"", expectedLengths["5"]),
+			add_events.AttrBundleKey:      "d41d8cd98f00b204e9800998ecf8427e",
+			add_events.AttrOrigServerHost: "foo",
+			"0":                           strings.Repeat("\"", expectedLengths["0"]),
+			"7":                           strings.Repeat("\"", expectedLengths["7"]),
+			"2":                           strings.Repeat("\"", expectedLengths["2"]),
+			"5":                           strings.Repeat("\"", expectedLengths["5"]),
 		}
-		assert.Equal(t, wasAttrs, expectedAttrs)
 		assert.Equal(t, wasLengths, expectedLengths)
+		assert.Equal(t, wasAttrs, expectedAttrs)
 
 		wasSuccessful.Store(true)
 		payload, err := json.Marshal(map[string]interface{}{
@@ -422,7 +454,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), *newDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -446,7 +478,7 @@ func TestAddEventsRejectAfterFinish(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
-	))
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 	err = sc.Shutdown()
@@ -479,7 +511,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sentDelay := 5 * time.Millisecond
+	sentDelay := 50 * time.Millisecond
 	config := &config.DataSetConfig{
 		Endpoint: server.URL,
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
@@ -492,6 +524,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
 		},
+		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
@@ -526,7 +559,7 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(5) * time.Second),
-	))
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -549,7 +582,7 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	defer server.Close()
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(3) * time.Second),
-	))
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -582,7 +615,7 @@ func TestAddEventsAreNotRejectedOncePreviousReqRetriesMaxLifetimeExpired(t *test
 		buffer_config.WithMaxLifetime(time.Second),
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
-	))
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -613,7 +646,7 @@ func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *test
 		buffer_config.WithMaxLifetime(time.Second),
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
-	))
+	), server_host_config.NewDefaultDataSetServerHostSettings())
 	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
@@ -632,6 +665,352 @@ func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *test
 	// THEN event is rejected
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "AddEvents - reject batch: rejecting - Last HTTP request contains an error: failed to handle previous request")
+}
+
+func TestAddEventsServerHostLogic(t *testing.T) {
+	configServerHost := "global-server-host"
+	ev1ServerHost := "host-1"
+	ev2ServerHost := "host-2"
+	ev3ServerHost := "host-3"
+	ev4ServerHost := "host-4"
+	ev5ServerHost := "host-5"
+	key := attributeKey
+	ev1Value := "event-1-value"
+	ev2Value := "event-2-value"
+	ev3Value := "event-3-value"
+	ev4Value := "event-4-value"
+	ev5Value := "event-5-value"
+
+	tests := []struct {
+		name     string
+		events   []tEvent
+		groupBy  []string
+		expCalls [][]tAttr
+	}{
+		// when nothing is specified, there is just once call
+		{
+			name: "no server host is specified",
+			events: []tEvent{
+				{
+					attrs: tAttr{key: ev1Value},
+				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+
+		// when serverHost is specified and is same as global one, there is just once call
+		{
+			name: "serverHost is same as global",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value},
+					serverHost: configServerHost,
+				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+
+		// when serverHost is specified and is different from global one, there are two calls
+		{
+			name: "serverHost is different from global",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value},
+					serverHost: ev1ServerHost,
+				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+
+		// when serverHost is specified and is same as attribute serverHost
+		{
+			name: "serverHost and attribute serverHost are same",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value, add_events.AttrServerHost: ev1ServerHost},
+					serverHost: ev1ServerHost,
+				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+
+		// when serverHost is specified and is same as attribute serverHost then event.serverHost wins
+		{
+			name: "serverHost and attribute serverHost differs",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value, add_events.AttrServerHost: ev1ServerHost},
+					serverHost: ev3ServerHost,
+				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev3ServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+
+		// when serverHost is specified and is same as attribute serverHost then event.serverHost wins and original value can be used for grouping
+		{
+			name: "serverHost and attribute serverHost differs and can be used for grouping",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value, add_events.AttrServerHost: ev1ServerHost},
+					serverHost: ev3ServerHost,
+				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			groupBy: []string{add_events.AttrServerHost},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev3ServerHost},
+				},
+				{
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+
+		// when serverHosts are different, but they are not used for grouping
+		{
+			name: "serverHost is different and in both events from global",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value},
+					serverHost: ev1ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev2Value},
+					serverHost: ev2ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev3Value},
+					serverHost: ev3ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev4Value},
+					serverHost: ev4ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev5Value},
+					serverHost: ev5ServerHost,
+				},
+			},
+
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: ev2ServerHost},
+					{key: ev3Value, add_events.AttrOrigServerHost: ev3ServerHost},
+					{key: ev4Value, add_events.AttrOrigServerHost: ev4ServerHost},
+					{key: ev5Value, add_events.AttrOrigServerHost: ev5ServerHost},
+				},
+			},
+		},
+
+		// when serverHosts are different, but they are not used for grouping
+		{
+			name: "serverHost is different and in both events from global",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value},
+					serverHost: ev1ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev2Value},
+					serverHost: ev2ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev3Value},
+					serverHost: ev3ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev4Value},
+					serverHost: ev4ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev5Value},
+					serverHost: ev5ServerHost,
+				},
+			},
+			groupBy: []string{key},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+				},
+				{
+					{key: ev2Value, add_events.AttrOrigServerHost: ev2ServerHost},
+				},
+				{
+					{key: ev3Value, add_events.AttrOrigServerHost: ev3ServerHost},
+				},
+				{
+					{key: ev4Value, add_events.AttrOrigServerHost: ev4ServerHost},
+				},
+				{
+					{key: ev5Value, add_events.AttrOrigServerHost: ev5ServerHost},
+				},
+			},
+		},
+
+		// serverHost from event.serverHost wins
+		{
+			name: "serverHost from event.serverHost wins",
+			events: []tEvent{
+				{
+					attrs: tAttr{
+						key:                           ev1Value,
+						add_events.AttrServerHost:     ev1ServerHost,
+						add_events.AttrOrigServerHost: ev2ServerHost,
+					},
+					serverHost: ev3ServerHost,
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev3ServerHost},
+				},
+			},
+		},
+
+		// serverHost from the config wins
+		{
+			name: "serverHost from event.serverHost wins",
+			events: []tEvent{
+				{
+					attrs: tAttr{
+						key:                           ev1Value,
+						add_events.AttrServerHost:     ev1ServerHost,
+						add_events.AttrOrigServerHost: ev2ServerHost,
+					},
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+	}
+
+	extractAttrs := func(events []*add_events.Event) []tAttr {
+		attrs := make([]map[string]interface{}, 0)
+		for _, ev := range events {
+			delete(ev.Attrs, add_events.AttrBundleKey)
+			attrs = append(attrs, ev.Attrs)
+		}
+		return attrs
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			numCalls := atomic.Int32{}
+			lock := sync.Mutex{}
+			calls := make([][]tAttr, 0)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				numCalls.Add(1)
+				cer, err := extract(req)
+
+				assert.Nil(t, err, "Error reading request: %v", err)
+				assert.Equal(t, "b", cer.SessionInfo.ServerType)
+				assert.Equal(t, "a", cer.SessionInfo.ServerId)
+
+				lock.Lock()
+				calls = append(calls, extractAttrs(cer.Events))
+				lock.Unlock()
+
+				payload, err := json.Marshal(map[string]interface{}{
+					"status":       "success",
+					"bytesCharged": 42,
+				})
+				assert.NoError(t, err)
+				l, err := w.Write(payload)
+				assert.Greater(t, l, 1)
+				assert.NoError(t, err)
+			}))
+			defer server.Close()
+
+			config := newDataSetConfig(
+				server.URL,
+				*newBufferSettings(
+					buffer_config.WithGroupBy(tt.groupBy),
+					buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
+					buffer_config.WithRetryInitialInterval(RetryBase),
+					buffer_config.WithRetryMaxInterval(RetryBase),
+				),
+				server_host_config.DataSetServerHostSettings{
+					UseHostName: false,
+					ServerHost:  configServerHost,
+				})
+			sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
+			require.Nil(t, err)
+			sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+			sc.SessionInfo = sessionInfo
+
+			bundles := make([]*add_events.EventBundle, 0)
+			for _, event := range tt.events {
+				bundles = append(
+					bundles,
+					&add_events.EventBundle{
+						Event: &add_events.Event{
+							Thread:     "5",
+							Sev:        3,
+							Ts:         "1",
+							Attrs:      event.attrs,
+							ServerHost: event.serverHost,
+						},
+					},
+				)
+			}
+
+			err = sc.AddEvents(bundles)
+			assert.Nil(t, err)
+			err = sc.Shutdown()
+			assert.Nil(t, err)
+
+			// check that expected API calls were made with expected values
+			sort.Sort(byKey(calls))
+			assert.Equal(t, tt.expCalls, calls, tt.name)
+		})
+	}
 }
 
 func mockServerDefaultPayload(t *testing.T, statusCode int) *httptest.Server {
@@ -653,11 +1032,12 @@ func mockServer(t *testing.T, statusCode int, payload []byte) *httptest.Server {
 	return server
 }
 
-func newDataSetConfig(url string, settings buffer_config.DataSetBufferSettings) *config.DataSetConfig {
+func newDataSetConfig(url string, bufferSettings buffer_config.DataSetBufferSettings, serverHostSettings server_host_config.DataSetServerHostSettings) *config.DataSetConfig {
 	return &config.DataSetConfig{
-		Endpoint:       url,
-		Tokens:         config.DataSetTokens{WriteLog: "AAAA"},
-		BufferSettings: settings,
+		Endpoint:           url,
+		Tokens:             config.DataSetTokens{WriteLog: "AAAA"},
+		BufferSettings:     bufferSettings,
+		ServerHostSettings: serverHostSettings,
 	}
 }
 
@@ -673,4 +1053,11 @@ func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) 
 	}
 	bufferSetting, _ := buffer_config.New(append(defaultOpts, customOpts...)...)
 	return bufferSetting
+}
+
+func newDataSetServerHostSettings() *server_host_config.DataSetServerHostSettings {
+	return &server_host_config.DataSetServerHostSettings{
+		UseHostName: false,
+		ServerHost:  "foo",
+	}
 }

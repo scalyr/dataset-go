@@ -41,7 +41,7 @@ Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
 
 // AddEvents enqueues given events for processing (sending to Dataset).
-// It returns an error if the batch was not accepted (eg. exporter in error state and retrying handle previous batches or client is being shutdown).
+// It returns an error if the batch was not accepted (e.g. exporter in error state and retrying handle previous batches or client is being shutdown).
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
@@ -51,7 +51,8 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		return fmt.Errorf("AddEvents - reject batch: %w", errR)
 	}
 
-	// first, figure out which keys are part of the batch
+	// then, figure out which keys are part of the batch
+	// store there information about the host
 	seenKeys := make(map[string]bool)
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
@@ -71,6 +72,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	for key := range seenKeys {
 		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
+			// add information about the host to the sessionInfo
 			client.newBufferForEvents(key)
 
 			client.newEventBundleSubscriberRoutine(key)
@@ -80,11 +82,27 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// and as last step - publish them
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		client.eventsEnqueued.Add(1)
 		client.eventBundlePerKeyTopic.Pub(bundle, key)
+		client.eventsEnqueued.Add(1)
 	}
 
 	return nil
+}
+
+// fixServerHostsInBundle fills the attribute __origServerHost for the event
+// and removes the attribute serverHost. This is needed to properly associate
+// incoming events with the correct host
+func (client *DataSetClient) fixServerHostsInBundle(bundle *add_events.EventBundle) {
+	delete(bundle.Event.Attrs, add_events.AttrServerHost)
+
+	// set the attribute __origServerHost to the event's ServerHost
+	if len(bundle.Event.ServerHost) > 0 {
+		bundle.Event.Attrs[add_events.AttrOrigServerHost] = bundle.Event.ServerHost
+		return
+	}
+
+	// as fallback use the value set to the client
+	bundle.Event.Attrs[add_events.AttrOrigServerHost] = client.serverHost
 }
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
@@ -98,6 +116,7 @@ func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 func (client *DataSetClient) newBufferForEvents(key string) {
 	session := fmt.Sprintf("%s-%s", client.Id, key)
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
+
 	client.initBuffer(buf, client.SessionInfo)
 
 	client.buffersAllMutex.Lock()
@@ -132,6 +151,8 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			bundle, ok := msg.(*add_events.EventBundle)
 			if ok {
 				buf := getBuffer(key)
+				client.fixServerHostsInBundle(bundle)
+
 				added, err := buf.AddBundle(bundle)
 				if err != nil {
 					if errors.Is(err, &buffer.NotAcceptingError{}) {
@@ -399,6 +420,7 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.Respon
 	return nil
 }
 
+// SendAllAddEventsBuffers send all buffers to the server
 // TODO make this private
 func (client *DataSetClient) SendAllAddEventsBuffers() {
 	buffers := client.getBuffers()

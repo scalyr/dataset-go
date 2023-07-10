@@ -19,6 +19,8 @@ package config
 import (
 	"fmt"
 
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
+
 	osUtil "github.com/scalyr/dataset-go/internal/pkg/os/util"
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 )
@@ -35,24 +37,26 @@ func (tokens DataSetTokens) String() string {
 	return fmt.Sprintf(
 		"WriteLog: %t, ReadLog: %t, WriteConfig: %t, ReadConfig: %t",
 		tokens.WriteLog != "",
-		tokens.WriteLog != "",
-		tokens.WriteLog != "",
-		tokens.WriteLog != "",
+		tokens.ReadLog != "",
+		tokens.WriteConfig != "",
+		tokens.ReadConfig != "",
 	)
 }
 
 // DataSetConfig wraps DataSet endpoint configuration (host, tokens, etc.)
 type DataSetConfig struct {
-	Endpoint       string
-	Tokens         DataSetTokens
-	BufferSettings buffer_config.DataSetBufferSettings
+	Endpoint           string
+	Tokens             DataSetTokens
+	BufferSettings     buffer_config.DataSetBufferSettings
+	ServerHostSettings server_host_config.DataSetServerHostSettings
 }
 
 func NewDefaultDataSetConfig() DataSetConfig {
 	return DataSetConfig{
-		Endpoint:       "https://app.scalyr.com",
-		Tokens:         DataSetTokens{},
-		BufferSettings: buffer_config.NewDefaultDataSetBufferSettings(),
+		Endpoint:           "https://app.scalyr.com",
+		Tokens:             DataSetTokens{},
+		BufferSettings:     buffer_config.NewDefaultDataSetBufferSettings(),
+		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
 }
 
@@ -79,6 +83,13 @@ func WithBufferSettings(bufferSettings buffer_config.DataSetBufferSettings) Data
 	}
 }
 
+func WithServerHostSettings(serverHostSettings server_host_config.DataSetServerHostSettings) DataSetConfigOption {
+	return func(c *DataSetConfig) error {
+		c.ServerHostSettings = serverHostSettings
+		return nil
+	}
+}
+
 func FromEnv() DataSetConfigOption {
 	return func(c *DataSetConfig) error {
 		if c.Tokens.WriteLog == "" {
@@ -97,7 +108,7 @@ func FromEnv() DataSetConfigOption {
 			c.Endpoint = osUtil.GetEnvVariableOrDefault("SCALYR_SERVER", "")
 		}
 		c.BufferSettings = buffer_config.NewDefaultDataSetBufferSettings()
-
+		c.ServerHostSettings = server_host_config.NewDefaultDataSetServerHostSettings()
 		return nil
 	}
 }
@@ -124,10 +135,11 @@ func (cfg *DataSetConfig) WithOptions(opts ...DataSetConfigOption) (*DataSetConf
 
 func (cfg *DataSetConfig) String() string {
 	return fmt.Sprintf(
-		"Endpoint: %s, Tokens: (%s), BufferSettings: (%s)",
+		"Endpoint: %s, Tokens: (%s), BufferSettings: (%s), ServerHostSettings: (%s)",
 		cfg.Endpoint,
 		cfg.Tokens.String(),
 		cfg.BufferSettings.String(),
+		cfg.ServerHostSettings.String(),
 	)
 }
 
@@ -138,6 +150,10 @@ func (cfg *DataSetConfig) Validate() error {
 	bufferErr := cfg.BufferSettings.Validate()
 	if bufferErr != nil {
 		return fmt.Errorf("buffer settings are invalid: %w", bufferErr)
+	}
+	serverHostErr := cfg.ServerHostSettings.Validate()
+	if bufferErr != nil {
+		return fmt.Errorf("server host settings are invalid: %w", serverHostErr)
 	}
 	return nil
 }

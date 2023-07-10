@@ -24,6 +24,8 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
+
 	"github.com/scalyr/dataset-go/pkg/version"
 
 	"github.com/stretchr/testify/assert"
@@ -61,9 +63,10 @@ func TestClientBuffer(t *testing.T) {
 
 	token := "token-test"
 	sc, err := NewClient(&config.DataSetConfig{
-		Endpoint:       ts.URL,
-		Tokens:         config.DataSetTokens{WriteLog: token},
-		BufferSettings: buffer_config.NewDefaultDataSetBufferSettings(),
+		Endpoint:           ts.URL,
+		Tokens:             config.DataSetTokens{WriteLog: token},
+		BufferSettings:     buffer_config.NewDefaultDataSetBufferSettings(),
+		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
