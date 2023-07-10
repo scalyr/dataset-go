@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.0.10
+
+* feat: make `serverHost` explicit field of the `Event`.
+
 ## 0.0.9 Add more retry parameters
 
 * fix: recovery from error mode - when DataSet HTTP req sending fails consuming of additional input events is blocked. Fix issue with rejected input events once retry attempts times out.
