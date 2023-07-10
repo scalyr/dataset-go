@@ -744,7 +744,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			},
 		},
 
-		// when serverHost is specified and is same as attribute serverHost then serverHost wins
+		// when serverHost is specified and is same as attribute serverHost then attribute serverHost wins
 		{
 			name: "serverHost and attribute serverHost differs",
 			events: []tEvent{
@@ -758,7 +758,30 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			},
 			expCalls: [][]tAttr{
 				{
-					{key: ev1Value, add_events.AttrOrigServerHost: ev3ServerHost},
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+
+		// when serverHost is specified and is same as attribute serverHost then attribute serverHost wins and can be used for grouping
+		{
+			name: "serverHost and attribute serverHost differs and can be used for grouping",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value, add_events.AttrServerHost: ev1ServerHost},
+					serverHost: ev3ServerHost,
+				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			groupBy: []string{add_events.AttrServerHost},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+				},
+				{
 					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
 				},
 			},
