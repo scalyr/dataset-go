@@ -766,7 +766,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			},
 		},
 
-		// when serverHost is specified and is same as attribute serverHost then attribute serverHost wins
+		// when serverHost is specified and is same as attribute serverHost then event.serverHost wins
 		{
 			name: "serverHost and attribute serverHost differs",
 			events: []tEvent{
@@ -780,13 +780,13 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			},
 			expCalls: [][]tAttr{
 				{
-					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+					{key: ev1Value, add_events.AttrOrigServerHost: ev3ServerHost},
 					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
 				},
 			},
 		},
 
-		// when serverHost is specified and is same as attribute serverHost then attribute serverHost wins and can be used for grouping
+		// when serverHost is specified and is same as attribute serverHost then event.serverHost wins and original value can be used for grouping
 		{
 			name: "serverHost and attribute serverHost differs and can be used for grouping",
 			events: []tEvent{
@@ -801,7 +801,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			groupBy: []string{add_events.AttrServerHost},
 			expCalls: [][]tAttr{
 				{
-					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+					{key: ev1Value, add_events.AttrOrigServerHost: ev3ServerHost},
 				},
 				{
 					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
@@ -887,6 +887,45 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				},
 				{
 					{key: ev5Value, add_events.AttrOrigServerHost: ev5ServerHost},
+				},
+			},
+		},
+
+		// serverHost from event.serverHost wins
+		{
+			name: "serverHost from event.serverHost wins",
+			events: []tEvent{
+				{
+					attrs: tAttr{
+						key:                           ev1Value,
+						add_events.AttrServerHost:     ev1ServerHost,
+						add_events.AttrOrigServerHost: ev2ServerHost,
+					},
+					serverHost: ev3ServerHost,
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev3ServerHost},
+				},
+			},
+		},
+
+		// serverHost from the config wins
+		{
+			name: "serverHost from event.serverHost wins",
+			events: []tEvent{
+				{
+					attrs: tAttr{
+						key:                           ev1Value,
+						add_events.AttrServerHost:     ev1ServerHost,
+						add_events.AttrOrigServerHost: ev2ServerHost,
+					},
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
 				},
 			},
 		},

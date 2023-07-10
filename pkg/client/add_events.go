@@ -89,29 +89,13 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	return nil
 }
 
-// fixServerHostsInBundles for each event fills the attribute __origServerHost
-// and removed the attribute serverHost. This is needed to properly associate
+// fixServerHostsInBundle fills the attribute __origServerHost for the event
+// and removes the attribute serverHost. This is needed to properly associate
 // incoming events with the correct host
 func (client *DataSetClient) fixServerHostsInBundle(bundle *add_events.EventBundle) {
-	// if the attribute __origServerHost is set, we are done
-	// we have to only remove attribute serverHost
-	_, hasOrig := bundle.Event.Attrs[add_events.AttrOrigServerHost]
-	if hasOrig {
-		delete(bundle.Event.Attrs, add_events.AttrServerHost)
-		return
-	}
+	delete(bundle.Event.Attrs, add_events.AttrServerHost)
 
-	// if the attribute serverHost is set, we have to move
-	// its value to the __origServerHost and then remove it
-	host, hasHost := bundle.Event.Attrs[add_events.AttrServerHost]
-	if hasHost && len(host.(string)) > 0 {
-		bundle.Event.Attrs[add_events.AttrOrigServerHost] = host
-		delete(bundle.Event.Attrs, add_events.AttrServerHost)
-		return
-	}
-
-	// now there is no attribute serverHost or __origServerHost, so we set
-	// attribute __origServerHost to the event's ServerHost
+	// set the attribute __origServerHost to the event's ServerHost
 	if len(bundle.Event.ServerHost) > 0 {
 		bundle.Event.Attrs[add_events.AttrOrigServerHost] = bundle.Event.ServerHost
 		return
