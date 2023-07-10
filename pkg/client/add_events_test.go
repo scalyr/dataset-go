@@ -642,9 +642,15 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 	configServerHost := "global-server-host"
 	ev1ServerHost := "host-1"
 	ev2ServerHost := "host-2"
+	ev3ServerHost := "host-3"
+	ev4ServerHost := "host-4"
+	ev5ServerHost := "host-5"
 	key := "key"
 	ev1Value := "event-1-value"
 	ev2Value := "event-2-value"
+	ev3Value := "event-3-value"
+	ev4Value := "event-4-value"
+	ev5Value := "event-5-value"
 
 	// define new types to make the code shorter
 	type tAttr = add_events.EventAttrs
@@ -656,7 +662,8 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 	tests := []struct {
 		name     string
 		events   []tEvent
-		expCalls []tAttr
+		groupBy  []string
+		expCalls [][]tAttr
 	}{
 		// when nothing is specified, there is just once call
 		{
@@ -669,9 +676,11 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 					attrs: tAttr{key: ev2Value},
 				},
 			},
-			expCalls: []tAttr{
-				{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
-				{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
 			},
 		},
 
@@ -687,9 +696,11 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 					attrs: tAttr{key: ev2Value},
 				},
 			},
-			expCalls: []tAttr{
-				{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
-				{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
 			},
 		},
 
@@ -705,13 +716,55 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 					attrs: tAttr{key: ev2Value},
 				},
 			},
-			expCalls: []tAttr{
-				{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
-				{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
 			},
 		},
 
-		// when serverHost are specified and are different, there are two calls
+		// when serverHost is specified and is same as attribute serverHost
+		{
+			name: "serverHost and attribute serverHost are same",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value, add_events.AttrServerHost: ev1ServerHost},
+					serverHost: ev1ServerHost,
+				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+
+		// when serverHost is specified and is same as attribute serverHost then serverHost wins
+		{
+			name: "serverHost and attribute serverHost differs",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value, add_events.AttrServerHost: ev1ServerHost},
+					serverHost: ev3ServerHost,
+				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev3ServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
+				},
+			},
+		},
+
+		// when serverHosts are different, but they are not used for grouping
 		{
 			name: "serverHost is different and in both events from global",
 			events: []tEvent{
@@ -722,11 +775,74 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					attrs:      tAttr{key: ev2Value},
 					serverHost: ev2ServerHost,
-				}},
+				},
+				{
+					attrs:      tAttr{key: ev3Value},
+					serverHost: ev3ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev4Value},
+					serverHost: ev4ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev5Value},
+					serverHost: ev5ServerHost,
+				},
+			},
 
-			expCalls: []tAttr{
-				{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
-				{key: ev2Value, add_events.AttrOrigServerHost: ev2ServerHost},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+					{key: ev2Value, add_events.AttrOrigServerHost: ev2ServerHost},
+					{key: ev3Value, add_events.AttrOrigServerHost: ev3ServerHost},
+					{key: ev4Value, add_events.AttrOrigServerHost: ev4ServerHost},
+					{key: ev5Value, add_events.AttrOrigServerHost: ev5ServerHost},
+				},
+			},
+		},
+
+		// when serverHosts are different, but they are not used for grouping
+		{
+			name: "serverHost is different and in both events from global",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value},
+					serverHost: ev1ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev2Value},
+					serverHost: ev2ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev3Value},
+					serverHost: ev3ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev4Value},
+					serverHost: ev4ServerHost,
+				},
+				{
+					attrs:      tAttr{key: ev5Value},
+					serverHost: ev5ServerHost,
+				},
+			},
+			groupBy: []string{key},
+			expCalls: [][]tAttr{
+				{
+					{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+				},
+				{
+					{key: ev2Value, add_events.AttrOrigServerHost: ev2ServerHost},
+				},
+				{
+					{key: ev3Value, add_events.AttrOrigServerHost: ev3ServerHost},
+				},
+				{
+					{key: ev4Value, add_events.AttrOrigServerHost: ev4ServerHost},
+				},
+				{
+					{key: ev5Value, add_events.AttrOrigServerHost: ev5ServerHost},
+				},
 			},
 		},
 	}
@@ -775,9 +891,15 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			}))
 			defer server.Close()
 
+			bCfgD := buffer_config.NewDefaultDataSetBufferSettings()
+			bCfg, err := (&bCfgD).WithOptions(
+				buffer_config.WithGroupBy(tt.groupBy),
+			)
+			require.NoError(t, err)
+
 			config := newDataSetConfig(
 				server.URL,
-				buffer_config.NewDefaultDataSetBufferSettings(),
+				*bCfg,
 				server_host_config.DataSetServerHostSettings{
 					UseHostName: false,
 					ServerHost:  configServerHost,
@@ -787,10 +909,23 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
 			sc.SessionInfo = sessionInfo
 
-			err = sc.AddEvents([]*add_events.EventBundle{
-				{Event: &add_events.Event{Thread: "5", Sev: 3, Ts: "1", Attrs: tt.wasAttrs1, ServerHost: "foo"}},
-				{Event: &add_events.Event{Thread: "5", Sev: 3, Ts: "2", Attrs: tt.wasAttrs2, ServerHost: "bar"}},
-			})
+			bundles := make([]*add_events.EventBundle, 0)
+			for _, event := range tt.events {
+				bundles = append(
+					bundles,
+					&add_events.EventBundle{
+						Event: &add_events.Event{
+							Thread:     "5",
+							Sev:        3,
+							Ts:         "1",
+							Attrs:      event.attrs,
+							ServerHost: event.serverHost,
+						},
+					},
+				)
+			}
+
+			err = sc.AddEvents(bundles)
 			assert.Nil(t, err)
 			err = sc.Shutdown()
 			assert.Nil(t, err)
