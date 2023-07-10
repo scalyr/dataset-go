@@ -51,16 +51,12 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		return fmt.Errorf("AddEvents - reject batch: %w", errR)
 	}
 
-	// first, we have to adjust server host attributes, since they are
-	// needed for computing the key
-	client.fixServerHostsInBundles(bundles)
-
 	// then, figure out which keys are part of the batch
 	// store there information about the host
-	seenKeys := make(map[string]string)
+	seenKeys := make(map[string]bool)
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		seenKeys[key] = bundle.Event.Attrs[add_events.AttrOrigServerHost].(string)
+		seenKeys[key] = true
 	}
 
 	// update time when the first batch was received
@@ -73,11 +69,11 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// add subscriber for buffer by key
 	client.addEventsMutex.Lock()
 	defer client.addEventsMutex.Unlock()
-	for key, host := range seenKeys {
+	for key := range seenKeys {
 		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
 			// add information about the host to the sessionInfo
-			client.newBufferForEvents(key, host)
+			client.newBufferForEvents(key)
 
 			client.newEventBundleSubscriberRoutine(key)
 		}
@@ -86,8 +82,6 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// and as last step - publish them
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		// since it's part of the session, we can remove it
-		delete(bundle.Event.Attrs, add_events.AttrOrigServerHost)
 		client.eventBundlePerKeyTopic.Pub(bundle, key)
 		client.eventsEnqueued.Add(1)
 	}
@@ -98,28 +92,33 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 // fixServerHostsInBundles for each event fills the attribute __origServerHost
 // and removed the attribute serverHost. This is needed to properly associate
 // incoming events with the correct host
-func (client *DataSetClient) fixServerHostsInBundles(bundles []*add_events.EventBundle) {
-	for _, bundle := range bundles {
-		_, hasOrig := bundle.Event.Attrs[add_events.AttrOrigServerHost]
-		if hasOrig {
-			// if the orig is set, we are done
-			// we have to only remove AttrServerHost
-			delete(bundle.Event.Attrs, add_events.AttrServerHost)
-			continue
-		}
-
-		host, hasHost := bundle.Event.Attrs[add_events.AttrServerHost]
-		if hasHost && len(host.(string)) > 0 {
-			// host is set, so lets set is orig as well
-			bundle.Event.Attrs[add_events.AttrOrigServerHost] = host
-			// and remove it, so it's not messing things up
-			delete(bundle.Event.Attrs, add_events.AttrServerHost)
-			continue
-		}
-
-		// as fallback use the value set to the client
-		bundle.Event.Attrs[add_events.AttrOrigServerHost] = client.serverHost
+func (client *DataSetClient) fixServerHostsInBundle(bundle *add_events.EventBundle) {
+	// if the attribute __origServerHost is set, we are done
+	// we have to only remove attribute serverHost
+	_, hasOrig := bundle.Event.Attrs[add_events.AttrOrigServerHost]
+	if hasOrig {
+		delete(bundle.Event.Attrs, add_events.AttrServerHost)
+		return
 	}
+
+	// if the attribute serverHost is set, we have to move
+	// its value to the __origServerHost and then remove it
+	host, hasHost := bundle.Event.Attrs[add_events.AttrServerHost]
+	if hasHost && len(host.(string)) > 0 {
+		bundle.Event.Attrs[add_events.AttrOrigServerHost] = host
+		delete(bundle.Event.Attrs, add_events.AttrServerHost)
+		return
+	}
+
+	// now there is no attribute serverHost or __origServerHost, so we set
+	// attribute __origServerHost to the event's ServerHost
+	if len(bundle.Event.ServerHost) > 0 {
+		bundle.Event.Attrs[add_events.AttrOrigServerHost] = bundle.Event.ServerHost
+		return
+	}
+
+	// as fallback use the value set to the client
+	bundle.Event.Attrs[add_events.AttrOrigServerHost] = client.serverHost
 }
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
@@ -130,11 +129,11 @@ func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	})(key, ch)
 }
 
-func (client *DataSetClient) newBufferForEvents(key string, host string) {
+func (client *DataSetClient) newBufferForEvents(key string) {
 	session := fmt.Sprintf("%s-%s", client.Id, key)
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 
-	client.initBuffer(buf, client.SessionInfo.WithHost(host))
+	client.initBuffer(buf, client.SessionInfo)
 
 	client.buffersAllMutex.Lock()
 	client.buffers[session] = buf
@@ -168,6 +167,8 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			bundle, ok := msg.(*add_events.EventBundle)
 			if ok {
 				buf := getBuffer(key)
+				client.fixServerHostsInBundle(bundle)
+
 				added, err := buf.AddBundle(bundle)
 				if err != nil {
 					if errors.Is(err, &buffer.NotAcceptingError{}) {

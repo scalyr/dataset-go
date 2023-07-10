@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -57,6 +58,30 @@ func extract(req *http.Request) (add_events.AddEventsRequest, error) {
 	cer := &add_events.AddEventsRequest{}
 	err := json.Unmarshal(resB.Bytes(), cer)
 	return *cer, err
+}
+
+type (
+	tAttr  = add_events.EventAttrs
+	tEvent struct {
+		attrs      tAttr
+		serverHost string
+	}
+)
+
+const attributeKey = "key"
+
+type byKey [][]tAttr
+
+func (s byKey) Len() int {
+	return len(s)
+}
+
+func (s byKey) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s byKey) Less(i, j int) bool {
+	return s[i][0][attributeKey].(string) < s[j][0][attributeKey].(string)
 }
 
 func TestAddEventsRetry(t *testing.T) {
@@ -304,25 +329,27 @@ func TestAddEventsLargeEvent(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			add_events.AttrBundleKye: 32,
-			"0":                      990000,
-			"7":                      995000,
-			"2":                      999000,
-			"5":                      999900,
-			"4":                      1000000,
-			"3":                      1000100,
-			"6":                      241670,
+			add_events.AttrBundleKye:      32,
+			add_events.AttrOrigServerHost: 3,
+			"0":                           990000,
+			"7":                           995000,
+			"2":                           999000,
+			"5":                           999900,
+			"4":                           1000000,
+			"3":                           1000100,
+			"6":                           241661,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			add_events.AttrBundleKye: "3a8d26251579170a1a04bf5ba194d138",
-			"0":                      strings.Repeat("0", expectedLengths["0"]),
-			"7":                      strings.Repeat("7", expectedLengths["7"]),
-			"2":                      strings.Repeat("2", expectedLengths["2"]),
-			"5":                      strings.Repeat("5", expectedLengths["5"]),
-			"4":                      strings.Repeat("4", expectedLengths["4"]),
-			"3":                      strings.Repeat("3", expectedLengths["3"]),
-			"6":                      strings.Repeat("6", expectedLengths["6"]),
+			add_events.AttrBundleKye:      "d41d8cd98f00b204e9800998ecf8427e",
+			add_events.AttrOrigServerHost: "foo",
+			"0":                           strings.Repeat("0", expectedLengths["0"]),
+			"7":                           strings.Repeat("7", expectedLengths["7"]),
+			"2":                           strings.Repeat("2", expectedLengths["2"]),
+			"5":                           strings.Repeat("5", expectedLengths["5"]),
+			"4":                           strings.Repeat("4", expectedLengths["4"]),
+			"3":                           strings.Repeat("3", expectedLengths["3"]),
+			"6":                           strings.Repeat("6", expectedLengths["6"]),
 		}
 		assert.Equal(t, wasLengths, expectedLengths)
 		assert.Equal(t, wasAttrs, expectedAttrs, wasAttrs)
@@ -392,19 +419,21 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			add_events.AttrBundleKye: 32,
-			"0":                      990000,
-			"7":                      995000,
-			"2":                      999000,
-			"5":                      6,
+			add_events.AttrBundleKye:      32,
+			add_events.AttrOrigServerHost: 3,
+			"0":                           990000,
+			"7":                           995000,
+			"2":                           999000,
+			"5":                           6,
 		}
 
 		expectedAttrs := map[string]interface{}{
-			add_events.AttrBundleKye: "3a8d26251579170a1a04bf5ba194d138",
-			"0":                      strings.Repeat("\"", expectedLengths["0"]),
-			"7":                      strings.Repeat("\"", expectedLengths["7"]),
-			"2":                      strings.Repeat("\"", expectedLengths["2"]),
-			"5":                      strings.Repeat("\"", expectedLengths["5"]),
+			add_events.AttrBundleKye:      "d41d8cd98f00b204e9800998ecf8427e",
+			add_events.AttrOrigServerHost: "foo",
+			"0":                           strings.Repeat("\"", expectedLengths["0"]),
+			"7":                           strings.Repeat("\"", expectedLengths["7"]),
+			"2":                           strings.Repeat("\"", expectedLengths["2"]),
+			"5":                           strings.Repeat("\"", expectedLengths["5"]),
 		}
 		assert.Equal(t, wasLengths, expectedLengths)
 		assert.Equal(t, wasAttrs, expectedAttrs)
@@ -645,19 +674,12 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 	ev3ServerHost := "host-3"
 	ev4ServerHost := "host-4"
 	ev5ServerHost := "host-5"
-	key := "key"
+	key := attributeKey
 	ev1Value := "event-1-value"
 	ev2Value := "event-2-value"
 	ev3Value := "event-3-value"
 	ev4Value := "event-4-value"
 	ev5Value := "event-5-value"
-
-	// define new types to make the code shorter
-	type tAttr = add_events.EventAttrs
-	type tEvent struct {
-		attrs      tAttr
-		serverHost string
-	}
 
 	tests := []struct {
 		name     string
@@ -870,7 +892,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 		},
 	}
 
-	extractAttrs := func(events []*add_events.Event) []map[string]interface{} {
+	extractAttrs := func(events []*add_events.Event) []tAttr {
 		attrs := make([]map[string]interface{}, 0)
 		for _, ev := range events {
 			delete(ev.Attrs, add_events.AttrBundleKye)
@@ -883,7 +905,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 		t.Run(tt.name, func(*testing.T) {
 			numCalls := atomic.Int32{}
 			lock := sync.Mutex{}
-			calls := make(map[string][]map[string]interface{})
+			calls := make([][]tAttr, 0)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				numCalls.Add(1)
 				cer, err := extract(req)
@@ -892,15 +914,8 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				assert.Equal(t, "b", cer.SessionInfo.ServerType)
 				assert.Equal(t, "a", cer.SessionInfo.ServerId)
 
-				serverHost := cer.SessionInfo.ServerHost
 				lock.Lock()
-				val, ok := calls[serverHost]
-				if ok {
-					val = append(val, extractAttrs(cer.Events)...)
-				} else {
-					val = extractAttrs(cer.Events)
-				}
-				calls[serverHost] = val
+				calls = append(calls, extractAttrs(cer.Events))
 				lock.Unlock()
 
 				payload, err := json.Marshal(map[string]interface{}{
@@ -954,6 +969,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			assert.Nil(t, err)
 
 			// check that expected API calls were made with expected values
+			sort.Sort(byKey(calls))
 			assert.Equal(t, tt.expCalls, calls, tt.name)
 		})
 	}
