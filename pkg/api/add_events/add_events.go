@@ -36,11 +36,12 @@ type EventAttrs = map[string]interface{}
 
 // Event represents DataSet REST API event structure (see https://app.scalyr.com/help/api#addEvents)
 type Event struct {
-	Thread string     `json:"thread,omitempty"`
-	Sev    int        `json:"sev,omitempty"`
-	Ts     string     `json:"ts,omitempty"`
-	Log    string     `json:"log,omitempty"`
-	Attrs  EventAttrs `json:"attrs"`
+	Thread     string     `json:"thread,omitempty"`
+	Sev        int        `json:"sev,omitempty"`
+	Ts         string     `json:"ts,omitempty"`
+	Log        string     `json:"log,omitempty"`
+	Attrs      EventAttrs `json:"attrs"`
+	ServerHost string     `json:"-"`
 }
 
 func (event *Event) CloneWithoutAttrs() *Event {

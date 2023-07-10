@@ -647,109 +647,86 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 	ev2Value := "event-2-value"
 
 	// define new types to make the code shorter
-	type tAttrs = []add_events.EventAttrs
-	type tCalls = map[string]tAttrs
+	type tAttr = add_events.EventAttrs
+	type tEvent struct {
+		attrs      tAttr
+		serverHost string
+	}
 
 	tests := []struct {
-		name      string
-		wasAttrs1 map[string]interface{}
-		wasAttrs2 map[string]interface{}
-		expCalls  tCalls
+		name     string
+		events   []tEvent
+		expCalls []tAttr
 	}{
 		// when nothing is specified, there is just once call
 		{
-			name:      "no server host is specified",
-			wasAttrs1: map[string]interface{}{key: ev1Value},
-			wasAttrs2: map[string]interface{}{key: ev2Value},
-			expCalls: tCalls{
-				configServerHost: tAttrs{
-					{key: ev1Value},
-					{key: ev2Value},
+			name: "no server host is specified",
+			events: []tEvent{
+				{
+					attrs: tAttr{key: ev1Value},
 				},
+				{
+					attrs: tAttr{key: ev2Value},
+				},
+			},
+			expCalls: []tAttr{
+				{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
+				{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
 			},
 		},
 
 		// when serverHost is specified and is same as global one, there is just once call
 		{
-			name:      "serverHost is same as global",
-			wasAttrs1: map[string]interface{}{add_events.AttrServerHost: configServerHost, key: ev1Value},
-			wasAttrs2: map[string]interface{}{key: ev2Value},
-			expCalls: tCalls{
-				configServerHost: tAttrs{
-					{key: ev1Value},
-					{key: ev2Value},
+			name: "serverHost is same as global",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value},
+					serverHost: configServerHost,
+				},
+				{
+					attrs: tAttr{key: ev2Value},
 				},
 			},
-		},
-		// when __origServerHost is specified and is same as global one, there is just once call
-		{
-			name:      "__origServerHost is same as global",
-			wasAttrs1: map[string]interface{}{add_events.AttrOrigServerHost: configServerHost, key: ev1Value},
-			wasAttrs2: map[string]interface{}{key: ev2Value},
-			expCalls: tCalls{
-				configServerHost: tAttrs{
-					{key: ev1Value},
-					{key: ev2Value},
-				},
+			expCalls: []tAttr{
+				{key: ev1Value, add_events.AttrOrigServerHost: configServerHost},
+				{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
 			},
 		},
 
 		// when serverHost is specified and is different from global one, there are two calls
 		{
-			name:      "serverHost is different from global",
-			wasAttrs1: map[string]interface{}{add_events.AttrServerHost: ev1ServerHost, key: ev1Value},
-			wasAttrs2: map[string]interface{}{key: ev2Value},
-			expCalls: tCalls{
-				ev1ServerHost: tAttrs{
-					{key: ev1Value},
+			name: "serverHost is different from global",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value},
+					serverHost: ev1ServerHost,
 				},
-				configServerHost: tAttrs{
-					{key: ev2Value},
+				{
+					attrs: tAttr{key: ev2Value},
 				},
 			},
-		},
-		// when __origServerHost is specified and is different from global one, there are two calls
-		{
-			name:      "__origServerHost is different from global",
-			wasAttrs1: map[string]interface{}{add_events.AttrOrigServerHost: ev1ServerHost, key: ev1Value},
-			wasAttrs2: map[string]interface{}{key: ev2Value},
-			expCalls: tCalls{
-				ev1ServerHost: tAttrs{
-					{key: ev1Value},
-				},
-				configServerHost: tAttrs{
-					{key: ev2Value},
-				},
+			expCalls: []tAttr{
+				{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+				{key: ev2Value, add_events.AttrOrigServerHost: configServerHost},
 			},
 		},
 
 		// when serverHost are specified and are different, there are two calls
 		{
-			name:      "serverHost is different and in both events from global",
-			wasAttrs1: map[string]interface{}{add_events.AttrServerHost: ev1ServerHost, key: ev1Value},
-			wasAttrs2: map[string]interface{}{add_events.AttrServerHost: ev2ServerHost, key: ev2Value},
-			expCalls: tCalls{
-				ev1ServerHost: tAttrs{
-					{key: ev1Value},
+			name: "serverHost is different and in both events from global",
+			events: []tEvent{
+				{
+					attrs:      tAttr{key: ev1Value},
+					serverHost: ev1ServerHost,
 				},
-				ev2ServerHost: tAttrs{
-					{key: ev2Value},
-				},
-			},
-		},
+				{
+					attrs:      tAttr{key: ev2Value},
+					serverHost: ev2ServerHost,
+				}},
 
-		// when serverHost are specified and are different, there are two calls
-		{
-			name:      "serverHost and __origServerHost are used",
-			wasAttrs1: map[string]interface{}{add_events.AttrOrigServerHost: ev1ServerHost, key: ev1Value},
-			wasAttrs2: map[string]interface{}{add_events.AttrServerHost: ev2ServerHost, key: ev2Value},
-			expCalls: tCalls{
-				ev1ServerHost: tAttrs{
-					{key: ev1Value},
-				},
-				ev2ServerHost: tAttrs{
-					{key: ev2Value},
-				},
+			expCalls: []tAttr{
+				{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+				{key: ev2Value, add_events.AttrOrigServerHost: ev2ServerHost},
 			},
 		},
 	}
@@ -811,8 +788,8 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			sc.SessionInfo = sessionInfo
 
 			err = sc.AddEvents([]*add_events.EventBundle{
-				{Event: &add_events.Event{Thread: "5", Sev: 3, Ts: "1", Attrs: tt.wasAttrs1}},
-				{Event: &add_events.Event{Thread: "5", Sev: 3, Ts: "2", Attrs: tt.wasAttrs2}},
+				{Event: &add_events.Event{Thread: "5", Sev: 3, Ts: "1", Attrs: tt.wasAttrs1, ServerHost: "foo"}},
+				{Event: &add_events.Event{Thread: "5", Sev: 3, Ts: "2", Attrs: tt.wasAttrs2, ServerHost: "bar"}},
 			})
 			assert.Nil(t, err)
 			err = sc.Shutdown()
