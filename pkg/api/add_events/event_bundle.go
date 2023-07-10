@@ -48,7 +48,7 @@ func (bundle *EventBundle) Key(groupBy []string) string {
 	bundleKey := hex.EncodeToString(hash[:])
 
 	// add the key as attribute
-	bundle.Event.Attrs[AttrBundleKye] = bundleKey
+	bundle.Event.Attrs[AttrBundleKey] = bundleKey
 
 	// return the key
 	return bundleKey

@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	AttrBundleKye      = "bundle_key"
+	AttrBundleKey      = "bundle_key"
 	AttrServerHost     = "serverHost"
 	AttrOrigServerHost = "__origServerHost"
 )
@@ -72,16 +72,6 @@ type SessionInfo struct {
 	ServerType string `json:"serverType,omitempty"`
 	ServerId   string `json:"serverId,omitempty"`
 	Region     string `json:"region,omitempty"`
-	ServerHost string `json:"serverHost,omitempty"`
-}
-
-func (info *SessionInfo) WithHost(host string) *SessionInfo {
-	return &SessionInfo{
-		ServerType: info.ServerType,
-		ServerId:   info.ServerId,
-		Region:     info.Region,
-		ServerHost: host,
-	}
 }
 
 // AddEventsRequestParams represents a represents a AddEvent DataSet REST API request parameters, see https://app.scalyr.com/help/api#addEvents.

@@ -329,7 +329,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			add_events.AttrBundleKye:      32,
+			add_events.AttrBundleKey:      32,
 			add_events.AttrOrigServerHost: 3,
 			"0":                           990000,
 			"7":                           995000,
@@ -341,7 +341,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 		}
 
 		expectedAttrs := map[string]interface{}{
-			add_events.AttrBundleKye:      "d41d8cd98f00b204e9800998ecf8427e",
+			add_events.AttrBundleKey:      "d41d8cd98f00b204e9800998ecf8427e",
 			add_events.AttrOrigServerHost: "foo",
 			"0":                           strings.Repeat("0", expectedLengths["0"]),
 			"7":                           strings.Repeat("7", expectedLengths["7"]),
@@ -419,7 +419,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 			}
 		}
 		expectedLengths := map[string]int{
-			add_events.AttrBundleKye:      32,
+			add_events.AttrBundleKey:      32,
 			add_events.AttrOrigServerHost: 3,
 			"0":                           990000,
 			"7":                           995000,
@@ -428,7 +428,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 		}
 
 		expectedAttrs := map[string]interface{}{
-			add_events.AttrBundleKye:      "d41d8cd98f00b204e9800998ecf8427e",
+			add_events.AttrBundleKey:      "d41d8cd98f00b204e9800998ecf8427e",
 			add_events.AttrOrigServerHost: "foo",
 			"0":                           strings.Repeat("\"", expectedLengths["0"]),
 			"7":                           strings.Repeat("\"", expectedLengths["7"]),
@@ -934,7 +934,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 	extractAttrs := func(events []*add_events.Event) []tAttr {
 		attrs := make([]map[string]interface{}, 0)
 		for _, ev := range events {
-			delete(ev.Attrs, add_events.AttrBundleKye)
+			delete(ev.Attrs, add_events.AttrBundleKey)
 			attrs = append(attrs, ev.Attrs)
 		}
 		return attrs
@@ -968,15 +968,14 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 			}))
 			defer server.Close()
 
-			bCfgD := buffer_config.NewDefaultDataSetBufferSettings()
-			bCfg, err := (&bCfgD).WithOptions(
-				buffer_config.WithGroupBy(tt.groupBy),
-			)
-			require.NoError(t, err)
-
 			config := newDataSetConfig(
 				server.URL,
-				*bCfg,
+				*newBufferSettings(
+					buffer_config.WithGroupBy(tt.groupBy),
+					buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
+					buffer_config.WithRetryInitialInterval(RetryBase),
+					buffer_config.WithRetryMaxInterval(RetryBase),
+				),
 				server_host_config.DataSetServerHostSettings{
 					UseHostName: false,
 					ServerHost:  configServerHost,
