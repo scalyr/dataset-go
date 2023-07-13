@@ -214,6 +214,7 @@ func (client *DataSetClient) isProcessingEvents() bool {
 // Shutdown stops processing of new events and waits until all the events that are
 // being processed are really processed (sent to DataSet).
 func (client *DataSetClient) Shutdown() error {
+	client.Logger.Info("Shutting down - BEGIN")
 	// mark as finished to prevent processing of further events
 	client.finished.Store(true)
 
@@ -250,14 +251,21 @@ func (client *DataSetClient) Shutdown() error {
 		lastProcessed = client.eventsProcessed.Load()
 		backoffDelay := expBackoff.NextBackOff()
 		client.Logger.Info(
-			"Not all events has been processed",
+			"Shutting down - processing events",
 			zap.Int("retryNum", retryNum),
 			zap.Duration("backoffDelay", backoffDelay),
 			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
 			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
 		)
 		if backoffDelay == expBackoff.Stop {
-			lastError = fmt.Errorf("not all events has been processed")
+			lastError = fmt.Errorf("not all events have been processed")
+			client.Logger.Error(
+				"Shutting down - not all events have been processed",
+				zap.Int("retryNum", retryNum),
+				zap.Duration("backoffDelay", backoffDelay),
+				zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
+				zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
+			)
 			break
 		}
 		time.Sleep(backoffDelay)
@@ -265,7 +273,8 @@ func (client *DataSetClient) Shutdown() error {
 	}
 
 	// send all buffers
-	client.SendAllAddEventsBuffers()
+	client.Logger.Info("Shutting down - publishing all buffers")
+	client.publishAllBuffers()
 
 	// do wait for all buffers to be processed
 	retryNum = 0
@@ -285,7 +294,7 @@ func (client *DataSetClient) Shutdown() error {
 		lastDropped = client.buffersDropped.Load()
 		backoffDelay := expBackoff.NextBackOff()
 		client.Logger.Info(
-			"Not all buffers has been processed",
+			"Shutting down - processing buffers",
 			zap.Int("retryNum", retryNum),
 			zap.Duration("backoffDelay", backoffDelay),
 			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
@@ -293,7 +302,14 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
 		)
 		if backoffDelay == expBackoff.Stop {
-			lastError = fmt.Errorf("not all buffers has been processed")
+			lastError = fmt.Errorf("not all buffers have been processed")
+			client.Logger.Error(
+				"Shutting down - not all buffers have been processed",
+				zap.Int("retryNum", retryNum),
+				zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
+				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
+				zap.Uint64("buffersDropped", client.buffersDropped.Load()),
+			)
 			break
 		}
 		time.Sleep(backoffDelay)
@@ -306,15 +322,19 @@ func (client *DataSetClient) Shutdown() error {
 			"some buffers were dropped during finishing - %d",
 			buffersDropped,
 		)
+		client.Logger.Error(
+			"Shutting down - buffers were dropped during shutdown",
+			zap.Uint64("buffersDropped", buffersDropped),
+		)
 	}
 
 	// print final statistics
 	client.logStatistics()
 
 	if lastError == nil {
-		client.Logger.Info("Finishing with success")
+		client.Logger.Info("Shutting down - success")
 	} else {
-		client.Logger.Error("Finishing with error", zap.Error(lastError))
+		client.Logger.Error("Shutting down - error", zap.Error(lastError))
 		if client.LastError() == nil {
 			return lastError
 		}
@@ -420,11 +440,13 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.Respon
 	return nil
 }
 
-// SendAllAddEventsBuffers send all buffers to the server
-// TODO make this private
-func (client *DataSetClient) SendAllAddEventsBuffers() {
+// publishAllBuffers send all buffers to the server
+func (client *DataSetClient) publishAllBuffers() {
 	buffers := client.getBuffers()
-	client.Logger.Debug("Send all AddEvents buffers")
+	client.Logger.Info(
+		"Publish all buffers",
+		zap.Int("numBuffers", len(buffers)),
+	)
 	for _, buf := range buffers {
 		client.publishBuffer(buf)
 	}

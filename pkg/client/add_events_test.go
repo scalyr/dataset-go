@@ -203,7 +203,8 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err1 := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	time.Sleep(RetryBase)
-	sc.SendAllAddEventsBuffers()
+	// we are not calling shutdown, because we want to process more events in the future
+	sc.publishAllBuffers()
 
 	// wait for processing
 	for i := 0; i < 10; i++ {
