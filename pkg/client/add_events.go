@@ -258,7 +258,10 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
 		)
 		if backoffDelay == expBackoff.Stop {
-			lastError = fmt.Errorf("not all events have been processed")
+			lastError = fmt.Errorf(
+				"not all events have been processed - %d",
+				client.eventsEnqueued.Load()-client.eventsProcessed.Load(),
+			)
 			client.Logger.Error(
 				"Shutting down - not all events have been processed",
 				zap.Int("retryNum", retryNum),
@@ -302,7 +305,10 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
 		)
 		if backoffDelay == expBackoff.Stop {
-			lastError = fmt.Errorf("not all buffers have been processed")
+			lastError = fmt.Errorf(
+				"not all buffers have been processed - %d",
+				client.buffersEnqueued.Load()-client.buffersProcessed.Load()-client.buffersDropped.Load(),
+			)
 			client.Logger.Error(
 				"Shutting down - not all buffers have been processed",
 				zap.Int("retryNum", retryNum),
