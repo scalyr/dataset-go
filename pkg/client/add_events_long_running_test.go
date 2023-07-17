@@ -42,7 +42,7 @@ import (
 )
 
 func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
-	const MaxDelayMs = 200
+	const MaxDelay = 200 * time.Millisecond
 
 	const MaxBatchCount = 20
 	const LogsPerBatch = 10000
@@ -76,7 +76,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		}
 
 		lastCall.Store(time.Now().UnixNano())
-		time.Sleep(time.Duration(MaxDelayMs*0.7) * time.Millisecond)
+		time.Sleep(time.Duration(float64(MaxDelay) * 0.7))
 		payload, err := json.Marshal(map[string]interface{}{
 			"status":       "success",
 			"bytesCharged": 42,
@@ -92,7 +92,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
 			MaxSize:                  1000,
-			MaxLifetime:              time.Duration(MaxDelayMs) * time.Millisecond,
+			MaxLifetime:              MaxDelay,
 			RetryRandomizationFactor: 1.0,
 			RetryMultiplier:          1.0,
 			RetryInitialInterval:     RetryBase,
@@ -143,7 +143,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			err := sc.AddEvents(batch)
 			assert.Nil(t, err)
 		})(batch)
-		time.Sleep(time.Duration(MaxDelayMs*0.3) * time.Millisecond)
+		time.Sleep(time.Duration(float64(MaxDelay) * 0.3))
 	}
 
 	err = sc.Shutdown()

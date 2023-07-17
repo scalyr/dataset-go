@@ -70,9 +70,6 @@ func main() {
 		panic(err)
 	}
 
-	// send all buffers when we want to finish
-	defer cl.SendAllAddEventsBuffers() // TODO use cl.Shutdown() instead
-
 	// build some bundles
 	bundles := make([]*add_events.EventBundle, 0)
 	for i := 0; i < BundleCount; i++ {
@@ -119,5 +116,10 @@ func main() {
 			fmt.Printf("There was problem in batch starting at %d: %v", j, err)
 		}
 		time.Sleep(BatchDelay)
+	}
+
+	shutdownError := cl.Shutdown()
+	if shutdownError != nil {
+		panic(shutdownError)
 	}
 }
