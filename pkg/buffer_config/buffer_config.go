@@ -43,6 +43,7 @@ type DataSetBufferSettings struct {
 	RetryInitialInterval     time.Duration
 	RetryMaxInterval         time.Duration
 	RetryMaxElapsedTime      time.Duration
+	RetryShutdownTimeout     time.Duration // defines timeout period (for which client will retry on failures) for processing events and sending buffers after shutdown of a client
 }
 
 func NewDefaultDataSetBufferSettings() DataSetBufferSettings {
@@ -55,6 +56,7 @@ func NewDefaultDataSetBufferSettings() DataSetBufferSettings {
 		RetryMaxElapsedTime:      300 * time.Second,
 		RetryRandomizationFactor: backoff.DefaultRandomizationFactor,
 		RetryMultiplier:          backoff.DefaultMultiplier,
+		RetryShutdownTimeout:     30 * time.Second,
 	}
 }
 
@@ -112,6 +114,13 @@ func WithRetryMaxInterval(retryMaxInterval time.Duration) DataSetBufferSettingsO
 func WithRetryMaxElapsedTime(retryMaxElapsedTime time.Duration) DataSetBufferSettingsOption {
 	return func(c *DataSetBufferSettings) error {
 		c.RetryMaxElapsedTime = retryMaxElapsedTime
+		return nil
+	}
+}
+
+func WithRetryShutdownTimeout(retryShutdownTimeout time.Duration) DataSetBufferSettingsOption {
+	return func(c *DataSetBufferSettings) error {
+		c.RetryShutdownTimeout = retryShutdownTimeout
 		return nil
 	}
 }
