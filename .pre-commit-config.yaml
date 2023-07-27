@@ -22,33 +22,15 @@ repos:
             test/testdata/buffer_test_payload_full.json
           )
       - id: trailing-whitespace
-  - repo: https://github.com/dnephin/pre-commit-golang
-    rev: v0.5.1
-    hooks:
-      - id: go-fmt
-      - id: go-imports
-      - id: go-cyclo
-      - id: validate-toml
-      - id: no-go-testing
-      - id: golangci-lint
-      # - id: go-critic
-      #  # args: [-disable=sloppyTypeAssert]
-      #  args: ["-v", "-enable='yodaStyleExpr'", "-disable=sloppyTypeAssert"]
-      # there is timeout of 30s for go-unit-test and we need more
-      # - id: go-unit-tests
-      - id: go-build
-      - id: go-mod-tidy
-      - id: go-mod-vendor
 
   - repo: https://github.com/Bahjat/pre-commit-golang
     rev: v1.0.3
     hooks:
       - id: go-fmt-import
       - id: go-lint
-      # - id: go-unit-tests
       - id: gofumpt
       - id: go-err-check
-      # - id: go-static-check
-      # - id: golangci-lint
+      - id: golangci-lint
+      - id: go-static-check
       # - id: go-ruleguard # requires https://github.com/quasilyte/go-ruleguard
       #    args: [rules/rules.go] # required

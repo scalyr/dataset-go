@@ -8,4 +8,4 @@ go install -v github.com/BurntSushi/toml/cmd/tomlv@latest
 go install -v mvdan.cc/gofumpt@latest
 go install -v github.com/kisielk/errcheck@latest
 # go install -v github.com/quasilyte/go-ruleguard/cmd/ruleguard@latest
-# go install -v honnef.co/go/tools/cmd/staticcheck@latest
+go install -v honnef.co/go/tools/cmd/staticcheck@latest
