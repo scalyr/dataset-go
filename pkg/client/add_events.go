@@ -211,8 +211,10 @@ func (client *DataSetClient) isProcessingEvents() bool {
 	return client.eventsEnqueued.Load() > client.eventsProcessed.Load()
 }
 
-// Shutdown stops processing of new events and waits until all the events that are
-// being processed are really processed (sent to DataSet).
+// Shutdown takes care of shutdown of client. It does following steps
+// - stops processing of new events,
+// - tries (with 1st half of shutdownMaxTimeout period) to process (add into buffers) all the events,
+// - tries (with 2nd half of shutdownMaxTimeout period) to send processed events (buffers) into DataSet
 func (client *DataSetClient) Shutdown() error {
 	client.Logger.Info("Shutting down - BEGIN")
 	// mark as finished to prevent processing of further events
@@ -222,33 +224,25 @@ func (client *DataSetClient) Shutdown() error {
 	client.logStatistics()
 
 	var lastError error = nil
+	shutdownTimeout := minDuration(client.Config.BufferSettings.RetryMaxElapsedTime, client.Config.BufferSettings.RetryShutdownTimeout)
 	expBackoff := backoff.ExponentialBackOff{
 		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
 		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
 		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
 		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
-		MaxElapsedTime:      client.Config.BufferSettings.RetryMaxElapsedTime,
+		MaxElapsedTime:      shutdownTimeout / 2,
 		Stop:                backoff.Stop,
 		Clock:               backoff.SystemClock,
 	}
 	expBackoff.Reset()
 
-	// first we wait until all the events in buffers are added into buffers
-	// then we are waiting until all the buffers are processed
-	// if some progress is made we restart the waiting times
-
-	// do wait for all events to be processed
+	// try (with timeout) to process (add into buffers) events,
 	retryNum := 0
-	lastProcessed := client.eventsProcessed.Load()
+	processingStart := time.Now()
 	for client.isProcessingEvents() {
 		// log statistics
 		client.logStatistics()
 
-		// if some events were processed restart retry interval
-		if client.eventsProcessed.Load() != lastProcessed {
-			expBackoff.Reset()
-		}
-		lastProcessed = client.eventsProcessed.Load()
 		backoffDelay := expBackoff.NextBackOff()
 		client.Logger.Info(
 			"Shutting down - processing events",
@@ -279,22 +273,26 @@ func (client *DataSetClient) Shutdown() error {
 	client.Logger.Info("Shutting down - publishing all buffers")
 	client.publishAllBuffers()
 
-	// do wait for all buffers to be processed
+	// reinitialize expBackoff with MaxElapsedTime based on actually elapsed time of processing (previous phase)
+	processingElapsed := time.Since(processingStart)
+	remainingShutdownTimeout := maxDuration(shutdownTimeout-processingElapsed, shutdownTimeout/2)
+	expBackoff = backoff.ExponentialBackOff{
+		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
+		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
+		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
+		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
+		MaxElapsedTime:      remainingShutdownTimeout,
+		Stop:                backoff.Stop,
+		Clock:               backoff.SystemClock,
+	}
+	// do wait (with timeout) for all buffers to be sent to the server
 	retryNum = 0
 	expBackoff.Reset()
-	lastProcessed = client.buffersProcessed.Load()
-	lastDropped := client.buffersDropped.Load()
-	initialDropped := lastDropped
+	initialDropped := client.buffersDropped.Load()
 	for client.isProcessingBuffers() {
 		// log statistics
 		client.logStatistics()
 
-		// if some buffers were processed restart retry interval
-		if client.buffersProcessed.Load()+lastDropped != lastProcessed+client.buffersDropped.Load() {
-			expBackoff.Reset()
-		}
-		lastProcessed = client.buffersProcessed.Load()
-		lastDropped = client.buffersDropped.Load()
 		backoffDelay := expBackoff.NextBackOff()
 		client.Logger.Info(
 			"Shutting down - processing buffers",
@@ -475,4 +473,18 @@ func truncateText(text string, length int) string {
 	}
 
 	return text
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a <= b {
+		return a
+	}
+	return b
+}
+
+func maxDuration(a, b time.Duration) time.Duration {
+	if a >= b {
+		return a
+	}
+	return b
 }

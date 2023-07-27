@@ -665,3 +665,7 @@ func (client *DataSetClient) lastErrorTimestamp() time.Time {
 func (client *DataSetClient) isLastRetryableErrorTimedOut() bool {
 	return client.lastErrorTimestamp().Add(client.Config.BufferSettings.RetryMaxElapsedTime).Before(time.Now())
 }
+
+func (client *DataSetClient) ServerHost() string {
+	return client.serverHost
+}

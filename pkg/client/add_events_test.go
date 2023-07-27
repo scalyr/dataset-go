@@ -582,7 +582,8 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	server := mockServer(t, 503, []byte("<html>not valid json</html>"))
 	defer server.Close()
 	config := newDataSetConfig(server.URL, *newBufferSettings(
-		buffer_config.WithRetryMaxElapsedTime(time.Duration(3) * time.Second),
+		buffer_config.WithRetryMaxElapsedTime(time.Duration(30)*time.Second),
+		buffer_config.WithRetryShutdownTimeout(time.Duration(6)*time.Second),
 	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
@@ -599,6 +600,39 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 
 	assert.NotNil(t, lastError)
 	assert.Equal(t, fmt.Errorf("unable to parse response body: invalid character '<' looking for beginning of value, url: %s, response: <html>not valid json</html>", sc.addEventsEndpointUrl).Error(), lastError.Error())
+
+	assert.NotNil(t, err)
+	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
+	assert.GreaterOrEqual(t, attempt.Load(), int32(0))
+}
+
+func TestShutdownFinishesWithinExpectedTimeout(t *testing.T) {
+	// GIVEN
+	attempt.Store(0)
+	server := mockServer(t, http.StatusTooManyRequests, []byte("{}"))
+	defer server.Close()
+	retryShutdownTimeout := 6
+	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(time.Duration(30)*time.Second),
+		buffer_config.WithRetryShutdownTimeout(time.Duration(retryShutdownTimeout)*time.Second),
+	), server_host_config.NewDefaultDataSetServerHostSettings())
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
+	require.Nil(t, err)
+
+	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+	sc.SessionInfo = sessionInfo
+	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	assert.Nil(t, err)
+	// WHEN
+	shutdownStart := time.Now()
+	err = sc.Shutdown()
+	shutdownFinish := time.Since(shutdownStart)
+	// THEN
+	assert.LessOrEqual(t, shutdownFinish, time.Duration(retryShutdownTimeout+1)*time.Second)
+	lastError := sc.LastError()
+	assert.Nil(t, lastError)
 
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
