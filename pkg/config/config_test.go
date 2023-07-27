@@ -161,7 +161,7 @@ func TestNewConfigBasedOnExistingWithNewConfigOptions(t *testing.T) {
 
 func TestNewDefaultDataSetConfigToString(t *testing.T) {
 	cfg := NewDefaultDataSetConfig()
-	assert.Equal(t, cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s), ServerHostSettings: (UseHostName: true, ServerHost: )")
+	assert.Equal(t, cfg.String(), "Endpoint: https://app.scalyr.com, Tokens: (WriteLog: false, ReadLog: false, WriteConfig: false, ReadConfig: false), BufferSettings: (MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s, RetryShutdownTimeout: 30s), ServerHostSettings: (UseHostName: true, ServerHost: )")
 }
 
 func TestNewDefaultDataSetConfigIsValid(t *testing.T) {

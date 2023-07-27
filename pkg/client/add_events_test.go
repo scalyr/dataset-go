@@ -43,7 +43,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const RetryBase = time.Second
+const (
+	RetryBase       = time.Second
+	ShutdownTimeout = 2 * RetryBase
+)
 
 var attempt = atomic.Int32{}
 
@@ -1085,6 +1088,7 @@ func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) 
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(1) * time.Second),
 		buffer_config.WithRetryMultiplier(1.0),
 		buffer_config.WithRetryRandomizationFactor(1.0),
+		buffer_config.WithRetryShutdownTimeout(2 * time.Second),
 	}
 	bufferSetting, _ := buffer_config.New(append(defaultOpts, customOpts...)...)
 	return bufferSetting

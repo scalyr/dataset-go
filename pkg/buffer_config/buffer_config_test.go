@@ -30,6 +30,7 @@ func TestConfigWithOptions(t *testing.T) {
 		WithRetryInitialInterval(8*time.Second),
 		WithRetryMaxInterval(30*time.Second),
 		WithRetryMaxElapsedTime(10*time.Minute),
+		WithRetryShutdownTimeout(2*time.Minute),
 	)
 
 	assert.Nil(t, errB)
@@ -41,6 +42,7 @@ func TestConfigWithOptions(t *testing.T) {
 		RetryInitialInterval: 8 * time.Second,
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
+		RetryShutdownTimeout: 2 * time.Minute,
 	}, *bufCfg)
 }
 
@@ -52,6 +54,7 @@ func TestDataConfigUpdate(t *testing.T) {
 		WithRetryInitialInterval(8*time.Second),
 		WithRetryMaxInterval(30*time.Second),
 		WithRetryMaxElapsedTime(10*time.Minute),
+		WithRetryShutdownTimeout(2*time.Minute),
 	)
 	assert.Nil(t, errB)
 
@@ -62,6 +65,7 @@ func TestDataConfigUpdate(t *testing.T) {
 		RetryInitialInterval: 8 * time.Second,
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
+		RetryShutdownTimeout: 2 * time.Minute,
 	}, *bufCfg)
 
 	bufCfg2, err := bufCfg.WithOptions(
@@ -71,6 +75,7 @@ func TestDataConfigUpdate(t *testing.T) {
 		WithRetryInitialInterval(28*time.Second),
 		WithRetryMaxInterval(230*time.Second),
 		WithRetryMaxElapsedTime(210*time.Minute),
+		WithRetryShutdownTimeout(5*time.Minute),
 	)
 	assert.Nil(t, err)
 
@@ -82,6 +87,7 @@ func TestDataConfigUpdate(t *testing.T) {
 		RetryInitialInterval: 8 * time.Second,
 		RetryMaxInterval:     30 * time.Second,
 		RetryMaxElapsedTime:  10 * time.Minute,
+		RetryShutdownTimeout: 2 * time.Minute,
 	}, *bufCfg)
 
 	// new config is changed
@@ -92,12 +98,13 @@ func TestDataConfigUpdate(t *testing.T) {
 		RetryInitialInterval: 28 * time.Second,
 		RetryMaxInterval:     230 * time.Second,
 		RetryMaxElapsedTime:  210 * time.Minute,
+		RetryShutdownTimeout: 5 * time.Minute,
 	}, *bufCfg2)
 }
 
 func TestDataConfigNewDefaultToString(t *testing.T) {
 	cfg := NewDefaultDataSetBufferSettings()
-	assert.Equal(t, "MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s", cfg.String())
+	assert.Equal(t, "MaxLifetime: 5s, MaxSize: 6225920, GroupBy: [], RetryRandomizationFactor: 0.500000, RetryMultiplier: 1.500000, RetryInitialInterval: 5s, RetryMaxInterval: 30s, RetryMaxElapsedTime: 5m0s, RetryShutdownTimeout: 30s", cfg.String())
 }
 
 func TestDataConfigNewDefaultIsValid(t *testing.T) {

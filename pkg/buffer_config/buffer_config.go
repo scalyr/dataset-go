@@ -26,12 +26,13 @@ import (
 const (
 	ShouldSentBufferSize = 5 * 1024 * 1024
 	// LimitBufferSize defines maximum payload size (before compression) for REST API
-	LimitBufferSize            = 5*1024*1024 + 960*1024
-	MinimalMaxElapsedTime      = time.Second
-	MinimalMaxInterval         = time.Second
-	MinimalInitialInterval     = 50 * time.Millisecond
-	MinimalMultiplier          = 0.0
-	MinimalRandomizationFactor = 0.0
+	LimitBufferSize             = 5*1024*1024 + 960*1024
+	MinimalMaxElapsedTime       = time.Second
+	MinimalMaxInterval          = time.Second
+	MinimalInitialInterval      = 50 * time.Millisecond
+	MinimalMultiplier           = 0.0
+	MinimalRandomizationFactor  = 0.0
+	MinimalRetryShutdownTimeout = 2 * MinimalMaxElapsedTime
 )
 
 type DataSetBufferSettings struct {
@@ -147,7 +148,7 @@ func (cfg *DataSetBufferSettings) WithOptions(opts ...DataSetBufferSettingsOptio
 
 func (cfg *DataSetBufferSettings) String() string {
 	return fmt.Sprintf(
-		"MaxLifetime: %s, MaxSize: %d, GroupBy: %s, RetryRandomizationFactor: %f, RetryMultiplier: %f, RetryInitialInterval: %s, RetryMaxInterval: %s, RetryMaxElapsedTime: %s",
+		"MaxLifetime: %s, MaxSize: %d, GroupBy: %s, RetryRandomizationFactor: %f, RetryMultiplier: %f, RetryInitialInterval: %s, RetryMaxInterval: %s, RetryMaxElapsedTime: %s, RetryShutdownTimeout: %s",
 		cfg.MaxLifetime,
 		cfg.MaxSize,
 		cfg.GroupBy,
@@ -156,6 +157,7 @@ func (cfg *DataSetBufferSettings) String() string {
 		cfg.RetryInitialInterval,
 		cfg.RetryMaxInterval,
 		cfg.RetryMaxElapsedTime,
+		cfg.RetryShutdownTimeout,
 	)
 }
 
@@ -205,6 +207,14 @@ func (cfg *DataSetBufferSettings) Validate() error {
 			"RetryRandomizationFactor has value %f which is less or equal  than %f",
 			cfg.RetryRandomizationFactor,
 			MinimalRandomizationFactor,
+		)
+	}
+
+	if cfg.RetryShutdownTimeout < MinimalRetryShutdownTimeout {
+		return fmt.Errorf(
+			"RetryShutdownTimeout has value %s which is less or equal  than %s",
+			cfg.RetryShutdownTimeout,
+			MinimalRetryShutdownTimeout,
 		)
 	}
 

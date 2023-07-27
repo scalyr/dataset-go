@@ -92,7 +92,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
 			MaxSize:                  1000,
-			MaxLifetime:              MaxDelay,
+			MaxLifetime:              10 * MaxDelay,
 			RetryRandomizationFactor: 1.0,
 			RetryMultiplier:          1.0,
 			RetryInitialInterval:     RetryBase,
