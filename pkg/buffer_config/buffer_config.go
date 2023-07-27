@@ -204,7 +204,7 @@ func (cfg *DataSetBufferSettings) Validate() error {
 
 	if cfg.RetryRandomizationFactor <= MinimalRandomizationFactor {
 		return fmt.Errorf(
-			"RetryRandomizationFactor has value %f which is less or equal  than %f",
+			"RetryRandomizationFactor has value %f which is less or equal than %f",
 			cfg.RetryRandomizationFactor,
 			MinimalRandomizationFactor,
 		)
@@ -212,7 +212,7 @@ func (cfg *DataSetBufferSettings) Validate() error {
 
 	if cfg.RetryShutdownTimeout < MinimalRetryShutdownTimeout {
 		return fmt.Errorf(
-			"RetryShutdownTimeout has value %s which is less or equal  than %s",
+			"RetryShutdownTimeout has value %s which is less than %s",
 			cfg.RetryShutdownTimeout,
 			MinimalRetryShutdownTimeout,
 		)

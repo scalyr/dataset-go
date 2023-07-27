@@ -252,17 +252,6 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
 		)
 		if backoffDelay == expBackoff.Stop {
-			lastError = fmt.Errorf(
-				"not all events have been processed - %d",
-				client.eventsEnqueued.Load()-client.eventsProcessed.Load(),
-			)
-			client.Logger.Error(
-				"Shutting down - not all events have been processed",
-				zap.Int("retryNum", retryNum),
-				zap.Duration("backoffDelay", backoffDelay),
-				zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
-				zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
-			)
 			break
 		}
 		time.Sleep(backoffDelay)
@@ -303,21 +292,37 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
 		)
 		if backoffDelay == expBackoff.Stop {
-			lastError = fmt.Errorf(
-				"not all buffers have been processed - %d",
-				client.buffersEnqueued.Load()-client.buffersProcessed.Load()-client.buffersDropped.Load(),
-			)
-			client.Logger.Error(
-				"Shutting down - not all buffers have been processed",
-				zap.Int("retryNum", retryNum),
-				zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
-				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
-				zap.Uint64("buffersDropped", client.buffersDropped.Load()),
-			)
 			break
 		}
 		time.Sleep(backoffDelay)
 		retryNum++
+	}
+
+	// construct error messages
+	if client.isProcessingEvents() {
+		lastError = fmt.Errorf(
+			"not all events have been processed - %d",
+			client.eventsEnqueued.Load()-client.eventsProcessed.Load(),
+		)
+		client.Logger.Error(
+			"Shutting down - not all events have been processed",
+			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
+			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
+		)
+	}
+
+	if client.isProcessingBuffers() {
+		lastError = fmt.Errorf(
+			"not all buffers have been processed - %d",
+			client.buffersEnqueued.Load()-client.buffersProcessed.Load()-client.buffersDropped.Load(),
+		)
+		client.Logger.Error(
+			"Shutting down - not all buffers have been processed",
+			zap.Int("retryNum", retryNum),
+			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
+			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
+			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
+		)
 	}
 
 	buffersDropped := client.buffersDropped.Load() - initialDropped
