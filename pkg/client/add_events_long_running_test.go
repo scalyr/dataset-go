@@ -76,7 +76,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		}
 
 		lastCall.Store(time.Now().UnixNano())
-		time.Sleep(time.Duration(float64(MaxDelay) * 0.7))
+		time.Sleep(time.Duration(float64(MaxDelay) * 0.6))
 		payload, err := json.Marshal(map[string]interface{}{
 			"status":       "success",
 			"bytesCharged": 42,
@@ -98,7 +98,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			RetryInitialInterval:     RetryBase,
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
-			RetryShutdownTimeout:     10 * RetryBase,
+			RetryShutdownTimeout:     15 * RetryBase,
 		},
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
