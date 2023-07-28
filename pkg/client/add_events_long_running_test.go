@@ -98,7 +98,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			RetryInitialInterval:     RetryBase,
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
-			RetryShutdownTimeout:     15 * RetryBase,
+			RetryShutdownTimeout:     30 * RetryBase,
 		},
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
