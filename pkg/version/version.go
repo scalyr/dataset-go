@@ -17,6 +17,6 @@
 package version
 
 const (
-	Version      = "0.12.0"
+	Version      = "0.12.1"
 	ReleasedDate = "2023-07-31"
 )

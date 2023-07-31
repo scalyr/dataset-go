@@ -74,6 +74,7 @@ type DataSetClient struct {
 	buffersEnqueued  atomic.Uint64
 	buffersProcessed atomic.Uint64
 	buffersDropped   atomic.Uint64
+	buffersBroken    atomic.Uint64
 	// Pub/Sub topics of Buffers based on its session
 	BufferPerSessionTopic *pubsub.PubSub
 	LastHttpStatus        atomic.Uint32
@@ -87,6 +88,8 @@ type DataSetClient struct {
 	Logger           *zap.Logger
 	eventsEnqueued   atomic.Uint64
 	eventsProcessed  atomic.Uint64
+	eventsDropped    atomic.Uint64
+	eventsBroken     atomic.Uint64
 	bytesAPISent     atomic.Uint64
 	bytesAPIAccepted atomic.Uint64
 	addEventsMutex   sync.Mutex
@@ -162,6 +165,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		buffersEnqueued:                 atomic.Uint64{},
 		buffersProcessed:                atomic.Uint64{},
 		buffersDropped:                  atomic.Uint64{},
+		buffersBroken:                   atomic.Uint64{},
 		buffersAllMutex:                 sync.Mutex{},
 		BufferPerSessionTopic:           pubsub.New(0),
 		LastHttpStatus:                  atomic.Uint32{},
@@ -172,6 +176,8 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		finished:                        atomic.Bool{},
 		eventsEnqueued:                  atomic.Uint64{},
 		eventsProcessed:                 atomic.Uint64{},
+		eventsDropped:                   atomic.Uint64{},
+		eventsBroken:                    atomic.Uint64{},
 		bytesAPIAccepted:                atomic.Uint64{},
 		bytesAPISent:                    atomic.Uint64{},
 		addEventsMutex:                  sync.Mutex{},
@@ -274,11 +280,16 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
 		if !channelReceiveSuccess {
-			client.buffersProcessed.Add(1)
+			client.Logger.Error(
+				"Cannot receive Buffer from channel",
+				zap.String("session", session),
+				zap.Any("msg", msg),
+			)
+			client.buffersBroken.Add(1)
 			client.lastAcceptedAt.Store(time.Now().UnixNano())
-			break
+			continue
 		}
-		client.Logger.Debug("Received buffer from channel",
+		client.Logger.Debug("Received Buffer from channel",
 			zap.String("session", session),
 			zap.Int("processedMsgCnt", processedMsgCnt),
 			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
@@ -297,10 +308,15 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				continue
 			}
 			client.sendBufferWithRetryPolicy(buf)
+			client.buffersProcessed.Add(1)
 		} else {
-			client.Logger.Error("Cannot convert message", zap.Any("msg", msg))
+			client.Logger.Error(
+				"Cannot convert message to Buffer",
+				zap.String("session", session),
+				zap.Any("msg", msg),
+			)
+			client.buffersBroken.Add(1)
 		}
-		client.buffersProcessed.Add(1)
 		client.lastAcceptedAt.Store(time.Now().UnixNano())
 	}
 }
@@ -422,23 +438,29 @@ func (client *DataSetClient) logStatistics() {
 	bProcessed := client.buffersProcessed.Load()
 	bEnqueued := client.buffersEnqueued.Load()
 	bDropped := client.buffersDropped.Load()
+	bBroken := client.buffersBroken.Load()
 	client.Logger.Info(
 		"Buffers' Queue Stats:",
 		zap.Uint64("processed", bProcessed),
 		zap.Uint64("enqueued", bEnqueued),
 		zap.Uint64("dropped", bDropped),
-		zap.Uint64("waiting", bEnqueued-bProcessed),
+		zap.Uint64("broken", bBroken),
+		zap.Uint64("waiting", bEnqueued-bProcessed-bDropped-bBroken),
 		zap.Float64("processingS", processingInSec),
 	)
 
 	// log events stats
 	eProcessed := client.eventsProcessed.Load()
 	eEnqueued := client.eventsEnqueued.Load()
+	eDropped := client.eventsDropped.Load()
+	eBroken := client.eventsBroken.Load()
 	client.Logger.Info(
 		"Events' Queue Stats:",
 		zap.Uint64("processed", eProcessed),
 		zap.Uint64("enqueued", eEnqueued),
-		zap.Uint64("waiting", eEnqueued-eProcessed),
+		zap.Uint64("dropped", eDropped),
+		zap.Uint64("broken", eBroken),
+		zap.Uint64("waiting", eEnqueued-eProcessed-eDropped-eBroken),
 		zap.Float64("processingS", processingInSec),
 	)
 
