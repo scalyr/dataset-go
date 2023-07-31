@@ -78,19 +78,12 @@ jobs:
           verbose: true
       - name: Build Examples
         run: |
-          ( cd examples/client; go build )
-          ( cd examples/readme; go build )
+          make build-examples
       - name: Check SSL Certificates
         run: |
-          cd scripts
-          ./test-ssl-certificates.sh
+          make test-ssl-certificates
       - name: Run Tests Many Times
-        # Run test multiple times to check for data races
+        # Run test multiple times to check for flaky tests
         if: github.ref_name == 'main'
         run: |
-          set -e;
-          N=10;
-          for i in `seq 1 ${N}`; do
-            echo "Running test ${i} / ${N}";
-            make test;
-          done;
+          make test-many-times COUNT=10

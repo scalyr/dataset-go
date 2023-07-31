@@ -175,6 +175,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 							buf = getBuffer(key)
 						} else {
 							client.Logger.Error("Cannot add bundle", zap.Error(err))
+							client.eventsDropped.Add(1)
 							continue
 						}
 					}
@@ -183,6 +184,8 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 					}
 					if added == buffer.TooMuch {
 						client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
+						client.eventsDropped.Add(1)
+						continue
 					}
 				}
 				client.eventsProcessed.Add(1)
@@ -194,6 +197,12 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				if buf.PublishAsap.Load() {
 					client.publishBuffer(buf)
 				}
+			} else {
+				client.Logger.Error(
+					"Cannot convert message to EventBundle",
+					zap.Any("msg", msg),
+				)
+				client.eventsBroken.Add(1)
 			}
 		}
 	}
@@ -202,13 +211,13 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 // isProcessingBuffers returns True if there are still some unprocessed buffers.
 // False otherwise.
 func (client *DataSetClient) isProcessingBuffers() bool {
-	return client.buffersEnqueued.Load() > client.buffersProcessed.Load()
+	return client.buffersEnqueued.Load() > (client.buffersProcessed.Load() + client.buffersDropped.Load() + client.buffersBroken.Load())
 }
 
 // isProcessingEvents returns True if there are still some unprocessed events.
 // False otherwise.
 func (client *DataSetClient) isProcessingEvents() bool {
-	return client.eventsEnqueued.Load() > client.eventsProcessed.Load()
+	return client.eventsEnqueued.Load() > (client.eventsProcessed.Load() + client.eventsDropped.Load() + client.eventsBroken.Load())
 }
 
 // Shutdown takes care of shutdown of client. It does following steps
@@ -245,10 +254,11 @@ func (client *DataSetClient) Shutdown() error {
 		Stop:                backoff.Stop,
 		Clock:               backoff.SystemClock,
 	}
-	expBackoff.Reset()
 
 	// try (with timeout) to process (add into buffers) events,
 	retryNum := 0
+	expBackoff.Reset()
+	initialEventsDropped := client.eventsDropped.Load()
 	for client.isProcessingEvents() {
 		// log statistics
 		client.logStatistics()
@@ -300,7 +310,7 @@ func (client *DataSetClient) Shutdown() error {
 	// do wait (with timeout) for all buffers to be sent to the server
 	retryNum = 0
 	expBackoff.Reset()
-	initialDropped := client.buffersDropped.Load()
+	initialBuffersDropped := client.buffersDropped.Load()
 	for client.isProcessingBuffers() {
 		// log statistics
 		client.logStatistics()
@@ -350,7 +360,19 @@ func (client *DataSetClient) Shutdown() error {
 		)
 	}
 
-	buffersDropped := client.buffersDropped.Load() - initialDropped
+	eventsDropped := client.eventsDropped.Load() - initialEventsDropped
+	if eventsDropped > 0 {
+		lastError = fmt.Errorf(
+			"some events were dropped during finishing - %d",
+			eventsDropped,
+		)
+		client.Logger.Error(
+			"Shutting down - events were dropped during shutdown",
+			zap.Uint64("eventsDropped", eventsDropped),
+		)
+	}
+
+	buffersDropped := client.buffersDropped.Load() - initialBuffersDropped
 	if buffersDropped > 0 {
 		lastError = fmt.Errorf(
 			"some buffers were dropped during finishing - %d",
