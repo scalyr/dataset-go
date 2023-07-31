@@ -460,6 +460,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
+		buffer_config.WithRetryShutdownTimeout(20*time.Second),
 	), *newDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
