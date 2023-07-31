@@ -217,20 +217,31 @@ func (client *DataSetClient) isProcessingEvents() bool {
 // - tries (with 2nd half of shutdownMaxTimeout period) to send processed events (buffers) into DataSet
 func (client *DataSetClient) Shutdown() error {
 	client.Logger.Info("Shutting down - BEGIN")
+	// start measuring processing time
+	processingStart := time.Now()
+
 	// mark as finished to prevent processing of further events
 	client.finished.Store(true)
 
 	// log statistics when finish was called
 	client.logStatistics()
 
+	retryShutdownTimeout := client.Config.BufferSettings.RetryShutdownTimeout
+	maxElapsedTime := retryShutdownTimeout/2 - 100*time.Millisecond
+	client.Logger.Info(
+		"Shutting down - waiting for events",
+		zap.Duration("maxElapsedTime", maxElapsedTime),
+		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
+		zap.Duration("elapsedTime", time.Since(processingStart)),
+	)
+
 	var lastError error = nil
-	shutdownTimeout := minDuration(client.Config.BufferSettings.RetryMaxElapsedTime, client.Config.BufferSettings.RetryShutdownTimeout)
 	expBackoff := backoff.ExponentialBackOff{
 		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
 		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
 		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
 		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
-		MaxElapsedTime:      shutdownTimeout / 2,
+		MaxElapsedTime:      maxElapsedTime,
 		Stop:                backoff.Stop,
 		Clock:               backoff.SystemClock,
 	}
@@ -238,7 +249,6 @@ func (client *DataSetClient) Shutdown() error {
 
 	// try (with timeout) to process (add into buffers) events,
 	retryNum := 0
-	processingStart := time.Now()
 	for client.isProcessingEvents() {
 		// log statistics
 		client.logStatistics()
@@ -250,19 +260,10 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Duration("backoffDelay", backoffDelay),
 			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
 			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
+			zap.Duration("elapsedTime", time.Since(processingStart)),
+			zap.Duration("maxElapsedTime", maxElapsedTime),
 		)
 		if backoffDelay == expBackoff.Stop {
-			lastError = fmt.Errorf(
-				"not all events have been processed - %d",
-				client.eventsEnqueued.Load()-client.eventsProcessed.Load(),
-			)
-			client.Logger.Error(
-				"Shutting down - not all events have been processed",
-				zap.Int("retryNum", retryNum),
-				zap.Duration("backoffDelay", backoffDelay),
-				zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
-				zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
-			)
 			break
 		}
 		time.Sleep(backoffDelay)
@@ -270,18 +271,29 @@ func (client *DataSetClient) Shutdown() error {
 	}
 
 	// send all buffers
-	client.Logger.Info("Shutting down - publishing all buffers")
+	client.Logger.Info(
+		"Shutting down - publishing all buffers",
+		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
+		zap.Duration("elapsedTime", time.Since(processingStart)),
+	)
 	client.publishAllBuffers()
 
 	// reinitialize expBackoff with MaxElapsedTime based on actually elapsed time of processing (previous phase)
 	processingElapsed := time.Since(processingStart)
-	remainingShutdownTimeout := maxDuration(shutdownTimeout-processingElapsed, shutdownTimeout/2)
+	maxElapsedTime = maxDuration(retryShutdownTimeout-processingElapsed, retryShutdownTimeout/2)
+	client.Logger.Info(
+		"Shutting down - waiting for buffers",
+		zap.Duration("maxElapsedTime", maxElapsedTime),
+		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
+		zap.Duration("elapsedTime", time.Since(processingStart)),
+	)
+
 	expBackoff = backoff.ExponentialBackOff{
 		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
 		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
 		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
 		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
-		MaxElapsedTime:      remainingShutdownTimeout,
+		MaxElapsedTime:      maxElapsedTime,
 		Stop:                backoff.Stop,
 		Clock:               backoff.SystemClock,
 	}
@@ -301,23 +313,41 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
 			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
+			zap.Duration("elapsedTime", time.Since(processingStart)),
+			zap.Duration("maxElapsedTime", maxElapsedTime),
 		)
 		if backoffDelay == expBackoff.Stop {
-			lastError = fmt.Errorf(
-				"not all buffers have been processed - %d",
-				client.buffersEnqueued.Load()-client.buffersProcessed.Load()-client.buffersDropped.Load(),
-			)
-			client.Logger.Error(
-				"Shutting down - not all buffers have been processed",
-				zap.Int("retryNum", retryNum),
-				zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
-				zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
-				zap.Uint64("buffersDropped", client.buffersDropped.Load()),
-			)
 			break
 		}
 		time.Sleep(backoffDelay)
 		retryNum++
+	}
+
+	// construct error messages
+	if client.isProcessingEvents() {
+		lastError = fmt.Errorf(
+			"not all events have been processed - %d",
+			client.eventsEnqueued.Load()-client.eventsProcessed.Load(),
+		)
+		client.Logger.Error(
+			"Shutting down - not all events have been processed",
+			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
+			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
+		)
+	}
+
+	if client.isProcessingBuffers() {
+		lastError = fmt.Errorf(
+			"not all buffers have been processed - %d",
+			client.buffersEnqueued.Load()-client.buffersProcessed.Load()-client.buffersDropped.Load(),
+		)
+		client.Logger.Error(
+			"Shutting down - not all buffers have been processed",
+			zap.Int("retryNum", retryNum),
+			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
+			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
+			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
+		)
 	}
 
 	buffersDropped := client.buffersDropped.Load() - initialDropped
@@ -336,9 +366,17 @@ func (client *DataSetClient) Shutdown() error {
 	client.logStatistics()
 
 	if lastError == nil {
-		client.Logger.Info("Shutting down - success")
+		client.Logger.Info(
+			"Shutting down - success",
+			zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
+			zap.Duration("elapsedTime", time.Since(processingStart)),
+		)
 	} else {
-		client.Logger.Error("Shutting down - error", zap.Error(lastError))
+		client.Logger.Error(
+			"Shutting down - error", zap.Error(lastError),
+			zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
+			zap.Duration("elapsedTime", time.Since(processingStart)),
+		)
 		if client.LastError() == nil {
 			return lastError
 		}
@@ -473,13 +511,6 @@ func truncateText(text string, length int) string {
 	}
 
 	return text
-}
-
-func minDuration(a, b time.Duration) time.Duration {
-	if a <= b {
-		return a
-	}
-	return b
 }
 
 func maxDuration(a, b time.Duration) time.Duration {

@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.12.0
+
+* fix: make client shutdown timeout configurable.
+
 ## 0.0.11
 
 * feat: make client shutdown timeout configurable.

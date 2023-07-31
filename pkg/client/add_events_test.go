@@ -43,7 +43,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const RetryBase = time.Second
+const (
+	RetryBase       = time.Second
+	ShutdownTimeout = 2 * RetryBase
+)
 
 var attempt = atomic.Int32{}
 
@@ -193,6 +196,7 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
+		buffer_config.WithRetryShutdownTimeout(10*time.Second),
 	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
@@ -280,6 +284,7 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
+		buffer_config.WithRetryShutdownTimeout(10*time.Second),
 	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
@@ -455,6 +460,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(RetryBase),
+		buffer_config.WithRetryShutdownTimeout(20*time.Second),
 	), *newDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
@@ -524,6 +530,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 			RetryInitialInterval:     RetryBase,
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
+			RetryShutdownTimeout:     ShutdownTimeout,
 		},
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
@@ -1085,6 +1092,7 @@ func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) 
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(1) * time.Second),
 		buffer_config.WithRetryMultiplier(1.0),
 		buffer_config.WithRetryRandomizationFactor(1.0),
+		buffer_config.WithRetryShutdownTimeout(10 * time.Second),
 	}
 	bufferSetting, _ := buffer_config.New(append(defaultOpts, customOpts...)...)
 	return bufferSetting
