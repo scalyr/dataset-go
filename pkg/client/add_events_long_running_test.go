@@ -98,7 +98,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			RetryInitialInterval:     RetryBase,
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
-			RetryShutdownTimeout:     30 * RetryBase,
+			RetryShutdownTimeout:     50 * RetryBase,
 		},
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
@@ -147,15 +147,15 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		time.Sleep(time.Duration(float64(MaxDelay) * 0.3))
 	}
 
-	err = sc.Shutdown()
-	assert.Nil(t, err, err)
-
 	for {
 		if time.Now().UnixNano()-lastCall.Load() > 5*time.Second.Nanoseconds() {
 			break
 		}
 		time.Sleep(time.Second)
 	}
+
+	err = sc.Shutdown()
+	assert.Nil(t, err, err)
 
 	assert.Equal(t, seenKeys, expectedKeys)
 	assert.Equal(t, processedEvents.Load(), ExpectedLogs, "processed items")

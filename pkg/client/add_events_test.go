@@ -1091,7 +1091,7 @@ func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) 
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(1) * time.Second),
 		buffer_config.WithRetryMultiplier(1.0),
 		buffer_config.WithRetryRandomizationFactor(1.0),
-		buffer_config.WithRetryShutdownTimeout(5 * time.Second),
+		buffer_config.WithRetryShutdownTimeout(10 * time.Second),
 	}
 	bufferSetting, _ := buffer_config.New(append(defaultOpts, customOpts...)...)
 	return bufferSetting

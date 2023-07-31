@@ -63,16 +63,17 @@ test-many-times:
 	else \
 		COUNT=$(COUNT); \
 	fi; \
+	prefix=out-test-many-times-; \
+	rm -rfv $${prefix}*; \
 	for i in `seq 1 $${COUNT}`; do \
-		echo "Running test $${i} / $${COUNT}"; \
-		rm -rfv out-test-$${i}.log; \
-		make test 2>&1 | tee out-test-$${i}.log; \
+		echo "Running test $${i} / $${COUNT} - BEGIN"; \
+		make test 2>&1 | tee $${prefix}-$${i}.log | awk '{print "'$${i}'/'$${COUNT}'", $$0; }' ; \
 		echo; \
-		grep -H FAIL out-test-$${i}.log; \
-		echo; \
+		grep -H FAIL $${prefix}-$${i}.log; \
+		echo "Running test $${i} / $${COUNT} - END"; \
 	done; \
 	echo "Grep for FAIL - no lines should be found"; \
-	! grep -H FAIL out-test-*.log;
+	! grep -H FAIL $${prefix}-*.log;
 
 foo:
 	! false
