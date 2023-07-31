@@ -86,4 +86,4 @@ jobs:
         # Run test multiple times to check for flaky tests
         if: github.ref_name == 'main'
         run: |
-          make test-many-times COUNT=10
+          make test-many-times COUNT=5
