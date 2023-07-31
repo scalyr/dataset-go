@@ -147,63 +147,74 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 	}
 
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
-		if msg, ok := <-ch; ok {
-			bundle, ok := msg.(*add_events.EventBundle)
-			if ok {
-				buf := getBuffer(key)
-				client.fixServerHostsInBundle(bundle)
+		msg, channelReceiveSuccess := <-ch
+		if !channelReceiveSuccess {
+			client.Logger.Error(
+				"Cannot receive EventBundle from channel",
+				zap.String("key", key),
+				zap.Any("msg", msg),
+			)
+			client.eventsBroken.Add(1)
+			client.lastAcceptedAt.Store(time.Now().UnixNano())
+			continue
+		}
 
-				added, err := buf.AddBundle(bundle)
+		bundle, ok := msg.(*add_events.EventBundle)
+		if ok {
+			buf := getBuffer(key)
+			client.fixServerHostsInBundle(bundle)
+
+			added, err := buf.AddBundle(bundle)
+			if err != nil {
+				if errors.Is(err, &buffer.NotAcceptingError{}) {
+					buf = getBuffer(key)
+				} else {
+					client.Logger.Error("Cannot add bundle", zap.Error(err))
+					// TODO: what to do? For now, lets skip it
+					continue
+				}
+			}
+
+			if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
+				buf = publish(key, buf)
+			}
+
+			if added == buffer.TooMuch {
+				added, err = buf.AddBundle(bundle)
 				if err != nil {
 					if errors.Is(err, &buffer.NotAcceptingError{}) {
 						buf = getBuffer(key)
 					} else {
 						client.Logger.Error("Cannot add bundle", zap.Error(err))
-						// TODO: what to do? For now, lets skip it
-						continue
-					}
-				}
-
-				if buf.ShouldSendSize() || added == buffer.TooMuch && buf.HasEvents() {
-					buf = publish(key, buf)
-				}
-
-				if added == buffer.TooMuch {
-					added, err = buf.AddBundle(bundle)
-					if err != nil {
-						if errors.Is(err, &buffer.NotAcceptingError{}) {
-							buf = getBuffer(key)
-						} else {
-							client.Logger.Error("Cannot add bundle", zap.Error(err))
-							client.eventsDropped.Add(1)
-							continue
-						}
-					}
-					if buf.ShouldSendSize() {
-						buf = publish(key, buf)
-					}
-					if added == buffer.TooMuch {
-						client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
 						client.eventsDropped.Add(1)
 						continue
 					}
 				}
-				client.eventsProcessed.Add(1)
-
-				buf.SetStatus(buffer.Ready)
-				// it could happen that the buffer could have been published
-				// by buffer sweeper, but it was skipped, because we have been
-				// adding events, so lets check it and publish it if needed
-				if buf.PublishAsap.Load() {
-					client.publishBuffer(buf)
+				if buf.ShouldSendSize() {
+					buf = publish(key, buf)
 				}
-			} else {
-				client.Logger.Error(
-					"Cannot convert message to EventBundle",
-					zap.Any("msg", msg),
-				)
-				client.eventsBroken.Add(1)
+				if added == buffer.TooMuch {
+					client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
+					client.eventsDropped.Add(1)
+					continue
+				}
 			}
+			client.eventsProcessed.Add(1)
+
+			buf.SetStatus(buffer.Ready)
+			// it could happen that the buffer could have been published
+			// by buffer sweeper, but it was skipped, because we have been
+			// adding events, so lets check it and publish it if needed
+			if buf.PublishAsap.Load() {
+				client.publishBuffer(buf)
+			}
+		} else {
+			client.Logger.Error(
+				"Cannot convert message to EventBundle",
+				zap.String("key", key),
+				zap.Any("msg", msg),
+			)
+			client.eventsBroken.Add(1)
 		}
 	}
 }

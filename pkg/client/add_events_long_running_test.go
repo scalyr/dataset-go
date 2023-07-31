@@ -158,6 +158,6 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	assert.Nil(t, err, err)
 
 	assert.Equal(t, seenKeys, expectedKeys)
-	assert.Equal(t, processedEvents.Load(), ExpectedLogs, "processed items")
-	assert.Equal(t, uint64(len(seenKeys)), ExpectedLogs, "unique items")
+	assert.Equal(t, int(processedEvents.Load()), int(ExpectedLogs), "processed items")
+	assert.Equal(t, int(len(seenKeys)), int(ExpectedLogs), "unique items")
 }

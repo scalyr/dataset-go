@@ -280,11 +280,16 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
 		if !channelReceiveSuccess {
-			client.buffersProcessed.Add(1)
+			client.Logger.Error(
+				"Cannot receive Buffer from channel",
+				zap.String("session", session),
+				zap.Any("msg", msg),
+			)
+			client.buffersBroken.Add(1)
 			client.lastAcceptedAt.Store(time.Now().UnixNano())
-			break
+			continue
 		}
-		client.Logger.Debug("Received buffer from channel",
+		client.Logger.Debug("Received Buffer from channel",
 			zap.String("session", session),
 			zap.Int("processedMsgCnt", processedMsgCnt),
 			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
@@ -307,6 +312,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 		} else {
 			client.Logger.Error(
 				"Cannot convert message to Buffer",
+				zap.String("session", session),
 				zap.Any("msg", msg),
 			)
 			client.buffersBroken.Add(1)
