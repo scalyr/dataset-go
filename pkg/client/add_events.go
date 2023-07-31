@@ -261,6 +261,7 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
 			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
+			zap.Duration("maxElapsedTime", maxElapsedTime),
 		)
 		if backoffDelay == expBackoff.Stop {
 			break
@@ -313,6 +314,7 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
 			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
+			zap.Duration("maxElapsedTime", maxElapsedTime),
 		)
 		if backoffDelay == expBackoff.Stop {
 			break
