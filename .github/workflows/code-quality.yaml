@@ -64,9 +64,6 @@ jobs:
       - name: Run pre-commit
         run: |
           pre-commit run -a
-      - name: Code tests
-        run: |
-          make test
       - name: Code coverage
         run: |
           make coverage
