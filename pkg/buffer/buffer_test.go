@@ -252,7 +252,7 @@ func TestAddEventWithShouldSendSize(t *testing.T) {
 				break
 			}
 			assert.Equal(t, added, Added)
-			time.Sleep(7 * time.Microsecond)
+			time.Sleep(25 * time.Microsecond)
 		}
 		finished.Add(1)
 	}()
@@ -261,7 +261,7 @@ func TestAddEventWithShouldSendSize(t *testing.T) {
 		waited := 0
 		for !buffer.ShouldSendSize() {
 			waited += 1
-			time.Sleep(10 * time.Microsecond)
+			time.Sleep(31 * time.Microsecond)
 			if buffer.BufferLengths() > 10000 {
 				break
 			}
