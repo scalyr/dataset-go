@@ -232,7 +232,7 @@ func TestAddEventWithShouldSendAge(t *testing.T) {
 	}()
 
 	for finished.Load() < 2 {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	assert.Equal(t, finished.Load(), int32(2))
 }
@@ -271,7 +271,7 @@ func TestAddEventWithShouldSendSize(t *testing.T) {
 	}()
 
 	for finished.Load() < 2 {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	assert.Equal(t, finished.Load(), int32(2))
 	assert.Greater(t, buffer.BufferLengths(), int32(ShouldSentBufferSize-1000))
