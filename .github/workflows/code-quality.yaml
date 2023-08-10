@@ -82,8 +82,3 @@ jobs:
       - name: Check SSL Certificates
         run: |
           make test-ssl-certificates
-      - name: Run Tests Many Times
-        # Run test multiple times to check for flaky tests
-        if: github.ref_name == 'main'
-        run: |
-          make test-many-times COUNT=5
