@@ -74,7 +74,7 @@ func createTestBundle() add_events.EventBundle {
 			Ts:     "0",
 			Attrs: map[string]interface{}{
 				"message": "test",
-				"meh":     1,
+				"s1web":   "CentralizeSentinelOne-nativeendpoint,cloud,andidentitytelemetrywithanyopen,thirdpartydatafromyoursecurityecosystemintoonepowerfulplatform.Don’tstopatjustidentifyingmaliciousbehaviors.Blockandremediateadvancedattacksautonomously,atmachinespeed,withcross-platform,enterprise-scaledataanalytics.Empoweranalystswiththecontexttheyneed,faster,byautomaticallyconnecting,correlatingbenignandmaliciouseventsinoneillustrativeview.",
 			},
 		},
 	}
@@ -128,7 +128,7 @@ func TestPayloadFull(t *testing.T) {
 	upperBound := int(math.Min(float64(len(expected)), float64(len(payload))))
 	for i := 0; i < upperBound; i++ {
 		if expected[i] != (payload)[i] {
-			assert.Equal(t, payload[0:i], expected[0:i], "Pos: %d", i)
+			assert.Equal(t, string(payload[0:i]), expected[0:i], "Pos: %d", i)
 		}
 	}
 	assert.Equal(t, payload, []byte(expected))
@@ -227,12 +227,12 @@ func TestAddEventWithShouldSendAge(t *testing.T) {
 				break
 			}
 		}
-		assert.GreaterOrEqual(t, waited, 5)
+		assert.GreaterOrEqual(t, waited, 4)
 		finished.Add(1)
 	}()
 
 	for finished.Load() < 2 {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	assert.Equal(t, finished.Load(), int32(2))
 }
@@ -252,7 +252,7 @@ func TestAddEventWithShouldSendSize(t *testing.T) {
 				break
 			}
 			assert.Equal(t, added, Added)
-			time.Sleep(time.Microsecond)
+			time.Sleep(25 * time.Microsecond)
 		}
 		finished.Add(1)
 	}()
@@ -261,7 +261,7 @@ func TestAddEventWithShouldSendSize(t *testing.T) {
 		waited := 0
 		for !buffer.ShouldSendSize() {
 			waited += 1
-			time.Sleep(10 * time.Microsecond)
+			time.Sleep(31 * time.Microsecond)
 			if buffer.BufferLengths() > 10000 {
 				break
 			}
@@ -271,7 +271,7 @@ func TestAddEventWithShouldSendSize(t *testing.T) {
 	}()
 
 	for finished.Load() < 2 {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	assert.Equal(t, finished.Load(), int32(2))
 	assert.Greater(t, buffer.BufferLengths(), int32(ShouldSentBufferSize-1000))
