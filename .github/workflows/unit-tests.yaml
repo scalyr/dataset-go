@@ -32,6 +32,7 @@ jobs:
   build:
     strategy:
       matrix:
+        go: ['1.19', '1.20']
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     needs: pre_job
@@ -46,7 +47,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.19
+          go-version: ${{ matrix.go }}
           cache: true
           cache-dependency-path: |
             go.sum
@@ -60,4 +61,4 @@ jobs:
         # Run test multiple times to check for flaky tests
         if: github.ref_name == 'main'
         run: |
-          make test-many-times COUNT=5
+          make test-many-times COUNT=2

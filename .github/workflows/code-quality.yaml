@@ -64,9 +64,6 @@ jobs:
       - name: Run pre-commit
         run: |
           pre-commit run -a
-      - name: Code tests
-        run: |
-          make test
       - name: Code coverage
         run: |
           make coverage
@@ -82,8 +79,3 @@ jobs:
       - name: Check SSL Certificates
         run: |
           make test-ssl-certificates
-      - name: Run Tests Many Times
-        # Run test multiple times to check for flaky tests
-        if: github.ref_name == 'main'
-        run: |
-          make test-many-times COUNT=5

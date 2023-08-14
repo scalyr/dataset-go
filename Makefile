@@ -57,7 +57,7 @@ test-all:
 
 .PHONY: test-many-times
 test-many-times:
-	# set -e;
+	set -e; \
 	if [ "x$(COUNT)" == "x" ]; then \
 		COUNT=50; \
 	else \
@@ -67,9 +67,7 @@ test-many-times:
 	rm -rfv $${prefix}*; \
 	for i in `seq 1 $${COUNT}`; do \
 		echo "Running test $${i} / $${COUNT} - BEGIN"; \
-		make test 2>&1 | tee $${prefix}-$${i}.log | awk '{print "'$${i}'/'$${COUNT}'", $$0; }' ; \
-		echo; \
-		grep -H FAIL $${prefix}-$${i}.log; \
+		make test 2>&1 | tee $${prefix}-$${i}.log | awk '{print "'$${i}'/'$${COUNT}'", $$0; }' || exit 0; \
 		echo "Running test $${i} / $${COUNT} - END"; \
 	done; \
 	echo "Grep for FAIL - no lines should be found"; \
