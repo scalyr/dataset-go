@@ -53,7 +53,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	processedEvents := atomic.Uint64{}
 	seenKeys := make(map[string]int64)
 	expectedKeys := make(map[string]int64)
-	mutex := &sync.RWMutex{}
+	seenMutex := &sync.RWMutex{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		attempt.Add(1)
@@ -65,14 +65,14 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			processedEvents.Add(1)
 			key, found := ev.Attrs["body.str"]
 			assert.True(t, found)
-			mutex.Lock()
+			seenMutex.Lock()
 			sKey := key.(string)
 			_, f := seenKeys[sKey]
 			if !f {
 				seenKeys[sKey] = 0
 			}
 			seenKeys[sKey] += 1
-			mutex.Unlock()
+			seenMutex.Unlock()
 		}
 
 		lastCall.Store(time.Now().UnixNano())
