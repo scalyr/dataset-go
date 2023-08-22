@@ -238,8 +238,11 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	wasSuccessful.Store(false)
 	assert.Nil(t, err2)
 	assert.Nil(t, sc.LastError())
-	// info2 := httpmock.GetCallCountInfo()
-	// assert.CmpDeeply(info2, map[string]int{"POST https://example.com/api/addEvents": 3})
+
+	stats := sc.Statistics()
+	assert.Equal(t, uint64(2), stats.Buffers.Enqueued)
+	assert.Equal(t, uint64(0), stats.Buffers.Waiting)
+	assert.Equal(t, uint64(0), stats.Buffers.Dropped)
 }
 
 func TestAddEventsRetryAfterTime(t *testing.T) {
@@ -578,6 +581,12 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
 	err = sc.Shutdown()
+
+	stats := sc.Statistics()
+	assert.Equal(t, uint64(1), stats.Buffers.Enqueued)
+	assert.Equal(t, uint64(0), stats.Buffers.Processed)
+	assert.Equal(t, uint64(0), stats.Buffers.Waiting)
+	assert.Equal(t, uint64(1), stats.Buffers.Dropped)
 
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")

@@ -157,6 +157,13 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	err = sc.Shutdown()
 	assert.Nil(t, err, err)
 
+	stats := sc.Statistics()
+	assert.Equal(t, uint64(0), stats.Buffers.Waiting)
+	assert.Equal(t, uint64(0), stats.Buffers.Dropped)
+
+	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Enqueued)
+	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Processed)
+
 	assert.Equal(t, seenKeys, expectedKeys)
 	assert.Equal(t, int(processedEvents.Load()), int(ExpectedLogs), "processed items")
 	assert.Equal(t, int(len(seenKeys)), int(ExpectedLogs), "unique items")
