@@ -1,5 +1,10 @@
 # Release Notes
 
+## 0.13.0
+
+* fix: do not drop event when buffer is being published
+* fix: do not double count dropped buffers
+
 ## 0.12.0
 
 * fix: make client shutdown timeout configurable.

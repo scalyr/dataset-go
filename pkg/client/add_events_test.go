@@ -135,11 +135,29 @@ func TestAddEventsRetry(t *testing.T) {
 	assert.Nil(t, err)
 	err = sc.Shutdown()
 	assert.Nil(t, err)
-
 	assert.True(t, wasSuccessful.Load())
-	assert.Nil(t, err)
-
 	assert.Equal(t, attempt.Load(), succeedInAttempt)
+
+	stats := sc.Statistics()
+	assert.Equal(t, uint64(1), stats.Events.Enqueued())
+	assert.Equal(t, uint64(1), stats.Events.Processed())
+	assert.Equal(t, uint64(0), stats.Events.Waiting())
+	assert.Equal(t, uint64(0), stats.Events.Dropped())
+	assert.Equal(t, uint64(0), stats.Events.Broken())
+	assert.Equal(t, 1.0, stats.Events.SuccessRate())
+	assert.Equal(t, uint64(1), stats.Buffers.Enqueued())
+	assert.Equal(t, uint64(1), stats.Buffers.Processed())
+	assert.Equal(t, uint64(0), stats.Buffers.Waiting())
+	assert.Equal(t, uint64(0), stats.Buffers.Dropped())
+	assert.Equal(t, uint64(0), stats.Buffers.Broken())
+	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
+	assert.Equal(t, 1.0/float64(succeedInAttempt), stats.Transfer.SuccessRate())
+	assert.Equal(t, uint64(1), stats.Transfer.BuffersProcessed())
+	/* TODO: on my Mac it's 337 in GitHub action on ubuntu-latest it's 339
+	assert.Equal(t, uint64(0x3f3), stats.Transfer.BytesSent())
+	assert.Equal(t, uint64(0x151), stats.Transfer.BytesAccepted())
+	assert.Equal(t, 337.0, stats.Transfer.AvgBufferBytes())
+	*/
 }
 
 func TestAddEventsRetryAfterSec(t *testing.T) {
@@ -238,8 +256,11 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	wasSuccessful.Store(false)
 	assert.Nil(t, err2)
 	assert.Nil(t, sc.LastError())
-	// info2 := httpmock.GetCallCountInfo()
-	// assert.CmpDeeply(info2, map[string]int{"POST https://example.com/api/addEvents": 3})
+
+	stats := sc.Statistics()
+	assert.Equal(t, uint64(2), stats.Buffers.Enqueued())
+	assert.Equal(t, uint64(0), stats.Buffers.Waiting())
+	assert.Equal(t, uint64(0), stats.Buffers.Dropped())
 }
 
 func TestAddEventsRetryAfterTime(t *testing.T) {
@@ -388,12 +409,27 @@ func TestAddEventsLargeEvent(t *testing.T) {
 	assert.Nil(t, err)
 	err = sc.Shutdown()
 	assert.Nil(t, err)
-
 	assert.True(t, wasSuccessful.Load())
-	assert.Nil(t, err)
 	assert.Nil(t, sc.LastError())
-	// info := httpmock.GetCallCountInfo()
-	// assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 1})
+
+	stats := sc.Statistics()
+	assert.Equal(t, uint64(1), stats.Events.Enqueued())
+	assert.Equal(t, uint64(1), stats.Events.Processed())
+	assert.Equal(t, uint64(0), stats.Events.Waiting())
+	assert.Equal(t, uint64(0), stats.Events.Dropped())
+	assert.Equal(t, uint64(0), stats.Events.Broken())
+	assert.Equal(t, 1.0, stats.Events.SuccessRate())
+	assert.Equal(t, uint64(2), stats.Buffers.Enqueued())
+	assert.Equal(t, uint64(2), stats.Buffers.Processed())
+	assert.Equal(t, uint64(0), stats.Buffers.Waiting())
+	assert.Equal(t, uint64(0), stats.Buffers.Dropped())
+	assert.Equal(t, uint64(0), stats.Buffers.Broken())
+	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
+	assert.Equal(t, 1.0, stats.Transfer.SuccessRate())
+	assert.Equal(t, uint64(2), stats.Transfer.BuffersProcessed())
+	assert.Equal(t, uint64(0x5f006d), stats.Transfer.BytesSent())
+	assert.Equal(t, uint64(0x5f006d), stats.Transfer.BytesAccepted())
+	assert.Equal(t, 3113014.5, stats.Transfer.AvgBufferBytes())
 }
 
 func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
@@ -578,6 +614,21 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	assert.Nil(t, err)
 	err = sc.Shutdown()
+
+	stats := sc.Statistics()
+	assert.Equal(t, uint64(1), stats.Events.Enqueued())
+	assert.Equal(t, uint64(1), stats.Events.Processed())
+	assert.Equal(t, uint64(0), stats.Events.Waiting())
+	assert.Equal(t, uint64(0), stats.Events.Dropped())
+	assert.Equal(t, uint64(0), stats.Events.Broken())
+	assert.Equal(t, 1.0, stats.Events.SuccessRate())
+	assert.Equal(t, uint64(1), stats.Buffers.Enqueued())
+	assert.Equal(t, uint64(0), stats.Buffers.Processed())
+	assert.Equal(t, uint64(0), stats.Buffers.Waiting())
+	assert.Equal(t, uint64(1), stats.Buffers.Dropped())
+	assert.Equal(t, uint64(0), stats.Buffers.Broken())
+	assert.Equal(t, 0.0, stats.Buffers.SuccessRate())
+	assert.Equal(t, 0.0, stats.Transfer.SuccessRate())
 
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")

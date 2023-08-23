@@ -53,7 +53,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	processedEvents := atomic.Uint64{}
 	seenKeys := make(map[string]int64)
 	expectedKeys := make(map[string]int64)
-	mutex := &sync.RWMutex{}
+	seenMutex := &sync.RWMutex{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		attempt.Add(1)
@@ -65,14 +65,14 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			processedEvents.Add(1)
 			key, found := ev.Attrs["body.str"]
 			assert.True(t, found)
-			mutex.Lock()
+			seenMutex.Lock()
 			sKey := key.(string)
 			_, f := seenKeys[sKey]
 			if !f {
 				seenKeys[sKey] = 0
 			}
 			seenKeys[sKey] += 1
-			mutex.Unlock()
+			seenMutex.Unlock()
 		}
 
 		lastCall.Store(time.Now().UnixNano())
@@ -156,6 +156,21 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 
 	err = sc.Shutdown()
 	assert.Nil(t, err, err)
+
+	stats := sc.Statistics()
+	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Enqueued())
+	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Processed())
+	assert.Equal(t, uint64(0), stats.Events.Waiting())
+	assert.Equal(t, uint64(0), stats.Events.Dropped())
+	assert.Equal(t, uint64(0), stats.Events.Broken())
+	assert.Equal(t, 1.0, stats.Events.SuccessRate())
+
+	assert.Equal(t, uint64(0), stats.Buffers.Waiting())
+	assert.Equal(t, uint64(0), stats.Buffers.Dropped())
+	assert.Equal(t, uint64(0), stats.Buffers.Broken())
+	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
+
+	assert.Equal(t, 1.0, stats.Transfer.SuccessRate())
 
 	assert.Equal(t, seenKeys, expectedKeys)
 	assert.Equal(t, int(processedEvents.Load()), int(ExpectedLogs), "processed items")

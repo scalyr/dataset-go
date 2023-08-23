@@ -170,8 +170,12 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 					buf = getBuffer(key)
 				} else {
 					client.Logger.Error("Cannot add bundle", zap.Error(err))
-					// TODO: what to do? For now, lets skip it
-					continue
+					// TODO: what to do?
+					// this error happens when the buffer is already publishing
+					// we can solve it by waiting little bit
+					// since we are also returning TooMuch we will get new buffer
+					// few lines below
+					time.Sleep(10 * time.Millisecond)
 				}
 			}
 

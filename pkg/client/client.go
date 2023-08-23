@@ -307,8 +307,9 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				client.buffersProcessed.Add(1)
 				continue
 			}
-			client.sendBufferWithRetryPolicy(buf)
-			client.buffersProcessed.Add(1)
+			if client.sendBufferWithRetryPolicy(buf) {
+				client.buffersProcessed.Add(1)
+			}
 		} else {
 			client.Logger.Error(
 				"Cannot convert message to Buffer",
@@ -322,7 +323,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 }
 
 // Sends buffer to DataSet. If not succeeds and try is possible (it retryable), try retry until possible (timeout)
-func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
+func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool {
 	// Do not use NewExponentialBackOff since it calls Reset and the code here must
 	// call Reset after changing the InitialInterval (this saves an unnecessary call to Now).
 	expBackoff := backoff.ExponentialBackOff{
@@ -347,7 +348,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 				lastHttpStatus = HttpErrorHasErrorMessage
 				client.LastHttpStatus.Store(lastHttpStatus)
 				client.onBufferDrop(buf, lastHttpStatus, err)
-				break // exit loop (failed to send buffer)
+				return false // exit loop (failed to send buffer)
 			}
 			lastHttpStatus = HttpErrorCannotConnect
 			client.LastHttpStatus.Store(lastHttpStatus)
@@ -375,7 +376,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 		if isOkStatus(lastHttpStatus) {
 			// everything was fine, there is no need for retries
 			client.bytesAPIAccepted.Add(uint64(payloadLen))
-			break // exit loop (buffer sent)
+			return true // exit loop (buffer sent)
 		}
 
 		backoffDelay := expBackoff.NextBackOff()
@@ -384,7 +385,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 			// throw away the batch
 			err = fmt.Errorf("max elapsed time expired %w", err)
 			client.onBufferDrop(buf, lastHttpStatus, err)
-			break // exit loop (failed to send buffer)
+			return false // exit loop (failed to send buffer)
 		}
 
 		if isRetryableStatus(lastHttpStatus) {
@@ -406,7 +407,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) {
 		} else {
 			err = fmt.Errorf("non recoverable error %w", err)
 			client.onBufferDrop(buf, lastHttpStatus, err)
-			break // exit loop (failed to send buffer)
+			return false // exit loop (failed to send buffer)
 		}
 		retryNum++
 	}
@@ -420,9 +421,8 @@ func (client *DataSetClient) statisticsSweeper() {
 	}
 }
 
-func (client *DataSetClient) logStatistics() {
-	mb := float64(1024 * 1024)
-
+// Statistics returns statistics about events, buffers processing from the start time
+func (client *DataSetClient) Statistics() *Statistics {
 	// for how long are events being processed
 	firstAt := time.Unix(0, client.firstReceivedAt.Load())
 	lastAt := time.Unix(0, client.lastAcceptedAt.Load())
@@ -431,7 +431,7 @@ func (client *DataSetClient) logStatistics() {
 
 	// if nothing was processed, do not log statistics
 	if processingInSec <= 0 {
-		return
+		return nil
 	}
 
 	// log buffer stats
@@ -439,46 +439,92 @@ func (client *DataSetClient) logStatistics() {
 	bEnqueued := client.buffersEnqueued.Load()
 	bDropped := client.buffersDropped.Load()
 	bBroken := client.buffersBroken.Load()
-	client.Logger.Info(
-		"Buffers' Queue Stats:",
-		zap.Uint64("processed", bProcessed),
-		zap.Uint64("enqueued", bEnqueued),
-		zap.Uint64("dropped", bDropped),
-		zap.Uint64("broken", bBroken),
-		zap.Uint64("waiting", bEnqueued-bProcessed-bDropped-bBroken),
-		zap.Float64("processingS", processingInSec),
-	)
+
+	buffersStats := QueueStats{
+		bEnqueued,
+		bProcessed,
+		bDropped,
+		bBroken,
+		processingDur,
+	}
 
 	// log events stats
 	eProcessed := client.eventsProcessed.Load()
 	eEnqueued := client.eventsEnqueued.Load()
 	eDropped := client.eventsDropped.Load()
 	eBroken := client.eventsBroken.Load()
+
+	eventsStats := QueueStats{
+		eEnqueued,
+		eProcessed,
+		eDropped,
+		eBroken,
+		processingDur,
+	}
+
+	// log transferred stats
+	bAPISent := client.bytesAPISent.Load()
+	bAPIAccepted := client.bytesAPIAccepted.Load()
+	transferStats := TransferStats{
+		bAPISent,
+		bAPIAccepted,
+		bProcessed,
+		processingDur,
+	}
+
+	return &Statistics{
+		Buffers:  buffersStats,
+		Events:   eventsStats,
+		Transfer: transferStats,
+	}
+}
+
+func (client *DataSetClient) logStatistics() {
+	stats := client.Statistics()
+	if stats == nil {
+		return
+	}
+
+	b := stats.Buffers
+	client.Logger.Info(
+		"Buffers' Queue Stats:",
+		zap.Uint64("processed", b.Processed()),
+		zap.Uint64("enqueued", b.Enqueued()),
+		zap.Uint64("dropped", b.Dropped()),
+		zap.Uint64("broken", b.Broken()),
+		zap.Uint64("waiting", b.Waiting()),
+		zap.Float64("successRate", b.SuccessRate()),
+		zap.Float64("processingS", b.ProcessingTime().Seconds()),
+		zap.Duration("processing", b.ProcessingTime()),
+	)
+
+	// log events stats
+	e := stats.Events
 	client.Logger.Info(
 		"Events' Queue Stats:",
-		zap.Uint64("processed", eProcessed),
-		zap.Uint64("enqueued", eEnqueued),
-		zap.Uint64("dropped", eDropped),
-		zap.Uint64("broken", eBroken),
-		zap.Uint64("waiting", eEnqueued-eProcessed-eDropped-eBroken),
-		zap.Float64("processingS", processingInSec),
+		zap.Uint64("processed", e.Processed()),
+		zap.Uint64("enqueued", e.Enqueued()),
+		zap.Uint64("dropped", e.Dropped()),
+		zap.Uint64("broken", e.Broken()),
+		zap.Uint64("waiting", e.Waiting()),
+		zap.Float64("successRate", e.SuccessRate()),
+		zap.Float64("processingS", e.ProcessingTime().Seconds()),
+		zap.Duration("processing", e.ProcessingTime()),
 	)
 
 	// log transferred stats
-	bAPISent := float64(client.bytesAPISent.Load())
-	bAPIAccepted := float64(client.bytesAPIAccepted.Load())
-	throughput := bAPIAccepted / mb / processingInSec
-	successRate := (bAPIAccepted + 1) / (bAPISent + 1)
-	perBuffer := (bAPIAccepted) / float64(bProcessed)
+	mb := float64(1024 * 1024)
+	t := stats.Transfer
 	client.Logger.Info(
 		"Transfer Stats:",
-		zap.Float64("bytesSentMB", bAPISent/mb),
-		zap.Float64("bytesAcceptedMB", bAPIAccepted/mb),
-		zap.Float64("throughputMBpS", throughput),
-		zap.Float64("perBufferMB", perBuffer/mb),
-		zap.Float64("successRate", successRate),
-		zap.Float64("processingS", processingInSec),
-		zap.Duration("processing", processingDur),
+		zap.Float64("bytesSentMB", float64(t.BytesSent())/mb),
+		zap.Float64("bytesAcceptedMB", float64(t.BytesAccepted())/mb),
+		zap.Float64("throughputMBpS", t.ThroughputBpS()/mb),
+		zap.Uint64("buffersProcessed", t.BuffersProcessed()),
+		zap.Float64("perBufferMB", t.AvgBufferBytes()/mb),
+		zap.Float64("successRate", t.SuccessRate()),
+		zap.Float64("processingS", t.ProcessingTime().Seconds()),
+		zap.Duration("processing", t.ProcessingTime()),
 	)
 }
 

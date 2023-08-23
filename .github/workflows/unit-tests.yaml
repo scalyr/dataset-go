@@ -1,4 +1,4 @@
-name: Check code quality
+name: Unit Tests
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '0 6 * * *'
 
 permissions:
   actions: write  # Needed for skip-duplicate-jobs job
@@ -30,7 +30,11 @@ jobs:
           github_token: ${{ github.token }}
 
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ['1.19', '1.20']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
 
@@ -43,39 +47,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.19
+          go-version: ${{ matrix.go }}
           cache: true
           cache-dependency-path: |
             go.sum
-            examples/**/go.sum
-      - name: Install pre-commit
-        run: |
-          python -m pip install -U pip
-          python -m pip install pre-commit
-      - name: Install pre-commit hooks
-        run: |
-          pre-commit install
-      - name: Install Go tools
-        run: |
-          ./scripts/install-dev-tools.sh
       - name: Run go mod vendor
         run: |
           go mod vendor
-      - name: Run pre-commit
+      - name: Code tests
         run: |
-          pre-commit run -a
-      - name: Code coverage
+          make test
+      - name: Run Tests Many Times
+        # Run test multiple times to check for flaky tests
+        if: github.ref_name == 'main'
         run: |
-          make coverage
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
-          verbose: true
-      - name: Build Examples
-        run: |
-          make build-examples
-      - name: Check SSL Certificates
-        run: |
-          make test-ssl-certificates
+          make test-many-times COUNT=2
