@@ -119,9 +119,12 @@ func (stats TransferStats) ProcessingTime() time.Duration {
 }
 
 // Statistics store statistics about queues and transferred data
+// These are statistics from the beginning of the processing
 type Statistics struct {
-	// Buffers stores
-	Buffers  QueueStats    `mapstructure:"buffers"`
-	Events   QueueStats    `mapstructure:"events"`
+	// Events stores statistics about processing events
+	Events QueueStats `mapstructure:"events"`
+	// Buffers stores statistics about processing buffers
+	Buffers QueueStats `mapstructure:"buffers"`
+	// Transfer stores statistics about data transfers
 	Transfer TransferStats `mapstructure:"transfer"`
 }

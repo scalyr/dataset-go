@@ -421,6 +421,7 @@ func (client *DataSetClient) statisticsSweeper() {
 	}
 }
 
+// Statistics returns statistics about events, buffers processing from the start time
 func (client *DataSetClient) Statistics() *Statistics {
 	// for how long are events being processed
 	firstAt := time.Unix(0, client.firstReceivedAt.Load())
