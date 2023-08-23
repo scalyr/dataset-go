@@ -170,8 +170,12 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 					buf = getBuffer(key)
 				} else {
 					client.Logger.Error("Cannot add bundle", zap.Error(err))
-					// TODO: what to do? For now, lets skip it
-					continue
+					// TODO: what to do?
+					// in the past we have skipped it, but it was failing in CI/CD
+					// so lets wait for little bit and do not skip
+					// hopefully after this fix
+					time.Sleep(10 * time.Millisecond)
+					// continue
 				}
 			}
 
