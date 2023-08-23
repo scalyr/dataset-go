@@ -422,8 +422,6 @@ func (client *DataSetClient) statisticsSweeper() {
 }
 
 func (client *DataSetClient) Statistics() *Statistics {
-	mb := float64(1024 * 1024)
-
 	// for how long are events being processed
 	firstAt := time.Unix(0, client.firstReceivedAt.Load())
 	lastAt := time.Unix(0, client.lastAcceptedAt.Load())
@@ -442,12 +440,11 @@ func (client *DataSetClient) Statistics() *Statistics {
 	bBroken := client.buffersBroken.Load()
 
 	buffersStats := QueueStats{
-		bProcessed,
 		bEnqueued,
+		bProcessed,
 		bDropped,
 		bBroken,
-		bEnqueued - bProcessed - bDropped - bBroken,
-		processingInSec,
+		processingDur,
 	}
 
 	// log events stats
@@ -457,27 +454,20 @@ func (client *DataSetClient) Statistics() *Statistics {
 	eBroken := client.eventsBroken.Load()
 
 	eventsStats := QueueStats{
-		eProcessed,
 		eEnqueued,
+		eProcessed,
 		eDropped,
 		eBroken,
-		eEnqueued - eProcessed - eDropped - eBroken,
-		processingInSec,
+		processingDur,
 	}
 
 	// log transferred stats
-	bAPISent := float64(client.bytesAPISent.Load())
-	bAPIAccepted := float64(client.bytesAPIAccepted.Load())
-	throughput := bAPIAccepted / mb / processingInSec
-	successRate := (bAPIAccepted + 1) / (bAPISent + 1)
-	perBuffer := (bAPIAccepted) / float64(bProcessed)
+	bAPISent := client.bytesAPISent.Load()
+	bAPIAccepted := client.bytesAPIAccepted.Load()
 	transferStats := TransferStats{
-		bAPISent / mb,
-		bAPIAccepted / mb,
-		throughput,
-		perBuffer / mb,
-		successRate,
-		processingInSec,
+		bAPISent,
+		bAPIAccepted,
+		bProcessed,
 		processingDur,
 	}
 
@@ -497,37 +487,43 @@ func (client *DataSetClient) logStatistics() {
 	b := stats.Buffers
 	client.Logger.Info(
 		"Buffers' Queue Stats:",
-		zap.Uint64("processed", b.Processed),
-		zap.Uint64("enqueued", b.Enqueued),
-		zap.Uint64("dropped", b.Dropped),
-		zap.Uint64("broken", b.Broken),
-		zap.Uint64("waiting", b.Waiting),
-		zap.Float64("processingS", b.ProcessingS),
+		zap.Uint64("processed", b.Processed()),
+		zap.Uint64("enqueued", b.Enqueued()),
+		zap.Uint64("dropped", b.Dropped()),
+		zap.Uint64("broken", b.Broken()),
+		zap.Uint64("waiting", b.Waiting()),
+		zap.Float64("successRate", b.SuccessRate()),
+		zap.Float64("processingS", b.ProcessingTime().Seconds()),
+		zap.Duration("processing", b.ProcessingTime()),
 	)
 
 	// log events stats
 	e := stats.Events
 	client.Logger.Info(
 		"Events' Queue Stats:",
-		zap.Uint64("processed", e.Processed),
-		zap.Uint64("enqueued", e.Enqueued),
-		zap.Uint64("dropped", e.Dropped),
-		zap.Uint64("broken", e.Broken),
-		zap.Uint64("waiting", e.Waiting),
-		zap.Float64("processingS", e.ProcessingS),
+		zap.Uint64("processed", e.Processed()),
+		zap.Uint64("enqueued", e.Enqueued()),
+		zap.Uint64("dropped", e.Dropped()),
+		zap.Uint64("broken", e.Broken()),
+		zap.Uint64("waiting", e.Waiting()),
+		zap.Float64("successRate", e.SuccessRate()),
+		zap.Float64("processingS", e.ProcessingTime().Seconds()),
+		zap.Duration("processing", e.ProcessingTime()),
 	)
 
 	// log transferred stats
+	mb := float64(1024 * 1024)
 	t := stats.Transfer
 	client.Logger.Info(
 		"Transfer Stats:",
-		zap.Float64("bytesSentMB", t.BytesSentMB),
-		zap.Float64("bytesAcceptedMB", t.BytesAcceptedMB),
-		zap.Float64("throughputMBpS", t.ThroughputMBpS),
-		zap.Float64("perBufferMB", t.PerBufferMB),
-		zap.Float64("successRate", t.SuccessRate),
-		zap.Float64("processingS", t.ProcessingS),
-		zap.Duration("processing", t.Processing),
+		zap.Float64("bytesSentMB", float64(t.BytesSent())/mb),
+		zap.Float64("bytesAcceptedMB", float64(t.BytesAccepted())/mb),
+		zap.Float64("throughputMBpS", t.ThroughputBpS()/mb),
+		zap.Uint64("buffersProcessed", t.BuffersProcessed()),
+		zap.Float64("perBufferMB", t.AvgBufferBytes()/mb),
+		zap.Float64("successRate", t.SuccessRate()),
+		zap.Float64("processingS", t.ProcessingTime().Seconds()),
+		zap.Duration("processing", t.ProcessingTime()),
 	)
 }
 
