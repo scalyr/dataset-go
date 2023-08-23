@@ -1,5 +1,9 @@
 # Release Notes
 
+## 0.14.0
+
+* break: drop support for Go 1.19 and add testing for Go 1.21
+
 ## 0.13.0
 
 * fix: do not drop event when buffer is being published
