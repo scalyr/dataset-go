@@ -84,7 +84,13 @@ func (s byKey) Swap(i, j int) {
 }
 
 func (s byKey) Less(i, j int) bool {
-	return s[i][0][attributeKey].(string) < s[j][0][attributeKey].(string)
+	if s[i][0][attributeKey] == nil {
+		return true
+	} else if s[j][0][attributeKey] == nil {
+		return false
+	} else {
+		return s[i][0][attributeKey].(string) < s[j][0][attributeKey].(string)
+	}
 }
 
 func TestAddEventsRetry(t *testing.T) {
