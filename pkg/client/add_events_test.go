@@ -73,6 +73,7 @@ type (
 
 const attributeKey = "key"
 
+// byKey implement sort.Interface - https://pkg.go.dev/sort#Interface
 type byKey [][]tAttr
 
 func (s byKey) Len() int {
@@ -83,6 +84,8 @@ func (s byKey) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
+// Less returns true if ith element is nil or it's string representation
+// is before jth element.
 func (s byKey) Less(i, j int) bool {
 	if s[i][0][attributeKey] == nil {
 		return true
