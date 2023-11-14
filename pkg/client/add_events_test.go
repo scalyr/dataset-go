@@ -99,6 +99,49 @@ func (s byKey) Less(i, j int) bool {
 	}
 }
 
+func TestAddEvents(t *testing.T) {
+	meter := otel.Meter("test")
+	tests := []struct {
+		name  string
+		meter *metric.Meter
+	}{
+		{
+			name:  "no meter",
+			meter: nil,
+		},
+		{
+			name:  "with meter",
+			meter: &meter,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			// GIVEN
+			attempt.Store(0)
+			server := mockServerDefaultPayload(t, http.StatusOK)
+			defer server.Close()
+			dataSetConfig := newDataSetConfig(server.URL, buffer_config.NewDefaultDataSetBufferSettings(), server_host_config.NewDefaultDataSetServerHostSettings())
+			client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, tt.meter)
+			require.Nil(t, err)
+
+			sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
+			client.SessionInfo = sessionInfo
+			event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
+			eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+
+			// WHEN
+			errAdd := client.AddEvents([]*add_events.EventBundle{eventBundle1})
+			errShutdown := client.Shutdown()
+
+			// THEN
+			assert.Nil(t, errAdd)
+			assert.Nil(t, errShutdown)
+			lastError := client.LastError()
+			assert.Nil(t, lastError)
+		})
+	}
+}
+
 func TestAddEventsRetry(t *testing.T) {
 	attempt.Store(0)
 	wasSuccessful := atomic.Bool{}
@@ -770,49 +813,6 @@ func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *test
 	// THEN event is rejected
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "AddEvents - reject batch: rejecting - Last HTTP request contains an error: failed to handle previous request")
-}
-
-func TestAddEventsWithMetrics(t *testing.T) {
-	meter := otel.Meter("test")
-	tests := []struct {
-		name  string
-		meter *metric.Meter
-	}{
-		{
-			name:  "no meter",
-			meter: nil,
-		},
-		{
-			name:  "with meter",
-			meter: &meter,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(*testing.T) {
-			// GIVEN
-			attempt.Store(0)
-			server := mockServerDefaultPayload(t, http.StatusOK)
-			defer server.Close()
-			dataSetConfig := newDataSetConfig(server.URL, buffer_config.NewDefaultDataSetBufferSettings(), server_host_config.NewDefaultDataSetServerHostSettings())
-			client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, tt.meter)
-			require.Nil(t, err)
-
-			sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-			client.SessionInfo = sessionInfo
-			event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
-			eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
-
-			// WHEN
-			errAdd := client.AddEvents([]*add_events.EventBundle{eventBundle1})
-			errShutdown := client.Shutdown()
-
-			// THEN
-			assert.Nil(t, errAdd)
-			assert.Nil(t, errShutdown)
-			lastError := client.LastError()
-			assert.Nil(t, lastError)
-		})
-	}
 }
 
 func TestAddEventsServerHostLogic(t *testing.T) {
