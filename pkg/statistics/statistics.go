@@ -199,6 +199,14 @@ func (stats *Statistics) EventsBroken() uint64 {
 	return stats.eventsBroken.Load()
 }
 
+func (stats *Statistics) BytesAPISent() uint64 {
+	return stats.bytesAPISent.Load()
+}
+
+func (stats *Statistics) BytesAPIAccepted() uint64 {
+	return stats.bytesAPIAccepted.Load()
+}
+
 func (stats *Statistics) BuffersEnqueuedAdd(i uint64) {
 	stats.buffersEnqueued.Add(i)
 	stats.add(stats.cBuffersEnqueued, i)

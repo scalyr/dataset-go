@@ -19,6 +19,7 @@ package statistics
 import (
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -142,4 +143,70 @@ func TestEventsBroken(t *testing.T) {
 			assert.Equal(t, v, stats.EventsBroken())
 		})
 	}
+}
+
+func TestBytesAPISent(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			stats, err := NewStatistics(tt.meter)
+			require.Nil(t, err)
+			v := uint64(rand.Int())
+			stats.BytesAPISentAdd(v)
+			assert.Equal(t, v, stats.BytesAPISent())
+		})
+	}
+}
+
+func TestBytesAPIAccepted(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			stats, err := NewStatistics(tt.meter)
+			require.Nil(t, err)
+			v := uint64(rand.Int())
+			stats.BytesAPIAcceptedAdd(v)
+			assert.Equal(t, v, stats.BytesAPIAccepted())
+		})
+	}
+}
+
+func TestExport(t *testing.T) {
+	stats, err := NewStatistics(nil)
+	require.Nil(t, err)
+
+	stats.BuffersEnqueuedAdd(1000)
+	stats.BuffersProcessedAdd(100)
+	stats.BuffersDroppedAdd(10)
+	stats.BuffersBrokenAdd(1)
+
+	stats.EventsEnqueuedAdd(2000)
+	stats.EventsProcessedAdd(200)
+	stats.EventsDroppedAdd(20)
+	stats.EventsBrokenAdd(2)
+
+	stats.BytesAPISentAdd(3000)
+	stats.BytesAPIAcceptedAdd(300)
+
+	exp := stats.Export(time.Second)
+	assert.Equal(t, &ExportedStatistics{
+		Buffers: QueueStats{
+			enqueued:       1000,
+			processed:      100,
+			dropped:        10,
+			broken:         1,
+			processingTime: time.Second,
+		},
+		Events: QueueStats{
+			enqueued:       2000,
+			processed:      200,
+			dropped:        20,
+			broken:         2,
+			processingTime: time.Second,
+		},
+		Transfer: TransferStats{
+			bytesSent:        3000,
+			bytesAccepted:    300,
+			buffersProcessed: 100,
+			processingTime:   time.Second,
+		},
+	}, exp)
 }
