@@ -26,10 +26,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-func key(key string) string {
-	return "dataset." + key
-}
-
+// Statistics related to data processing
 type Statistics struct {
 	buffersEnqueued  atomic.Uint64
 	buffersProcessed atomic.Uint64
@@ -63,6 +60,9 @@ type Statistics struct {
 	hResponseTime metric.Int64Histogram
 }
 
+// NewStatistics creates structure to keep track of data processing.
+// If meter is not nil, then Open Telemetry is used for collecting metrics
+// as well.
 func NewStatistics(meter *metric.Meter) (*Statistics, error) {
 	statistics := &Statistics{
 		buffersEnqueued:  atomic.Uint64{},
@@ -84,6 +84,10 @@ func NewStatistics(meter *metric.Meter) (*Statistics, error) {
 	err := statistics.initMetrics(meter)
 
 	return statistics, err
+}
+
+func key(key string) string {
+	return "dataset." + key
 }
 
 func (stats *Statistics) initMetrics(meter *metric.Meter) error {
@@ -275,6 +279,7 @@ func (stats *Statistics) add(counter metric.Int64UpDownCounter, i uint64) {
 	}
 }
 
+// Export exports statistics related to the processing
 func (stats *Statistics) Export(processingDur time.Duration) *ExportedStatistics {
 	// log buffer stats
 	bProcessed := stats.buffersProcessed.Load()

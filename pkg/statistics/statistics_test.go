@@ -209,4 +209,40 @@ func TestExport(t *testing.T) {
 			processingTime:   time.Second,
 		},
 	}, exp)
+
+	assert.Equal(t, exp.Buffers.Enqueued(), uint64(1000))
+	assert.Equal(t, exp.Buffers.Processed(), uint64(100))
+	assert.Equal(t, exp.Buffers.Dropped(), uint64(10))
+	assert.Equal(t, exp.Buffers.Broken(), uint64(1))
+	assert.Equal(t, exp.Buffers.Waiting(), uint64(889))
+	assert.Equal(t, exp.Buffers.ProcessingTime(), time.Second)
+	assert.Equal(t, exp.Buffers.SuccessRate(), .89)
+
+	assert.Equal(t, exp.Events.Enqueued(), uint64(2000))
+	assert.Equal(t, exp.Events.Processed(), uint64(200))
+	assert.Equal(t, exp.Events.Dropped(), uint64(20))
+	assert.Equal(t, exp.Events.Broken(), uint64(2))
+	assert.Equal(t, exp.Events.Waiting(), uint64(1778))
+	assert.Equal(t, exp.Events.ProcessingTime(), time.Second)
+	assert.Equal(t, exp.Events.SuccessRate(), .89)
+
+	assert.Equal(t, exp.Transfer.BytesSent(), uint64(3000))
+	assert.Equal(t, exp.Transfer.BytesAccepted(), uint64(300))
+	assert.Equal(t, exp.Transfer.BuffersProcessed(), uint64(100))
+	assert.Equal(t, exp.Transfer.SuccessRate(), float64(0.1))
+	assert.Equal(t, exp.Transfer.ThroughputBpS(), float64(300))
+	assert.Equal(t, exp.Transfer.AvgBufferBytes(), float64(3))
+	assert.Equal(t, exp.Transfer.ProcessingTime(), time.Second)
+}
+
+func TestExportNoTraffic(t *testing.T) {
+	stats, err := NewStatistics(nil)
+	require.Nil(t, err)
+
+	exp := stats.Export(time.Second)
+	assert.Equal(t, exp.Events.SuccessRate(), float64(0))
+	assert.Equal(t, exp.Buffers.SuccessRate(), float64(0))
+	assert.Equal(t, exp.Transfer.SuccessRate(), float64(0))
+	assert.Equal(t, exp.Transfer.ThroughputBpS(), float64(0))
+	assert.Equal(t, exp.Transfer.AvgBufferBytes(), float64(0))
 }
