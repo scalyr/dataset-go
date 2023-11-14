@@ -33,12 +33,13 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 
+	_ "net/http/pprof"
+
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/scalyr/dataset-go/pkg/buffer"
 	"github.com/scalyr/dataset-go/pkg/config"
 	"github.com/scalyr/dataset-go/pkg/server_host_config"
-
-	_ "net/http/pprof"
+	"github.com/scalyr/dataset-go/pkg/statistics"
 
 	"github.com/cskr/pubsub"
 	"github.com/google/uuid"
@@ -96,7 +97,7 @@ type DataSetClient struct {
 	addEventsEndpointUrl string
 	userAgent            string
 	serverHost           string
-	statistics           *Statistics
+	statistics           *statistics.Statistics
 }
 
 func NewClient(
@@ -153,7 +154,7 @@ func NewClient(
 		userAgent = userAgent + ";" + *userAgentSuffix
 	}
 
-	statictics, err := NewStatistics(meter)
+	stats, err := statistics.NewStatistics(meter)
 	if err != nil {
 		return nil, fmt.Errorf("it was not possible to create statistics: %w", err)
 	}
@@ -180,7 +181,7 @@ func NewClient(
 		addEventsEndpointUrl:            addEventsEndpointUrl,
 		userAgent:                       userAgent,
 		serverHost:                      serverHost,
-		statistics:                      statictics,
+		statistics:                      stats,
 	}
 
 	// run buffer sweeper if requested
@@ -285,9 +286,9 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 		client.Logger.Debug("Received Buffer from channel",
 			zap.String("session", session),
 			zap.Int("processedMsgCnt", processedMsgCnt),
-			zap.Uint64("buffersEnqueued", client.statistics.buffersEnqueued.Load()),
-			zap.Uint64("buffersProcessed", client.statistics.buffersProcessed.Load()),
-			zap.Uint64("buffersDropped", client.statistics.buffersDropped.Load()),
+			zap.Uint64("buffersEnqueued", client.statistics.BuffersEnqueued()),
+			zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
+			zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
 		)
 		buf, bufferReadSuccess := msg.(*buffer.Buffer)
 		if bufferReadSuccess {
@@ -415,7 +416,7 @@ func (client *DataSetClient) statisticsSweeper() {
 }
 
 // Statistics returns statistics about events, buffers processing from the start time
-func (client *DataSetClient) Statistics() *ExportedStatistics {
+func (client *DataSetClient) Statistics() *statistics.ExportedStatistics {
 	// for how long are events being processed
 	firstAt := time.Unix(0, client.firstReceivedAt.Load())
 	lastAt := time.Unix(0, client.lastAcceptedAt.Load())

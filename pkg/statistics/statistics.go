@@ -1,9 +1,27 @@
-package client
+/*
+ * Copyright 2023 SentinelOne, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package statistics
 
 import (
 	"context"
 	"sync/atomic"
 	"time"
+
+	"github.com/scalyr/dataset-go/pkg/buffer_config"
 
 	"go.opentelemetry.io/otel/metric"
 )
@@ -40,6 +58,9 @@ type Statistics struct {
 
 	cBytesAPISent     metric.Int64UpDownCounter
 	cBytesAPIAccepted metric.Int64UpDownCounter
+
+	hPayloadSize  metric.Int64Histogram
+	hResponseTime metric.Int64Histogram
 }
 
 func NewStatistics(meter *metric.Meter) (*Statistics, error) {
@@ -117,7 +138,65 @@ func (stats *Statistics) initMetrics(meter *metric.Meter) error {
 		return err
 	}
 
+	var payloadBuckets []float64
+	for _, r := range [11]float64{0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 0.9, 0.95, 1.0, 1.1, 2} {
+		payloadBuckets = append(payloadBuckets, r*buffer_config.LimitBufferSize)
+	}
+	stats.hPayloadSize, err = (*meter).Int64Histogram(key(
+		"payloadSize"),
+		metric.WithExplicitBucketBoundaries(payloadBuckets...),
+		metric.WithUnit("b"),
+	)
+	if err != nil {
+		return err
+	}
+
+	var responseBuckets []float64
+	for i := 0; i < 12; i++ {
+		responseBuckets = append(responseBuckets, float64(4*2^i))
+	}
+	stats.hResponseTime, err = (*meter).Int64Histogram(key(
+		"responseTime"),
+		metric.WithExplicitBucketBoundaries(responseBuckets...),
+		metric.WithUnit("ms"),
+	)
+	if err != nil {
+		return err
+	}
+
 	return err
+}
+
+func (stats *Statistics) BuffersEnqueued() uint64 {
+	return stats.buffersEnqueued.Load()
+}
+
+func (stats *Statistics) BuffersProcessed() uint64 {
+	return stats.buffersProcessed.Load()
+}
+
+func (stats *Statistics) BuffersDropped() uint64 {
+	return stats.buffersDropped.Load()
+}
+
+func (stats *Statistics) BuffersBroken() uint64 {
+	return stats.buffersBroken.Load()
+}
+
+func (stats *Statistics) EventsEnqueued() uint64 {
+	return stats.eventsEnqueued.Load()
+}
+
+func (stats *Statistics) EventsProcessed() uint64 {
+	return stats.eventsProcessed.Load()
+}
+
+func (stats *Statistics) EventsDropped() uint64 {
+	return stats.eventsDropped.Load()
+}
+
+func (stats *Statistics) EventsBroken() uint64 {
+	return stats.eventsBroken.Load()
 }
 
 func (stats *Statistics) BuffersEnqueuedAdd(i uint64) {
@@ -168,6 +247,18 @@ func (stats *Statistics) BytesAPISentAdd(i uint64) {
 func (stats *Statistics) BytesAPIAcceptedAdd(i uint64) {
 	stats.bytesAPIAccepted.Add(i)
 	stats.add(stats.cBytesAPIAccepted, i)
+}
+
+func (stats *Statistics) PayloadSizeRecord(payloadSizeInBytes int64) {
+	if stats.hPayloadSize != nil {
+		stats.hPayloadSize.Record(context.Background(), payloadSizeInBytes)
+	}
+}
+
+func (stats *Statistics) ResponseTimeRecord(duration time.Duration) {
+	if stats.hResponseTime != nil {
+		stats.hResponseTime.Record(context.Background(), duration.Milliseconds())
+	}
 }
 
 func (stats *Statistics) add(counter metric.Int64UpDownCounter, i uint64) {
