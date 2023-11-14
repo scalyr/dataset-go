@@ -30,10 +30,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scalyr/dataset-go/pkg/server_host_config"
-
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 	"github.com/scalyr/dataset-go/pkg/config"
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -102,7 +101,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		},
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
-	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
 
 	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}

@@ -83,7 +83,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	for _, bundle := range bundles {
 		key := bundle.Key(client.Config.BufferSettings.GroupBy)
 		client.eventBundlePerKeyTopic.Pub(bundle, key)
-		client.eventsEnqueued.Add(1)
+		client.statistics.EventsEnqueuedAdd(1)
 	}
 
 	return nil
@@ -154,7 +154,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				zap.String("key", key),
 				zap.Any("msg", msg),
 			)
-			client.eventsBroken.Add(1)
+			client.statistics.EventsBrokenAdd(1)
 			client.lastAcceptedAt.Store(time.Now().UnixNano())
 			continue
 		}
@@ -190,7 +190,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 						buf = getBuffer(key)
 					} else {
 						client.Logger.Error("Cannot add bundle", zap.Error(err))
-						client.eventsDropped.Add(1)
+						client.statistics.EventsDroppedAdd(1)
 						continue
 					}
 				}
@@ -199,11 +199,11 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				}
 				if added == buffer.TooMuch {
 					client.Logger.Fatal("Bundle was not added for second time!", buf.ZapStats()...)
-					client.eventsDropped.Add(1)
+					client.statistics.EventsDroppedAdd(1)
 					continue
 				}
 			}
-			client.eventsProcessed.Add(1)
+			client.statistics.EventsProcessedAdd(1)
 
 			buf.SetStatus(buffer.Ready)
 			// it could happen that the buffer could have been published
@@ -218,7 +218,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				zap.String("key", key),
 				zap.Any("msg", msg),
 			)
-			client.eventsBroken.Add(1)
+			client.statistics.EventsBrokenAdd(1)
 		}
 	}
 }
@@ -226,13 +226,13 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 // isProcessingBuffers returns True if there are still some unprocessed buffers.
 // False otherwise.
 func (client *DataSetClient) isProcessingBuffers() bool {
-	return client.buffersEnqueued.Load() > (client.buffersProcessed.Load() + client.buffersDropped.Load() + client.buffersBroken.Load())
+	return client.statistics.buffersEnqueued.Load() > (client.statistics.buffersProcessed.Load() + client.statistics.buffersDropped.Load() + client.statistics.buffersBroken.Load())
 }
 
 // isProcessingEvents returns True if there are still some unprocessed events.
 // False otherwise.
 func (client *DataSetClient) isProcessingEvents() bool {
-	return client.eventsEnqueued.Load() > (client.eventsProcessed.Load() + client.eventsDropped.Load() + client.eventsBroken.Load())
+	return client.statistics.eventsEnqueued.Load() > (client.statistics.eventsProcessed.Load() + client.statistics.eventsDropped.Load() + client.statistics.eventsBroken.Load())
 }
 
 // Shutdown takes care of shutdown of client. It does following steps
@@ -273,7 +273,7 @@ func (client *DataSetClient) Shutdown() error {
 	// try (with timeout) to process (add into buffers) events,
 	retryNum := 0
 	expBackoff.Reset()
-	initialEventsDropped := client.eventsDropped.Load()
+	initialEventsDropped := client.statistics.eventsDropped.Load()
 	for client.isProcessingEvents() {
 		// log statistics
 		client.logStatistics()
@@ -283,8 +283,8 @@ func (client *DataSetClient) Shutdown() error {
 			"Shutting down - processing events",
 			zap.Int("retryNum", retryNum),
 			zap.Duration("backoffDelay", backoffDelay),
-			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
-			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
+			zap.Uint64("eventsEnqueued", client.statistics.eventsEnqueued.Load()),
+			zap.Uint64("eventsProcessed", client.statistics.eventsProcessed.Load()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
 			zap.Duration("maxElapsedTime", maxElapsedTime),
 		)
@@ -325,7 +325,7 @@ func (client *DataSetClient) Shutdown() error {
 	// do wait (with timeout) for all buffers to be sent to the server
 	retryNum = 0
 	expBackoff.Reset()
-	initialBuffersDropped := client.buffersDropped.Load()
+	initialBuffersDropped := client.statistics.buffersDropped.Load()
 	for client.isProcessingBuffers() {
 		// log statistics
 		client.logStatistics()
@@ -335,9 +335,9 @@ func (client *DataSetClient) Shutdown() error {
 			"Shutting down - processing buffers",
 			zap.Int("retryNum", retryNum),
 			zap.Duration("backoffDelay", backoffDelay),
-			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
-			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
-			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
+			zap.Uint64("buffersEnqueued", client.statistics.buffersEnqueued.Load()),
+			zap.Uint64("buffersProcessed", client.statistics.buffersProcessed.Load()),
+			zap.Uint64("buffersDropped", client.statistics.buffersDropped.Load()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
 			zap.Duration("maxElapsedTime", maxElapsedTime),
 		)
@@ -352,30 +352,30 @@ func (client *DataSetClient) Shutdown() error {
 	if client.isProcessingEvents() {
 		lastError = fmt.Errorf(
 			"not all events have been processed - %d",
-			client.eventsEnqueued.Load()-client.eventsProcessed.Load(),
+			client.statistics.eventsEnqueued.Load()-client.statistics.eventsProcessed.Load(),
 		)
 		client.Logger.Error(
 			"Shutting down - not all events have been processed",
-			zap.Uint64("eventsEnqueued", client.eventsEnqueued.Load()),
-			zap.Uint64("eventsProcessed", client.eventsProcessed.Load()),
+			zap.Uint64("eventsEnqueued", client.statistics.eventsEnqueued.Load()),
+			zap.Uint64("eventsProcessed", client.statistics.eventsProcessed.Load()),
 		)
 	}
 
 	if client.isProcessingBuffers() {
 		lastError = fmt.Errorf(
 			"not all buffers have been processed - %d",
-			client.buffersEnqueued.Load()-client.buffersProcessed.Load()-client.buffersDropped.Load(),
+			client.statistics.buffersEnqueued.Load()-client.statistics.buffersProcessed.Load()-client.statistics.buffersDropped.Load(),
 		)
 		client.Logger.Error(
 			"Shutting down - not all buffers have been processed",
 			zap.Int("retryNum", retryNum),
-			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
-			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
-			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
+			zap.Uint64("buffersEnqueued", client.statistics.buffersEnqueued.Load()),
+			zap.Uint64("buffersProcessed", client.statistics.buffersProcessed.Load()),
+			zap.Uint64("buffersDropped", client.statistics.buffersDropped.Load()),
 		)
 	}
 
-	eventsDropped := client.eventsDropped.Load() - initialEventsDropped
+	eventsDropped := client.statistics.eventsDropped.Load() - initialEventsDropped
 	if eventsDropped > 0 {
 		lastError = fmt.Errorf(
 			"some events were dropped during finishing - %d",
@@ -387,7 +387,7 @@ func (client *DataSetClient) Shutdown() error {
 		)
 	}
 
-	buffersDropped := client.buffersDropped.Load() - initialBuffersDropped
+	buffersDropped := client.statistics.buffersDropped.Load() - initialBuffersDropped
 	if buffersDropped > 0 {
 		lastError = fmt.Errorf(
 			"some buffers were dropped during finishing - %d",
@@ -446,7 +446,7 @@ func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 	}
 
 	err = client.apiCall(httpRequest, resp)
-	client.bytesAPISent.Add(uint64(len(payload)))
+	client.statistics.bytesAPISent.Add(uint64(len(payload)))
 
 	if strings.HasPrefix(resp.Status, "error") {
 		client.Logger.Error(

@@ -1,8 +1,226 @@
 package client
 
 import (
+	"context"
+	"sync/atomic"
 	"time"
+
+	"go.opentelemetry.io/otel/metric"
 )
+
+func key(key string) string {
+	return "dataset." + key
+}
+
+type Statistics struct {
+	buffersEnqueued  atomic.Uint64
+	buffersProcessed atomic.Uint64
+	buffersDropped   atomic.Uint64
+	buffersBroken    atomic.Uint64
+
+	eventsEnqueued  atomic.Uint64
+	eventsProcessed atomic.Uint64
+	eventsDropped   atomic.Uint64
+	eventsBroken    atomic.Uint64
+
+	bytesAPISent     atomic.Uint64
+	bytesAPIAccepted atomic.Uint64
+
+	meter *metric.Meter
+
+	cBuffersEnqueued  metric.Int64UpDownCounter
+	cBuffersProcessed metric.Int64UpDownCounter
+	cBuffersDropped   metric.Int64UpDownCounter
+	cBuffersBroken    metric.Int64UpDownCounter
+
+	cEventsEnqueued  metric.Int64UpDownCounter
+	cEventsProcessed metric.Int64UpDownCounter
+	cEventsDropped   metric.Int64UpDownCounter
+	cEventsBroken    metric.Int64UpDownCounter
+
+	cBytesAPISent     metric.Int64UpDownCounter
+	cBytesAPIAccepted metric.Int64UpDownCounter
+}
+
+func NewStatistics(meter *metric.Meter) (*Statistics, error) {
+	statistics := &Statistics{
+		buffersEnqueued:  atomic.Uint64{},
+		buffersProcessed: atomic.Uint64{},
+		buffersDropped:   atomic.Uint64{},
+		buffersBroken:    atomic.Uint64{},
+
+		eventsEnqueued:  atomic.Uint64{},
+		eventsProcessed: atomic.Uint64{},
+		eventsDropped:   atomic.Uint64{},
+		eventsBroken:    atomic.Uint64{},
+
+		bytesAPIAccepted: atomic.Uint64{},
+		bytesAPISent:     atomic.Uint64{},
+
+		meter: meter,
+	}
+
+	err := statistics.initMetrics(meter)
+
+	return statistics, err
+}
+
+func (stats *Statistics) initMetrics(meter *metric.Meter) error {
+	// if there is no meter, there is no need to initialise counters
+	if meter == nil {
+		return nil
+	}
+
+	stats.meter = meter
+
+	err := error(nil)
+	stats.cBuffersEnqueued, err = (*meter).Int64UpDownCounter(key("buffersEnqueued"))
+	if err != nil {
+		return err
+	}
+	stats.cBuffersProcessed, err = (*meter).Int64UpDownCounter(key("buffersProcessed"))
+	if err != nil {
+		return err
+	}
+	stats.cBuffersDropped, err = (*meter).Int64UpDownCounter(key("buffersDropped"))
+	if err != nil {
+		return err
+	}
+	stats.cBuffersBroken, err = (*meter).Int64UpDownCounter(key("buffersBroken"))
+	if err != nil {
+		return err
+	}
+
+	stats.cEventsEnqueued, err = (*meter).Int64UpDownCounter(key("eventsEnqueued"))
+	if err != nil {
+		return err
+	}
+	stats.cEventsProcessed, err = (*meter).Int64UpDownCounter(key("eventsProcessed"))
+	if err != nil {
+		return err
+	}
+	stats.cEventsDropped, err = (*meter).Int64UpDownCounter(key("eventsDropped"))
+	if err != nil {
+		return err
+	}
+	stats.cEventsBroken, err = (*meter).Int64UpDownCounter(key("eventsBroken"))
+	if err != nil {
+		return err
+	}
+
+	stats.cBytesAPISent, err = (*meter).Int64UpDownCounter(key("bytesAPISent"))
+	if err != nil {
+		return err
+	}
+	stats.cBytesAPIAccepted, err = (*meter).Int64UpDownCounter(key("bytesAPIAccepted"))
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+func (stats *Statistics) BuffersEnqueuedAdd(i uint64) {
+	stats.buffersEnqueued.Add(i)
+	stats.add(stats.cBuffersEnqueued, i)
+}
+
+func (stats *Statistics) BuffersProcessedAdd(i uint64) {
+	stats.buffersProcessed.Add(i)
+	stats.add(stats.cBuffersProcessed, i)
+}
+
+func (stats *Statistics) BuffersDroppedAdd(i uint64) {
+	stats.buffersDropped.Add(i)
+	stats.add(stats.cBuffersDropped, i)
+}
+
+func (stats *Statistics) BuffersBrokenAdd(i uint64) {
+	stats.buffersBroken.Add(i)
+	stats.add(stats.cBuffersBroken, i)
+}
+
+func (stats *Statistics) EventsEnqueuedAdd(i uint64) {
+	stats.eventsEnqueued.Add(i)
+	stats.add(stats.cEventsEnqueued, i)
+}
+
+func (stats *Statistics) EventsProcessedAdd(i uint64) {
+	stats.eventsProcessed.Add(i)
+	stats.add(stats.cEventsProcessed, i)
+}
+
+func (stats *Statistics) EventsDroppedAdd(i uint64) {
+	stats.eventsDropped.Add(i)
+	stats.add(stats.cEventsDropped, i)
+}
+
+func (stats *Statistics) EventsBrokenAdd(i uint64) {
+	stats.eventsBroken.Add(i)
+	stats.add(stats.cEventsBroken, i)
+}
+
+func (stats *Statistics) BytesAPISentAdd(i uint64) {
+	stats.bytesAPISent.Add(i)
+	stats.add(stats.cBytesAPISent, i)
+}
+
+func (stats *Statistics) BytesAPIAcceptedAdd(i uint64) {
+	stats.bytesAPIAccepted.Add(i)
+	stats.add(stats.cBytesAPIAccepted, i)
+}
+
+func (stats *Statistics) add(counter metric.Int64UpDownCounter, i uint64) {
+	if counter != nil {
+		counter.Add(context.Background(), int64(i))
+	}
+}
+
+func (stats *Statistics) Export(processingDur time.Duration) *ExportedStatistics {
+	// log buffer stats
+	bProcessed := stats.buffersProcessed.Load()
+	bEnqueued := stats.buffersEnqueued.Load()
+	bDropped := stats.buffersDropped.Load()
+	bBroken := stats.buffersBroken.Load()
+
+	buffersStats := QueueStats{
+		bEnqueued,
+		bProcessed,
+		bDropped,
+		bBroken,
+		processingDur,
+	}
+
+	// log events stats
+	eProcessed := stats.eventsProcessed.Load()
+	eEnqueued := stats.eventsEnqueued.Load()
+	eDropped := stats.eventsDropped.Load()
+	eBroken := stats.eventsBroken.Load()
+
+	eventsStats := QueueStats{
+		eEnqueued,
+		eProcessed,
+		eDropped,
+		eBroken,
+		processingDur,
+	}
+
+	// log transferred stats
+	bAPISent := stats.bytesAPISent.Load()
+	bAPIAccepted := stats.bytesAPIAccepted.Load()
+	transferStats := TransferStats{
+		bAPISent,
+		bAPIAccepted,
+		bProcessed,
+		processingDur,
+	}
+
+	return &ExportedStatistics{
+		Buffers:  buffersStats,
+		Events:   eventsStats,
+		Transfer: transferStats,
+	}
+}
 
 // QueueStats stores statistics related to the queue processing
 type QueueStats struct {
@@ -120,7 +338,7 @@ func (stats TransferStats) ProcessingTime() time.Duration {
 
 // Statistics store statistics about queues and transferred data
 // These are statistics from the beginning of the processing
-type Statistics struct {
+type ExportedStatistics struct {
 	// Events stores statistics about processing events
 	Events QueueStats `mapstructure:"events"`
 	// Buffers stores statistics about processing buffers

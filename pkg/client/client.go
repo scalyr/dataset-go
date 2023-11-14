@@ -27,8 +27,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scalyr/dataset-go/pkg/server_host_config"
-
 	"golang.org/x/exp/slices"
 
 	"github.com/scalyr/dataset-go/pkg/version"
@@ -38,11 +36,13 @@ import (
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/scalyr/dataset-go/pkg/buffer"
 	"github.com/scalyr/dataset-go/pkg/config"
+	"github.com/scalyr/dataset-go/pkg/server_host_config"
 
 	_ "net/http/pprof"
 
 	"github.com/cskr/pubsub"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -69,12 +69,8 @@ type DataSetClient struct {
 	Client      *http.Client
 	SessionInfo *add_events.SessionInfo
 	// map of known Buffer //TODO introduce cleanup
-	buffers          map[string]*buffer.Buffer
-	buffersAllMutex  sync.Mutex
-	buffersEnqueued  atomic.Uint64
-	buffersProcessed atomic.Uint64
-	buffersDropped   atomic.Uint64
-	buffersBroken    atomic.Uint64
+	buffers         map[string]*buffer.Buffer
+	buffersAllMutex sync.Mutex
 	// Pub/Sub topics of Buffers based on its session
 	BufferPerSessionTopic *pubsub.PubSub
 	LastHttpStatus        atomic.Uint32
@@ -84,15 +80,9 @@ type DataSetClient struct {
 	retryAfter            time.Time
 	retryAfterMu          sync.RWMutex
 	// indicates that client has been shut down and no further processing is possible
-	finished         atomic.Bool
-	Logger           *zap.Logger
-	eventsEnqueued   atomic.Uint64
-	eventsProcessed  atomic.Uint64
-	eventsDropped    atomic.Uint64
-	eventsBroken     atomic.Uint64
-	bytesAPISent     atomic.Uint64
-	bytesAPIAccepted atomic.Uint64
-	addEventsMutex   sync.Mutex
+	finished       atomic.Bool
+	Logger         *zap.Logger
+	addEventsMutex sync.Mutex
 	// Pub/Sub topics of EventBundles based on its key
 	eventBundlePerKeyTopic *pubsub.PubSub
 	// map of known Subscription channels of eventBundlePerKeyTopic
@@ -106,9 +96,16 @@ type DataSetClient struct {
 	addEventsEndpointUrl string
 	userAgent            string
 	serverHost           string
+	statistics           *Statistics
 }
 
-func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logger, userAgentSuffix *string) (*DataSetClient, error) {
+func NewClient(
+	cfg *config.DataSetConfig,
+	client *http.Client,
+	logger *zap.Logger,
+	userAgentSuffix *string,
+	meter *metric.Meter,
+) (*DataSetClient, error) {
 	logger.Info(
 		"Using config: ",
 		zap.String("config", cfg.String()),
@@ -156,16 +153,17 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		userAgent = userAgent + ";" + *userAgentSuffix
 	}
 
+	statictics, err := NewStatistics(meter)
+	if err != nil {
+		return nil, fmt.Errorf("it was not possible to create statistics: %w", err)
+	}
+
 	dataClient := &DataSetClient{
 		Id:                              id,
 		Config:                          cfg,
 		Client:                          client,
 		SessionInfo:                     &add_events.SessionInfo{},
 		buffers:                         make(map[string]*buffer.Buffer),
-		buffersEnqueued:                 atomic.Uint64{},
-		buffersProcessed:                atomic.Uint64{},
-		buffersDropped:                  atomic.Uint64{},
-		buffersBroken:                   atomic.Uint64{},
 		buffersAllMutex:                 sync.Mutex{},
 		BufferPerSessionTopic:           pubsub.New(0),
 		LastHttpStatus:                  atomic.Uint32{},
@@ -174,12 +172,6 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		lastErrorMu:                     sync.RWMutex{},
 		Logger:                          logger,
 		finished:                        atomic.Bool{},
-		eventsEnqueued:                  atomic.Uint64{},
-		eventsProcessed:                 atomic.Uint64{},
-		eventsDropped:                   atomic.Uint64{},
-		eventsBroken:                    atomic.Uint64{},
-		bytesAPIAccepted:                atomic.Uint64{},
-		bytesAPISent:                    atomic.Uint64{},
 		addEventsMutex:                  sync.Mutex{},
 		eventBundlePerKeyTopic:          pubsub.New(0),
 		eventBundleSubscriptionChannels: make(map[string]chan interface{}),
@@ -188,6 +180,7 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		addEventsEndpointUrl:            addEventsEndpointUrl,
 		userAgent:                       userAgent,
 		serverHost:                      serverHost,
+		statistics:                      statictics,
 	}
 
 	// run buffer sweeper if requested
@@ -285,16 +278,16 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				zap.String("session", session),
 				zap.Any("msg", msg),
 			)
-			client.buffersBroken.Add(1)
+			client.statistics.BuffersBrokenAdd(1)
 			client.lastAcceptedAt.Store(time.Now().UnixNano())
 			continue
 		}
 		client.Logger.Debug("Received Buffer from channel",
 			zap.String("session", session),
 			zap.Int("processedMsgCnt", processedMsgCnt),
-			zap.Uint64("buffersEnqueued", client.buffersEnqueued.Load()),
-			zap.Uint64("buffersProcessed", client.buffersProcessed.Load()),
-			zap.Uint64("buffersDropped", client.buffersDropped.Load()),
+			zap.Uint64("buffersEnqueued", client.statistics.buffersEnqueued.Load()),
+			zap.Uint64("buffersProcessed", client.statistics.buffersProcessed.Load()),
+			zap.Uint64("buffersDropped", client.statistics.buffersDropped.Load()),
 		)
 		buf, bufferReadSuccess := msg.(*buffer.Buffer)
 		if bufferReadSuccess {
@@ -304,11 +297,11 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 			}
 			if !buf.HasEvents() {
 				client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
-				client.buffersProcessed.Add(1)
+				client.statistics.BuffersProcessedAdd(1)
 				continue
 			}
 			if client.sendBufferWithRetryPolicy(buf) {
-				client.buffersProcessed.Add(1)
+				client.statistics.BuffersProcessedAdd(1)
 			}
 		} else {
 			client.Logger.Error(
@@ -316,7 +309,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				zap.String("session", session),
 				zap.Any("msg", msg),
 			)
-			client.buffersBroken.Add(1)
+			client.statistics.BuffersBrokenAdd(1)
 		}
 		client.lastAcceptedAt.Store(time.Now().UnixNano())
 	}
@@ -375,7 +368,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 
 		if isOkStatus(lastHttpStatus) {
 			// everything was fine, there is no need for retries
-			client.bytesAPIAccepted.Add(uint64(payloadLen))
+			client.statistics.BytesAPIAcceptedAdd(uint64(payloadLen))
 			return true // exit loop (buffer sent)
 		}
 
@@ -422,7 +415,7 @@ func (client *DataSetClient) statisticsSweeper() {
 }
 
 // Statistics returns statistics about events, buffers processing from the start time
-func (client *DataSetClient) Statistics() *Statistics {
+func (client *DataSetClient) Statistics() *ExportedStatistics {
 	// for how long are events being processed
 	firstAt := time.Unix(0, client.firstReceivedAt.Load())
 	lastAt := time.Unix(0, client.lastAcceptedAt.Load())
@@ -434,49 +427,7 @@ func (client *DataSetClient) Statistics() *Statistics {
 		return nil
 	}
 
-	// log buffer stats
-	bProcessed := client.buffersProcessed.Load()
-	bEnqueued := client.buffersEnqueued.Load()
-	bDropped := client.buffersDropped.Load()
-	bBroken := client.buffersBroken.Load()
-
-	buffersStats := QueueStats{
-		bEnqueued,
-		bProcessed,
-		bDropped,
-		bBroken,
-		processingDur,
-	}
-
-	// log events stats
-	eProcessed := client.eventsProcessed.Load()
-	eEnqueued := client.eventsEnqueued.Load()
-	eDropped := client.eventsDropped.Load()
-	eBroken := client.eventsBroken.Load()
-
-	eventsStats := QueueStats{
-		eEnqueued,
-		eProcessed,
-		eDropped,
-		eBroken,
-		processingDur,
-	}
-
-	// log transferred stats
-	bAPISent := client.bytesAPISent.Load()
-	bAPIAccepted := client.bytesAPIAccepted.Load()
-	transferStats := TransferStats{
-		bAPISent,
-		bAPIAccepted,
-		bProcessed,
-		processingDur,
-	}
-
-	return &Statistics{
-		Buffers:  buffersStats,
-		Events:   eventsStats,
-		Transfer: transferStats,
-	}
+	return client.statistics.Export(processingDur)
 }
 
 func (client *DataSetClient) logStatistics() {
@@ -613,7 +564,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
 
 	// publish buffer so it can be sent
-	client.buffersEnqueued.Add(+1)
+	client.statistics.BuffersEnqueuedAdd(+1)
 	client.BufferPerSessionTopic.Pub(buf, buf.Session)
 }
 
@@ -709,7 +660,7 @@ func (client *DataSetClient) setRetryAfter(t time.Time) {
 }
 
 func (client *DataSetClient) onBufferDrop(buf *buffer.Buffer, status uint32, err error) {
-	client.buffersDropped.Add(1)
+	client.statistics.BuffersDroppedAdd(1)
 	client.Logger.Error("Dropping buffer",
 		buf.ZapStats(
 			zap.Uint32("httpStatus", status),
