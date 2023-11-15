@@ -103,11 +103,11 @@ func TestAddEventsRetry(t *testing.T) {
 	const succeedInAttempt = int32(3)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		attempt.Add(1)
-		cer, err := extract(req)
+		_, err := extract(req)
 
 		assert.Nil(t, err, "Error reading request: %v", err)
-		assert.Equal(t, "b", cer.SessionInfo.ServerType)
-		assert.Equal(t, "a", cer.SessionInfo.ServerId)
+		// F assert.Equal(t, "b", cer.SessionInfo.ServerType)
+		// F assert.Equal(t, "a", cer.SessionInfo.ServerId)
 
 		status := "success"
 		if attempt.Load() < succeedInAttempt {
@@ -136,8 +136,6 @@ func TestAddEventsRetry(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
@@ -228,8 +226,6 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err1 := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
@@ -319,8 +315,6 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
@@ -349,8 +343,6 @@ func TestAddEventsLargeEvent(t *testing.T) {
 		attempt.Add(1)
 		cer, err := extract(req)
 		assert.Nil(t, err, "Error reading request: %v", err)
-		assert.Equal(t, "b", cer.SessionInfo.ServerType)
-		assert.Equal(t, "a", cer.SessionInfo.ServerId)
 
 		assert.Equal(t, len(cer.Events), 1)
 		wasAttrs := (cer.Events)[0].Attrs
@@ -410,8 +402,6 @@ func TestAddEventsLargeEvent(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
@@ -454,8 +444,6 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 		attempt.Add(1)
 		cer, err := extract(req)
 		assert.Nil(t, err, "Error reading request: %v", err)
-		assert.Equal(t, "b", cer.SessionInfo.ServerType)
-		assert.Equal(t, "a", cer.SessionInfo.ServerId)
 
 		assert.Equal(t, len(cer.Events), 1)
 		wasAttrs := (cer.Events)[0].Attrs
@@ -510,8 +498,6 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: originalAttrs}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
@@ -582,9 +568,6 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
-
 	const NumEvents = 10
 
 	go func(n int) {
@@ -616,8 +599,6 @@ func TestAddEventsDoNotRetryForever(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
@@ -655,8 +636,6 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
@@ -686,8 +665,6 @@ func TestShutdownFinishesWithinExpectedTimeout(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
@@ -721,8 +698,6 @@ func TestAddEventsAreNotRejectedOncePreviousReqRetriesMaxLifetimeExpired(t *test
 	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	client.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 
@@ -752,8 +727,6 @@ func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *test
 	client, err := NewClient(dataSetConfig, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	client.SessionInfo = sessionInfo
 	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
 	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 
@@ -1052,8 +1025,6 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				cer, err := extract(req)
 
 				assert.Nil(t, err, "Error reading request: %v", err)
-				assert.Equal(t, "b", cer.SessionInfo.ServerType)
-				assert.Equal(t, "a", cer.SessionInfo.ServerId)
 
 				lock.Lock()
 				calls = append(calls, extractAttrs(cer.Events))
@@ -1084,8 +1055,6 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				})
 			sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil)
 			require.Nil(t, err)
-			sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-			sc.SessionInfo = sessionInfo
 
 			bundles := make([]*add_events.EventBundle, 0)
 			for _, event := range tt.events {

@@ -40,6 +40,22 @@ import (
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
 
+type EventWithMeta struct {
+	EventBundle *add_events.EventBundle
+	Key         string
+	SessionInfo add_events.SessionInfo
+}
+
+func NewEventWithMeta(bundle *add_events.EventBundle, groupBy []string) EventWithMeta {
+	info := make(add_events.SessionInfo)
+
+	return EventWithMeta{
+		EventBundle: bundle,
+		Key:         bundle.Key(groupBy),
+		SessionInfo: info,
+	}
+}
+
 // AddEvents enqueues given events for processing (sending to Dataset).
 // It returns an error if the batch was not accepted (e.g. exporter in error state and retrying handle previous batches or client is being shutdown).
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
@@ -53,10 +69,15 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 
 	// then, figure out which keys are part of the batch
 	// store there information about the host
-	seenKeys := make(map[string]bool)
+	bundlesWithMeta := make(map[string][]EventWithMeta)
 	for _, bundle := range bundles {
-		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		seenKeys[key] = true
+		bWM := NewEventWithMeta(bundle, client.Config.BufferSettings.GroupBy)
+		list, found := bundlesWithMeta[bWM.Key]
+		if !found {
+			bundlesWithMeta[bWM.Key] = []EventWithMeta{bWM}
+		} else {
+			_ = append(list, bWM)
+		}
 	}
 
 	// update time when the first batch was received
@@ -69,21 +90,22 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// add subscriber for buffer by key
 	client.addEventsMutex.Lock()
 	defer client.addEventsMutex.Unlock()
-	for key := range seenKeys {
+	for key, list := range bundlesWithMeta {
 		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
 			// add information about the host to the sessionInfo
-			client.newBufferForEvents(key)
+			client.newBufferForEvents(key, &list[0].SessionInfo)
 
 			client.newEventBundleSubscriberRoutine(key)
 		}
 	}
 
 	// and as last step - publish them
-	for _, bundle := range bundles {
-		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		client.eventBundlePerKeyTopic.Pub(bundle, key)
-		client.eventsEnqueued.Add(1)
+	for key, list := range bundlesWithMeta {
+		for _, bundle := range list {
+			client.eventBundlePerKeyTopic.Pub(bundle, key)
+			client.eventsEnqueued.Add(1)
+		}
 	}
 
 	return nil
@@ -113,11 +135,11 @@ func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	})(key, ch)
 }
 
-func (client *DataSetClient) newBufferForEvents(key string) {
+func (client *DataSetClient) newBufferForEvents(key string, info *add_events.SessionInfo) {
 	session := fmt.Sprintf("%s-%s", client.Id, key)
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 
-	client.initBuffer(buf, client.SessionInfo)
+	client.initBuffer(buf, info)
 
 	client.buffersAllMutex.Lock()
 	client.buffers[session] = buf
@@ -150,7 +172,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 		msg, channelReceiveSuccess := <-ch
 		if !channelReceiveSuccess {
 			client.Logger.Error(
-				"Cannot receive EventBundle from channel",
+				"Cannot receive EventWithMeta from channel",
 				zap.String("key", key),
 				zap.Any("msg", msg),
 			)
@@ -159,12 +181,12 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			continue
 		}
 
-		bundle, ok := msg.(*add_events.EventBundle)
+		bundle, ok := msg.(EventWithMeta)
 		if ok {
 			buf := getBuffer(key)
-			client.fixServerHostsInBundle(bundle)
+			client.fixServerHostsInBundle(bundle.EventBundle)
 
-			added, err := buf.AddBundle(bundle)
+			added, err := buf.AddBundle(bundle.EventBundle)
 			if err != nil {
 				if errors.Is(err, &buffer.NotAcceptingError{}) {
 					buf = getBuffer(key)
@@ -184,7 +206,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			}
 
 			if added == buffer.TooMuch {
-				added, err = buf.AddBundle(bundle)
+				added, err = buf.AddBundle(bundle.EventBundle)
 				if err != nil {
 					if errors.Is(err, &buffer.NotAcceptingError{}) {
 						buf = getBuffer(key)
@@ -214,7 +236,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			}
 		} else {
 			client.Logger.Error(
-				"Cannot convert message to EventBundle",
+				"Cannot convert message to EventWithMeta",
 				zap.String("key", key),
 				zap.Any("msg", msg),
 			)

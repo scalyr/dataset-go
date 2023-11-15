@@ -64,10 +64,9 @@ func isRetryableStatus(status uint32) bool {
 
 // DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
-	Id          uuid.UUID
-	Config      *config.DataSetConfig
-	Client      *http.Client
-	SessionInfo *add_events.SessionInfo
+	Id     uuid.UUID
+	Config *config.DataSetConfig
+	Client *http.Client
 	// map of known Buffer //TODO introduce cleanup
 	buffers          map[string]*buffer.Buffer
 	buffersAllMutex  sync.Mutex
@@ -160,7 +159,6 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		Id:                              id,
 		Config:                          cfg,
 		Client:                          client,
-		SessionInfo:                     &add_events.SessionInfo{},
 		buffers:                         make(map[string]*buffer.Buffer),
 		buffersEnqueued:                 atomic.Uint64{},
 		buffersProcessed:                atomic.Uint64{},
