@@ -122,6 +122,7 @@ func TestNewEventWithMeta(t *testing.T) {
 	tests := []struct {
 		name           string
 		groupBy        []string
+		expKey         string
 		expAttrs       add_events.EventAttrs
 		expSessionInfo add_events.SessionInfo
 	}{
@@ -129,48 +130,45 @@ func TestNewEventWithMeta(t *testing.T) {
 		{
 			name:    "empty group by",
 			groupBy: []string{},
+			expKey:  "d41d8cd98f00b204e9800998ecf8427e",
 			expAttrs: add_events.EventAttrs{
 				k1: v1, k2: v2, k3: v3,
 			},
-			expSessionInfo: add_events.SessionInfo{
-				add_events.AttrBundleKey: "d41d8cd98f00b204e9800998ecf8427e",
-			},
+			expSessionInfo: add_events.SessionInfo{},
 		},
 
 		// group by not specified attribute - 1
 		{
 			name:    "group by unused attribute - 1",
 			groupBy: []string{k4},
+			expKey:  "746ea36093d470e90a9c2fbf07c8ed17",
 			expAttrs: add_events.EventAttrs{
 				k1: v1, k2: v2, k3: v3,
 			},
-			expSessionInfo: add_events.SessionInfo{
-				add_events.AttrBundleKey: "746ea36093d470e90a9c2fbf07c8ed17",
-			},
+			expSessionInfo: add_events.SessionInfo{},
 		},
 
 		// group by not specified attribute - 2
 		{
 			name:    "group by unused attribute - 2",
 			groupBy: []string{k5},
+			expKey:  "d9b675aac82295ce36dad72278888308",
 			expAttrs: add_events.EventAttrs{
 				k1: v1, k2: v2, k3: v3,
 			},
-			expSessionInfo: add_events.SessionInfo{
-				add_events.AttrBundleKey: "d9b675aac82295ce36dad72278888308",
-			},
+			expSessionInfo: add_events.SessionInfo{},
 		},
 
 		// group by two attributes
 		{
 			name:    "group by two attributes - 1",
 			groupBy: []string{k1, k2},
+			expKey:  "4410d57b15f30fb22e92fc3e2338f288",
 			expAttrs: add_events.EventAttrs{
 				k3: v3,
 			},
 			expSessionInfo: add_events.SessionInfo{
-				add_events.AttrBundleKey: "4410d57b15f30fb22e92fc3e2338f288",
-				k1:                       v1, k2: v2,
+				k1: v1, k2: v2,
 			},
 		},
 
@@ -178,12 +176,12 @@ func TestNewEventWithMeta(t *testing.T) {
 		{
 			name:    "group by two attributes - 2",
 			groupBy: []string{k2, k1},
+			expKey:  "ce28b69e77b27f012501095cb343e2ae",
 			expAttrs: add_events.EventAttrs{
 				k3: v3,
 			},
 			expSessionInfo: add_events.SessionInfo{
-				add_events.AttrBundleKey: "ce28b69e77b27f012501095cb343e2ae",
-				k1:                       v1, k2: v2,
+				k1: v1, k2: v2,
 			},
 		},
 	}
@@ -207,7 +205,8 @@ func TestNewEventWithMeta(t *testing.T) {
 				"serverHost",
 			)
 
-			tt.expAttrs[add_events.AttrOrigServerHost] = "serverHost"
+			tt.expAttrs[add_events.AttrServerHost] = "serverHost"
+			assert.Equal(t, tt.expKey, eWM.Key)
 			assert.Equal(t, tt.expAttrs, eWM.EventBundle.Event.Attrs)
 			assert.Equal(t, tt.expSessionInfo, eWM.SessionInfo)
 		})
@@ -481,7 +480,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 			"5": 999900,
 			"4": 1000000,
 			"3": 1000100,
-			"6": 241699,
+			"6": 241753,
 		}
 
 		expectedAttrs := map[string]interface{}{
@@ -587,8 +586,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 			"5": strings.Repeat("\"", expectedLengths["5"]),
 		}
 		expectedSessionInfo := add_events.SessionInfo{
-			add_events.AttrOrigServerHost: "foo",
-			add_events.AttrBundleKey:      "b412b72ae4ad4a7c136ea140dc070d62",
+			add_events.AttrServerHost: "foo",
 		}
 
 		assert.Equal(t, expectedLengths, wasLengths)
@@ -895,11 +893,11 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{key: ev1Value},
-						info:  tInfo{add_events.AttrOrigServerHost: configServerHost},
+						info:  tInfo{add_events.AttrServerHost: configServerHost},
 					},
 					{
 						attrs: tAttr{key: ev2Value},
-						info:  tInfo{add_events.AttrOrigServerHost: configServerHost},
+						info:  tInfo{add_events.AttrServerHost: configServerHost},
 					},
 				},
 			},
@@ -921,12 +919,12 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{key: ev1Value},
-						info:  tInfo{add_events.AttrOrigServerHost: configServerHost},
+						info:  tInfo{add_events.AttrServerHost: configServerHost},
 					},
 
 					{
 						attrs: tAttr{key: ev2Value},
-						info:  tInfo{add_events.AttrOrigServerHost: configServerHost},
+						info:  tInfo{add_events.AttrServerHost: configServerHost},
 					},
 				},
 			},
@@ -948,13 +946,13 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{key: ev1Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev1ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev1ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{key: ev2Value},
-						info:  tInfo{add_events.AttrOrigServerHost: configServerHost},
+						info:  tInfo{add_events.AttrServerHost: configServerHost},
 					},
 				},
 			},
@@ -976,13 +974,13 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{key: ev1Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev1ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev1ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{key: ev2Value},
-						info:  tInfo{add_events.AttrOrigServerHost: configServerHost},
+						info:  tInfo{add_events.AttrServerHost: configServerHost},
 					},
 				},
 			},
@@ -1004,13 +1002,13 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{key: ev1Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev3ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev3ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{key: ev2Value},
-						info:  tInfo{add_events.AttrOrigServerHost: configServerHost},
+						info:  tInfo{add_events.AttrServerHost: configServerHost},
 					},
 				},
 			},
@@ -1033,13 +1031,13 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{key: ev1Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev3ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev3ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{key: ev2Value},
-						info:  tInfo{add_events.AttrOrigServerHost: configServerHost},
+						info:  tInfo{add_events.AttrServerHost: configServerHost},
 					},
 				},
 			},
@@ -1075,31 +1073,31 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{key: ev1Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev1ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev1ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{key: ev2Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev2ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev2ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{key: ev3Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev3ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev3ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{key: ev4Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev4ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev4ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{key: ev5Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev5ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev5ServerHost},
 					},
 				},
 			},
@@ -1135,31 +1133,31 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{},
-						info:  tInfo{key: ev1Value, add_events.AttrOrigServerHost: ev1ServerHost},
+						info:  tInfo{key: ev1Value, add_events.AttrServerHost: ev1ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{},
-						info:  tInfo{key: ev2Value, add_events.AttrOrigServerHost: ev2ServerHost},
+						info:  tInfo{key: ev2Value, add_events.AttrServerHost: ev2ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{},
-						info:  tInfo{key: ev3Value, add_events.AttrOrigServerHost: ev3ServerHost},
+						info:  tInfo{key: ev3Value, add_events.AttrServerHost: ev3ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{},
-						info:  tInfo{key: ev4Value, add_events.AttrOrigServerHost: ev4ServerHost},
+						info:  tInfo{key: ev4Value, add_events.AttrServerHost: ev4ServerHost},
 					},
 				},
 				{
 					{
 						attrs: tAttr{},
-						info:  tInfo{key: ev5Value, add_events.AttrOrigServerHost: ev5ServerHost},
+						info:  tInfo{key: ev5Value, add_events.AttrServerHost: ev5ServerHost},
 					},
 				},
 			},
@@ -1182,15 +1180,15 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{key: ev1Value},
-						info:  tInfo{add_events.AttrOrigServerHost: ev3ServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev3ServerHost},
 					},
 				},
 			},
 		},
 
-		// serverHost from the config wins
+		// serverHost is taken from serverHost if also _origServerHost is set
 		{
-			name: "serverHost from config wins",
+			name: "serverHost is taken from serverHost if also _origServerHost is set",
 			events: []tEvent{
 				{
 					attrs: tAttr{
@@ -1204,7 +1202,46 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				{
 					{
 						attrs: tAttr{key: ev1Value},
-						info:  tInfo{add_events.AttrOrigServerHost: configServerHost},
+						info:  tInfo{add_events.AttrServerHost: ev1ServerHost},
+					},
+				},
+			},
+		},
+		// serverHost from the config wins looses if any serverHost is set
+		{
+			name: "serverHost from config looses if any __origServerHost is set",
+			events: []tEvent{
+				{
+					attrs: tAttr{
+						key:                           ev1Value,
+						add_events.AttrOrigServerHost: ev2ServerHost,
+					},
+				},
+			},
+			expCalls: [][]tBundle{
+				{
+					{
+						attrs: tAttr{key: ev1Value},
+						info:  tInfo{add_events.AttrServerHost: ev2ServerHost},
+					},
+				},
+			},
+		},
+		// serverHost from config is used when it's not specified
+		{
+			name: "serverHost from config is used when it's not specified",
+			events: []tEvent{
+				{
+					attrs: tAttr{
+						key: ev1Value,
+					},
+				},
+			},
+			expCalls: [][]tBundle{
+				{
+					{
+						attrs: tAttr{key: ev1Value},
+						info:  tInfo{add_events.AttrServerHost: configServerHost},
 					},
 				},
 			},
@@ -1306,52 +1343,34 @@ func TestAddEventsGroupBy(t *testing.T) {
 	}{
 		// when no grouping is used, then attributes are kept
 		{
-			name:    "empty group by",
-			groupBy: []string{},
-			expAttrs: add_events.EventAttrs{
-				k1: v1, k2: v2, k3: v3,
-			},
-			expSessionInfo: add_events.SessionInfo{
-				add_events.AttrBundleKey: "ab1857c850d76129c895bc9d6ac48b7e",
-			},
+			name:           "empty group by",
+			groupBy:        []string{},
+			expAttrs:       add_events.EventAttrs{k1: v1, k2: v2, k3: v3},
+			expSessionInfo: add_events.SessionInfo{},
 		},
 
 		// group by not specified attribute
 		{
-			name:    "group by unused attribute",
-			groupBy: []string{k4},
-			expAttrs: add_events.EventAttrs{
-				k1: v1, k2: v2, k3: v3,
-			},
-			expSessionInfo: add_events.SessionInfo{
-				add_events.AttrBundleKey: "17e9bed12fd281a419b1d600e1fcbf5f",
-			},
+			name:           "group by unused attribute",
+			groupBy:        []string{k4},
+			expAttrs:       add_events.EventAttrs{k1: v1, k2: v2, k3: v3},
+			expSessionInfo: add_events.SessionInfo{},
 		},
 
 		// group by two attributes
 		{
-			name:    "group by two attributes",
-			groupBy: []string{k1, k2},
-			expAttrs: add_events.EventAttrs{
-				k3: v3,
-			},
-			expSessionInfo: add_events.SessionInfo{
-				add_events.AttrBundleKey: "2b35b78fe48c09ba264d6c1759fee8c0",
-				k1:                       v1, k2: v2,
-			},
+			name:           "group by two attributes",
+			groupBy:        []string{k1, k2},
+			expAttrs:       add_events.EventAttrs{k3: v3},
+			expSessionInfo: add_events.SessionInfo{k1: v1, k2: v2},
 		},
 
 		// group by two attributes
 		{
-			name:    "group by two attributes - swapped",
-			groupBy: []string{k2, k1},
-			expAttrs: add_events.EventAttrs{
-				k3: v3,
-			},
-			expSessionInfo: add_events.SessionInfo{
-				add_events.AttrBundleKey: "7368ff158ad3ed01a668701e1795e727",
-				k1:                       v1, k2: v2,
-			},
+			name:           "group by two attributes - swapped",
+			groupBy:        []string{k2, k1},
+			expAttrs:       add_events.EventAttrs{k3: v3},
+			expSessionInfo: add_events.SessionInfo{k1: v1, k2: v2},
 		},
 	}
 
@@ -1363,7 +1382,7 @@ func TestAddEventsGroupBy(t *testing.T) {
 				assert.Nil(t, err, "Error reading request: %v", err)
 
 				assert.Equal(t, tt.expAttrs, cer.Events[0].Attrs, tt.name)
-				tt.expSessionInfo[add_events.AttrOrigServerHost] = "serverHost"
+				tt.expSessionInfo[add_events.AttrServerHost] = "serverHost"
 				assert.Equal(t, tt.expSessionInfo, *cer.SessionInfo, tt.name)
 
 				payload, err := json.Marshal(map[string]interface{}{

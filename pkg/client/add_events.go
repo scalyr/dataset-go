@@ -57,26 +57,36 @@ func NewEventWithMeta(
 	key := ""
 	info := make(add_events.SessionInfo)
 
+	// figure out serverHost value
+	usedServerHost := serverHost
 	// if event's ServerHost is set, use it
 	if len(bundle.Event.ServerHost) > 0 {
-		bundle.Event.Attrs[add_events.AttrOrigServerHost] = bundle.Event.ServerHost
+		usedServerHost = bundle.Event.ServerHost
 	} else {
-		// if ServerHost is set in config, use it
-		if len(serverHost) > 0 {
-			bundle.Event.Attrs[add_events.AttrOrigServerHost] = serverHost
+		// if somebody is using library directly and forget to set Event.ServerHost,
+		// lets check the attributes first
+
+		// check serverHost attribute
+		attrHost, ok := bundle.Event.Attrs[add_events.AttrServerHost]
+		if ok {
+			usedServerHost = attrHost.(string)
 		} else {
-			// if somebody is using library directly and forget to set Event.ServerHost,
-			// lets check the attribute
-			attrHost, ok := bundle.Event.Attrs[add_events.AttrServerHost]
-			if ok {
-				// it's in attributes, so lets used this value
-				bundle.Event.Attrs[add_events.AttrOrigServerHost] = attrHost
+			// if serverHost attribute is not set, check the __origServerHost
+			attrOrigHost, okOrig := bundle.Event.Attrs[add_events.AttrOrigServerHost]
+			if okOrig {
+				usedServerHost = attrOrigHost.(string)
 			}
 		}
 	}
-	delete(bundle.Event.Attrs, add_events.AttrServerHost)
 
-	// iterate over attributes and build structures
+	// for the SessionInfo, it has to be in the serverHost
+	// therefore remove the orig and set the serverHost
+	// so that it can be in the next step moved to sessionInfo
+	delete(bundle.Event.Attrs, add_events.AttrOrigServerHost)
+	bundle.Event.Attrs[add_events.AttrServerHost] = usedServerHost
+
+	// construct Key
+	// move attributes from attrs to sessionInfo
 	for _, k := range groupBy {
 		val, ok := bundle.Event.Attrs[k]
 		key += k + ":"
@@ -93,7 +103,10 @@ func NewEventWithMeta(
 	// use md5 to shorten the key
 	hash := md5.Sum([]byte(key))
 	bundleKey := hex.EncodeToString(hash[:])
-	info[add_events.AttrBundleKey] = bundleKey
+
+	// during the development we can include the key
+	// so that we can see this in UI
+	// info[add_events.AttrBundleKey] = bundleKey
 
 	return EventWithMeta{
 		EventBundle: bundle,
@@ -117,7 +130,17 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// store there information about the host
 	bundlesWithMeta := make(map[string][]EventWithMeta)
 	for _, bundle := range bundles {
+		bef := len(bundle.Event.Attrs)
 		bWM := NewEventWithMeta(bundle, client.Config.BufferSettings.GroupBy, client.serverHost)
+		aftB := len(bundle.Event.Attrs)
+		aftM := len(bWM.EventBundle.Event.Attrs)
+		client.Logger.Warn("Amount of attributes:",
+			zap.String("Key", bWM.Key),
+			zap.Int("AttributesBefore", bef),
+			zap.Int("AttributesAfter", aftB),
+			zap.Int("AttributesWithMetaAfter", aftM),
+		)
+
 		list, found := bundlesWithMeta[bWM.Key]
 		if !found {
 			bundlesWithMeta[bWM.Key] = []EventWithMeta{bWM}

@@ -123,6 +123,10 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 	// update group by, so that logs from the same host
 	// belong to the same session
 	adjustGroupByWithSpecialAttributes(cfg)
+	logger.Info(
+		"Adjusted config: ",
+		zap.String("config", cfg.String()),
+	)
 
 	serverHost, err := getServerHost(cfg.ServerHostSettings)
 	if err != nil {
@@ -235,8 +239,8 @@ func adjustGroupByWithSpecialAttributes(cfg *config.DataSetConfig) {
 	if !slices.Contains(groupBy, add_events.AttrLogFile) {
 		groupBy = append(groupBy, add_events.AttrLogFile)
 	}
-	if !slices.Contains(groupBy, add_events.AttrOrigServerHost) {
-		groupBy = append(groupBy, add_events.AttrOrigServerHost)
+	if !slices.Contains(groupBy, add_events.AttrServerHost) {
+		groupBy = append(groupBy, add_events.AttrServerHost)
 	}
 
 	cfg.BufferSettings.GroupBy = groupBy
