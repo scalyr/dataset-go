@@ -17,6 +17,8 @@
 package client
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,12 +48,56 @@ type EventWithMeta struct {
 	SessionInfo add_events.SessionInfo
 }
 
-func NewEventWithMeta(bundle *add_events.EventBundle, groupBy []string) EventWithMeta {
+func NewEventWithMeta(
+	bundle *add_events.EventBundle,
+	groupBy []string,
+	serverHost string,
+) EventWithMeta {
+	// initialise
+	key := ""
 	info := make(add_events.SessionInfo)
+
+	// if event's ServerHost is set, use it
+	if len(bundle.Event.ServerHost) > 0 {
+		bundle.Event.Attrs[add_events.AttrOrigServerHost] = bundle.Event.ServerHost
+	} else {
+		// if ServerHost is set in config, use it
+		if len(serverHost) > 0 {
+			bundle.Event.Attrs[add_events.AttrOrigServerHost] = serverHost
+		} else {
+			// if somebody is using library directly and forget to set Event.ServerHost,
+			// lets check the attribute
+			attrHost, ok := bundle.Event.Attrs[add_events.AttrServerHost]
+			if ok {
+				// it's in attributes, so lets used this value
+				bundle.Event.Attrs[add_events.AttrOrigServerHost] = attrHost
+			}
+		}
+	}
+	delete(bundle.Event.Attrs, add_events.AttrServerHost)
+
+	// iterate over attributes and build structures
+	for _, k := range groupBy {
+		val, ok := bundle.Event.Attrs[k]
+		key += k + ":"
+		if ok {
+			key += fmt.Sprintf("%s", val)
+
+			// move to session info and remove from attributes
+			info[k] = val
+			delete(bundle.Event.Attrs, k)
+		}
+		key += "___DELIM___"
+	}
+
+	// use md5 to shorten the key
+	hash := md5.Sum([]byte(key))
+	bundleKey := hex.EncodeToString(hash[:])
+	info[add_events.AttrBundleKey] = bundleKey
 
 	return EventWithMeta{
 		EventBundle: bundle,
-		Key:         bundle.Key(groupBy),
+		Key:         bundleKey,
 		SessionInfo: info,
 	}
 }
@@ -71,12 +117,12 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// store there information about the host
 	bundlesWithMeta := make(map[string][]EventWithMeta)
 	for _, bundle := range bundles {
-		bWM := NewEventWithMeta(bundle, client.Config.BufferSettings.GroupBy)
+		bWM := NewEventWithMeta(bundle, client.Config.BufferSettings.GroupBy, client.serverHost)
 		list, found := bundlesWithMeta[bWM.Key]
 		if !found {
 			bundlesWithMeta[bWM.Key] = []EventWithMeta{bWM}
 		} else {
-			_ = append(list, bWM)
+			bundlesWithMeta[bWM.Key] = append(list, bWM)
 		}
 	}
 
@@ -109,22 +155,6 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	}
 
 	return nil
-}
-
-// fixServerHostsInBundle fills the attribute __origServerHost for the event
-// and removes the attribute serverHost. This is needed to properly associate
-// incoming events with the correct host
-func (client *DataSetClient) fixServerHostsInBundle(bundle *add_events.EventBundle) {
-	delete(bundle.Event.Attrs, add_events.AttrServerHost)
-
-	// set the attribute __origServerHost to the event's ServerHost
-	if len(bundle.Event.ServerHost) > 0 {
-		bundle.Event.Attrs[add_events.AttrOrigServerHost] = bundle.Event.ServerHost
-		return
-	}
-
-	// as fallback use the value set to the client
-	bundle.Event.Attrs[add_events.AttrOrigServerHost] = client.serverHost
 }
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
@@ -184,7 +214,6 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 		bundle, ok := msg.(EventWithMeta)
 		if ok {
 			buf := getBuffer(key)
-			client.fixServerHostsInBundle(bundle.EventBundle)
 
 			added, err := buf.AddBundle(bundle.EventBundle)
 			if err != nil {

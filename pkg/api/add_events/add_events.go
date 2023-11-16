@@ -30,6 +30,7 @@ const (
 	AttrBundleKey      = "bundle_key"
 	AttrServerHost     = "serverHost"
 	AttrOrigServerHost = "__origServerHost"
+	AttrLogFile        = "logfile"
 )
 
 type (
