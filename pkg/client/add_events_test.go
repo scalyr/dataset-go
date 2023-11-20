@@ -122,6 +122,7 @@ func TestNewEventWithMeta(t *testing.T) {
 	tests := []struct {
 		name           string
 		groupBy        []string
+		debug          bool
 		expKey         string
 		expAttrs       add_events.EventAttrs
 		expSessionInfo add_events.SessionInfo
@@ -130,6 +131,7 @@ func TestNewEventWithMeta(t *testing.T) {
 		{
 			name:    "empty group by",
 			groupBy: []string{},
+			debug:   false,
 			expKey:  "d41d8cd98f00b204e9800998ecf8427e",
 			expAttrs: add_events.EventAttrs{
 				k1: v1, k2: v2, k3: v3,
@@ -137,10 +139,25 @@ func TestNewEventWithMeta(t *testing.T) {
 			expSessionInfo: add_events.SessionInfo{},
 		},
 
+		// when no grouping is used, then attributes are kept
+		{
+			name:    "empty group by",
+			groupBy: []string{},
+			debug:   true,
+			expKey:  "d41d8cd98f00b204e9800998ecf8427e",
+			expAttrs: add_events.EventAttrs{
+				k1: v1, k2: v2, k3: v3,
+			},
+			expSessionInfo: add_events.SessionInfo{
+				add_events.AttrSessionKey: "d41d8cd98f00b204e9800998ecf8427e",
+			},
+		},
+
 		// group by not specified attribute - 1
 		{
 			name:    "group by unused attribute - 1",
 			groupBy: []string{k4},
+			debug:   false,
 			expKey:  "746ea36093d470e90a9c2fbf07c8ed17",
 			expAttrs: add_events.EventAttrs{
 				k1: v1, k2: v2, k3: v3,
@@ -152,6 +169,7 @@ func TestNewEventWithMeta(t *testing.T) {
 		{
 			name:    "group by unused attribute - 2",
 			groupBy: []string{k5},
+			debug:   false,
 			expKey:  "d9b675aac82295ce36dad72278888308",
 			expAttrs: add_events.EventAttrs{
 				k1: v1, k2: v2, k3: v3,
@@ -163,6 +181,7 @@ func TestNewEventWithMeta(t *testing.T) {
 		{
 			name:    "group by two attributes - 1",
 			groupBy: []string{k1, k2},
+			debug:   false,
 			expKey:  "4410d57b15f30fb22e92fc3e2338f288",
 			expAttrs: add_events.EventAttrs{
 				k3: v3,
@@ -176,6 +195,7 @@ func TestNewEventWithMeta(t *testing.T) {
 		{
 			name:    "group by two attributes - 2",
 			groupBy: []string{k2, k1},
+			debug:   false,
 			expKey:  "ce28b69e77b27f012501095cb343e2ae",
 			expAttrs: add_events.EventAttrs{
 				k3: v3,
@@ -203,6 +223,7 @@ func TestNewEventWithMeta(t *testing.T) {
 				&add_events.EventBundle{Event: event},
 				tt.groupBy,
 				"serverHost",
+				tt.debug,
 			)
 
 			tt.expAttrs[add_events.AttrServerHost] = "serverHost"
@@ -1250,7 +1271,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 
 	extractBundles := func(req add_events.AddEventsRequest) []tBundle {
 		bundles := make([]tBundle, 0)
-		delete(*req.SessionInfo, add_events.AttrBundleKey)
+		delete(*req.SessionInfo, add_events.AttrSessionKey)
 		for _, ev := range req.Events {
 			bundles = append(bundles, tBundle{attrs: ev.Attrs, info: *req.SessionInfo})
 		}

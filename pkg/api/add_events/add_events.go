@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	AttrBundleKey      = "bundle_key"
+	AttrSessionKey     = "session_key"
 	AttrServerHost     = "serverHost"
 	AttrOrigServerHost = "__origServerHost"
 	AttrLogFile        = "logfile"
