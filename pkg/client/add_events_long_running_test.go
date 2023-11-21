@@ -104,9 +104,6 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
 
-	sessionInfo := &add_events.SessionInfo{ServerId: "a", ServerType: "b"}
-	sc.SessionInfo = sessionInfo
-
 	for bI := 0; bI < MaxBatchCount; bI++ {
 		batch := make([]*add_events.EventBundle, 0)
 		for lI := 0; lI < LogsPerBatch; lI++ {
