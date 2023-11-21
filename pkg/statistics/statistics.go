@@ -18,6 +18,7 @@ package statistics
 
 import (
 	"context"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -157,7 +158,7 @@ func (stats *Statistics) initMetrics(meter *metric.Meter) error {
 
 	var responseBuckets []float64
 	for i := 0; i < 12; i++ {
-		responseBuckets = append(responseBuckets, float64(4*2^i))
+		responseBuckets = append(responseBuckets, 4*math.Pow(2, float64(i)))
 	}
 	stats.hResponseTime, err = (*meter).Int64Histogram(key(
 		"responseTime"),
