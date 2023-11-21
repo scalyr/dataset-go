@@ -64,10 +64,9 @@ func isRetryableStatus(status uint32) bool {
 
 // DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
-	Id          uuid.UUID
-	Config      *config.DataSetConfig
-	Client      *http.Client
-	SessionInfo *add_events.SessionInfo
+	Id     uuid.UUID
+	Config *config.DataSetConfig
+	Client *http.Client
 	// map of known Buffer //TODO introduce cleanup
 	buffers          map[string]*buffer.Buffer
 	buffersAllMutex  sync.Mutex
@@ -123,7 +122,11 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 
 	// update group by, so that logs from the same host
 	// belong to the same session
-	addServerHostIntoGroupBy(cfg)
+	adjustGroupByWithSpecialAttributes(cfg)
+	logger.Info(
+		"Adjusted config: ",
+		zap.String("config", cfg.String()),
+	)
 
 	serverHost, err := getServerHost(cfg.ServerHostSettings)
 	if err != nil {
@@ -160,7 +163,6 @@ func NewClient(cfg *config.DataSetConfig, client *http.Client, logger *zap.Logge
 		Id:                              id,
 		Config:                          cfg,
 		Client:                          client,
-		SessionInfo:                     &add_events.SessionInfo{},
 		buffers:                         make(map[string]*buffer.Buffer),
 		buffersEnqueued:                 atomic.Uint64{},
 		buffersProcessed:                atomic.Uint64{},
@@ -229,13 +231,18 @@ func getServerHost(settings server_host_config.DataSetServerHostSettings) (strin
 	return os.Hostname()
 }
 
-// addServerHostIntoGroupBy adds attributes that indicate from which machine
-// the logs are into the groupBy attribute, so that they are part of the same session
-func addServerHostIntoGroupBy(cfg *config.DataSetConfig) {
+// adjustGroupByWithSpecialAttributes adds attributes that have special meaning in the UI
+// serverHost and logfile are used in the drop-down, so they have to be part of the
+// SessionInfo.
+func adjustGroupByWithSpecialAttributes(cfg *config.DataSetConfig) {
 	groupBy := cfg.BufferSettings.GroupBy
-	if !slices.Contains(groupBy, add_events.AttrOrigServerHost) {
-		groupBy = append(groupBy, add_events.AttrOrigServerHost)
+	if !slices.Contains(groupBy, add_events.AttrLogFile) {
+		groupBy = append(groupBy, add_events.AttrLogFile)
 	}
+	if !slices.Contains(groupBy, add_events.AttrServerHost) {
+		groupBy = append(groupBy, add_events.AttrServerHost)
+	}
+
 	cfg.BufferSettings.GroupBy = groupBy
 }
 

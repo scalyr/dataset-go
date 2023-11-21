@@ -17,6 +17,8 @@
 package client
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,6 +42,90 @@ import (
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
 
+type EventWithMeta struct {
+	EventBundle *add_events.EventBundle
+	Key         string
+	SessionInfo add_events.SessionInfo
+}
+
+func NewEventWithMeta(
+	bundle *add_events.EventBundle,
+	groupBy []string,
+	serverHost string,
+	debug bool,
+) EventWithMeta {
+	// initialise
+	key := ""
+	info := make(add_events.SessionInfo)
+
+	// adjust server host attribute
+	adjustServerHost(bundle, serverHost)
+
+	// construct Key
+	bundleKey := extractKeyAndUpdateInfo(bundle, groupBy, key, info)
+
+	// in debug mode include bundleKey
+	if debug {
+		info[add_events.AttrSessionKey] = bundleKey
+	}
+
+	return EventWithMeta{
+		EventBundle: bundle,
+		Key:         bundleKey,
+		SessionInfo: info,
+	}
+}
+
+func extractKeyAndUpdateInfo(bundle *add_events.EventBundle, groupBy []string, key string, info add_events.SessionInfo) string {
+	// construct key and move attributes from attrs to sessionInfo
+	for _, k := range groupBy {
+		val, ok := bundle.Event.Attrs[k]
+		key += k + ":"
+		if ok {
+			key += fmt.Sprintf("%s", val)
+
+			// move to session info and remove from attributes
+			info[k] = val
+			delete(bundle.Event.Attrs, k)
+		}
+		key += "___DELIM___"
+	}
+
+	// use md5 to shorten the key
+	hash := md5.Sum([]byte(key))
+	return hex.EncodeToString(hash[:])
+}
+
+func adjustServerHost(bundle *add_events.EventBundle, serverHost string) {
+	// figure out serverHost value
+	usedServerHost := serverHost
+	// if event's ServerHost is set, use it
+	if len(bundle.Event.ServerHost) > 0 {
+		usedServerHost = bundle.Event.ServerHost
+	} else {
+		// if somebody is using library directly and forget to set Event.ServerHost,
+		// lets check the attributes first
+
+		// check serverHost attribute
+		attrHost, ok := bundle.Event.Attrs[add_events.AttrServerHost]
+		if ok {
+			usedServerHost = attrHost.(string)
+		} else {
+			// if serverHost attribute is not set, check the __origServerHost
+			attrOrigHost, okOrig := bundle.Event.Attrs[add_events.AttrOrigServerHost]
+			if okOrig {
+				usedServerHost = attrOrigHost.(string)
+			}
+		}
+	}
+
+	// for the SessionInfo, it has to be in the serverHost
+	// therefore remove the orig and set the serverHost
+	// so that it can be in the next step moved to sessionInfo
+	delete(bundle.Event.Attrs, add_events.AttrOrigServerHost)
+	bundle.Event.Attrs[add_events.AttrServerHost] = usedServerHost
+}
+
 // AddEvents enqueues given events for processing (sending to Dataset).
 // It returns an error if the batch was not accepted (e.g. exporter in error state and retrying handle previous batches or client is being shutdown).
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
@@ -53,10 +139,16 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 
 	// then, figure out which keys are part of the batch
 	// store there information about the host
-	seenKeys := make(map[string]bool)
+	bundlesWithMeta := make(map[string][]EventWithMeta)
 	for _, bundle := range bundles {
-		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		seenKeys[key] = true
+		bWM := NewEventWithMeta(bundle, client.Config.BufferSettings.GroupBy, client.serverHost, client.Config.Debug)
+
+		list, found := bundlesWithMeta[bWM.Key]
+		if !found {
+			bundlesWithMeta[bWM.Key] = []EventWithMeta{bWM}
+		} else {
+			bundlesWithMeta[bWM.Key] = append(list, bWM)
+		}
 	}
 
 	// update time when the first batch was received
@@ -69,40 +161,25 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// add subscriber for buffer by key
 	client.addEventsMutex.Lock()
 	defer client.addEventsMutex.Unlock()
-	for key := range seenKeys {
+	for key, list := range bundlesWithMeta {
 		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
 			// add information about the host to the sessionInfo
-			client.newBufferForEvents(key)
+			client.newBufferForEvents(key, &list[0].SessionInfo)
 
 			client.newEventBundleSubscriberRoutine(key)
 		}
 	}
 
 	// and as last step - publish them
-	for _, bundle := range bundles {
-		key := bundle.Key(client.Config.BufferSettings.GroupBy)
-		client.eventBundlePerKeyTopic.Pub(bundle, key)
-		client.eventsEnqueued.Add(1)
+	for key, list := range bundlesWithMeta {
+		for _, bundle := range list {
+			client.eventBundlePerKeyTopic.Pub(bundle, key)
+			client.eventsEnqueued.Add(1)
+		}
 	}
 
 	return nil
-}
-
-// fixServerHostsInBundle fills the attribute __origServerHost for the event
-// and removes the attribute serverHost. This is needed to properly associate
-// incoming events with the correct host
-func (client *DataSetClient) fixServerHostsInBundle(bundle *add_events.EventBundle) {
-	delete(bundle.Event.Attrs, add_events.AttrServerHost)
-
-	// set the attribute __origServerHost to the event's ServerHost
-	if len(bundle.Event.ServerHost) > 0 {
-		bundle.Event.Attrs[add_events.AttrOrigServerHost] = bundle.Event.ServerHost
-		return
-	}
-
-	// as fallback use the value set to the client
-	bundle.Event.Attrs[add_events.AttrOrigServerHost] = client.serverHost
 }
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
@@ -113,11 +190,11 @@ func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	})(key, ch)
 }
 
-func (client *DataSetClient) newBufferForEvents(key string) {
+func (client *DataSetClient) newBufferForEvents(key string, info *add_events.SessionInfo) {
 	session := fmt.Sprintf("%s-%s", client.Id, key)
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 
-	client.initBuffer(buf, client.SessionInfo)
+	client.initBuffer(buf, info)
 
 	client.buffersAllMutex.Lock()
 	client.buffers[session] = buf
@@ -150,7 +227,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 		msg, channelReceiveSuccess := <-ch
 		if !channelReceiveSuccess {
 			client.Logger.Error(
-				"Cannot receive EventBundle from channel",
+				"Cannot receive EventWithMeta from channel",
 				zap.String("key", key),
 				zap.Any("msg", msg),
 			)
@@ -159,12 +236,11 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			continue
 		}
 
-		bundle, ok := msg.(*add_events.EventBundle)
+		bundle, ok := msg.(EventWithMeta)
 		if ok {
 			buf := getBuffer(key)
-			client.fixServerHostsInBundle(bundle)
 
-			added, err := buf.AddBundle(bundle)
+			added, err := buf.AddBundle(bundle.EventBundle)
 			if err != nil {
 				if errors.Is(err, &buffer.NotAcceptingError{}) {
 					buf = getBuffer(key)
@@ -184,7 +260,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			}
 
 			if added == buffer.TooMuch {
-				added, err = buf.AddBundle(bundle)
+				added, err = buf.AddBundle(bundle.EventBundle)
 				if err != nil {
 					if errors.Is(err, &buffer.NotAcceptingError{}) {
 						buf = getBuffer(key)
@@ -214,7 +290,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			}
 		} else {
 			client.Logger.Error(
-				"Cannot convert message to EventBundle",
+				"Cannot convert message to EventWithMeta",
 				zap.String("key", key),
 				zap.Any("msg", msg),
 			)

@@ -71,10 +71,9 @@ func TestClientBuffer(t *testing.T) {
 	require.Nil(t, err)
 
 	sessionInfo := add_events.SessionInfo{
-		ServerId:   "serverId",
-		ServerType: "testing",
+		"ServerId":   "serverId",
+		"ServerType": "testing",
 	}
-	sc.SessionInfo = &sessionInfo
 
 	event1 := &add_events.Event{
 		Thread: "TId",
@@ -86,7 +85,7 @@ func TestClientBuffer(t *testing.T) {
 		},
 	}
 
-	sc.newBufferForEvents("aaa")
+	sc.newBufferForEvents("aaa", &sessionInfo)
 	buffer1 := sc.getBuffer("aaa")
 	added, err := buffer1.AddBundle(&add_events.EventBundle{Event: event1})
 	assert.Nil(t, err)
