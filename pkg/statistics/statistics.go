@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 
 	"go.opentelemetry.io/otel/metric"
@@ -42,7 +44,8 @@ type Statistics struct {
 	bytesAPISent     atomic.Uint64
 	bytesAPIAccepted atomic.Uint64
 
-	meter *metric.Meter
+	meter  *metric.Meter
+	logger *zap.Logger
 
 	cBuffersEnqueued  metric.Int64UpDownCounter
 	cBuffersProcessed metric.Int64UpDownCounter
@@ -64,7 +67,8 @@ type Statistics struct {
 // NewStatistics creates structure to keep track of data processing.
 // If meter is not nil, then Open Telemetry is used for collecting metrics
 // as well.
-func NewStatistics(meter *metric.Meter) (*Statistics, error) {
+func NewStatistics(meter *metric.Meter, logger *zap.Logger) (*Statistics, error) {
+	logger.Info("Initialising statistics")
 	statistics := &Statistics{
 		buffersEnqueued:  atomic.Uint64{},
 		buffersProcessed: atomic.Uint64{},
@@ -79,10 +83,11 @@ func NewStatistics(meter *metric.Meter) (*Statistics, error) {
 		bytesAPIAccepted: atomic.Uint64{},
 		bytesAPISent:     atomic.Uint64{},
 
-		meter: meter,
+		meter:  meter,
+		logger: logger,
 	}
 
-	err := statistics.initMetrics(meter)
+	err := statistics.initMetrics()
 
 	return statistics, err
 }
@@ -91,13 +96,14 @@ func key(key string) string {
 	return "dataset." + key
 }
 
-func (stats *Statistics) initMetrics(meter *metric.Meter) error {
+func (stats *Statistics) initMetrics() error {
+	meter := stats.meter
 	// if there is no meter, there is no need to initialise counters
 	if meter == nil {
+		stats.logger.Info("OTel metrics WILL NOT be collected")
 		return nil
 	}
-
-	stats.meter = meter
+	stats.logger.Info("OTel metrics WILL be collected")
 
 	err := error(nil)
 	stats.cBuffersEnqueued, err = (*meter).Int64UpDownCounter(key("buffersEnqueued"))
@@ -144,9 +150,13 @@ func (stats *Statistics) initMetrics(meter *metric.Meter) error {
 	}
 
 	var payloadBuckets []float64
-	for _, r := range [11]float64{0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 0.9, 0.95, 1.0, 1.1, 2} {
+	for _, r := range [11]float64{0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.6, 0.85, 1.0, 1.1, 2} {
 		payloadBuckets = append(payloadBuckets, r*buffer_config.LimitBufferSize)
 	}
+	stats.logger.Info(
+		"Histogram buckets for payload size: ",
+		zap.Float64s("buckets", payloadBuckets),
+	)
 	stats.hPayloadSize, err = (*meter).Int64Histogram(key(
 		"payloadSize"),
 		metric.WithExplicitBucketBoundaries(payloadBuckets...),
@@ -160,6 +170,10 @@ func (stats *Statistics) initMetrics(meter *metric.Meter) error {
 	for i := 0; i < 12; i++ {
 		responseBuckets = append(responseBuckets, 4*math.Pow(2, float64(i)))
 	}
+	stats.logger.Info(
+		"Histogram buckets for response times: ",
+		zap.Float64s("buckets", responseBuckets),
+	)
 	stats.hResponseTime, err = (*meter).Int64Histogram(key(
 		"responseTime"),
 		metric.WithExplicitBucketBoundaries(responseBuckets...),

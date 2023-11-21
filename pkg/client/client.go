@@ -156,8 +156,9 @@ func NewClient(
 	if userAgentSuffix != nil && *userAgentSuffix != "" {
 		userAgent = userAgent + ";" + *userAgentSuffix
 	}
+	logger.Info("Using User-Agent: ", zap.String("User-Agent", userAgent))
 
-	stats, err := statistics.NewStatistics(meter)
+	stats, err := statistics.NewStatistics(meter, logger)
 	if err != nil {
 		return nil, fmt.Errorf("it was not possible to create statistics: %w", err)
 	}

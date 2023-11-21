@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -48,7 +50,7 @@ var (
 func TestBuffersEnqueued(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 			require.Nil(t, err)
 			v := uint64(rand.Int())
 			stats.BuffersEnqueuedAdd(v)
@@ -60,7 +62,7 @@ func TestBuffersEnqueued(t *testing.T) {
 func TestBuffersProcessed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 
 			require.Nil(t, err)
 			v := uint64(rand.Int())
@@ -73,7 +75,7 @@ func TestBuffersProcessed(t *testing.T) {
 func TestBuffersDropped(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 
 			require.Nil(t, err)
 			v := uint64(rand.Int())
@@ -86,7 +88,7 @@ func TestBuffersDropped(t *testing.T) {
 func TestBuffersBroken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 			require.Nil(t, err)
 			v := uint64(rand.Int())
 			stats.BuffersBrokenAdd(v)
@@ -98,7 +100,7 @@ func TestBuffersBroken(t *testing.T) {
 func TestEventsEnqueued(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 			require.Nil(t, err)
 			v := uint64(rand.Int())
 			stats.EventsEnqueuedAdd(v)
@@ -110,7 +112,7 @@ func TestEventsEnqueued(t *testing.T) {
 func TestEventsProcessed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 
 			require.Nil(t, err)
 			v := uint64(rand.Int())
@@ -123,7 +125,7 @@ func TestEventsProcessed(t *testing.T) {
 func TestEventsDropped(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 
 			require.Nil(t, err)
 			v := uint64(rand.Int())
@@ -136,7 +138,7 @@ func TestEventsDropped(t *testing.T) {
 func TestEventsBroken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 			require.Nil(t, err)
 			v := uint64(rand.Int())
 			stats.EventsBrokenAdd(v)
@@ -148,7 +150,7 @@ func TestEventsBroken(t *testing.T) {
 func TestBytesAPISent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 			require.Nil(t, err)
 			v := uint64(rand.Int())
 			stats.BytesAPISentAdd(v)
@@ -160,7 +162,7 @@ func TestBytesAPISent(t *testing.T) {
 func TestBytesAPIAccepted(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(*testing.T) {
-			stats, err := NewStatistics(tt.meter)
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
 			require.Nil(t, err)
 			v := uint64(rand.Int())
 			stats.BytesAPIAcceptedAdd(v)
@@ -170,7 +172,7 @@ func TestBytesAPIAccepted(t *testing.T) {
 }
 
 func TestExport(t *testing.T) {
-	stats, err := NewStatistics(nil)
+	stats, err := NewStatistics(nil, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
 	stats.BuffersEnqueuedAdd(1000)
@@ -236,7 +238,7 @@ func TestExport(t *testing.T) {
 }
 
 func TestExportNoTraffic(t *testing.T) {
-	stats, err := NewStatistics(nil)
+	stats, err := NewStatistics(nil, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
 	exp := stats.Export(time.Second)
