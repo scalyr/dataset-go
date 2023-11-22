@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/scalyr/dataset-go/pkg/server_host_config"
 
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
@@ -79,9 +81,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	libraryConsumerUserAgentSuffix := "OtelCollector;1.2.3"
+	libraryConsumerUserAgentSuffix := "OtelCollector-readme;1.2.3"
+	meter := otel.Meter("example.readme")
 	// build client
-	cl, err := client.NewClient(cfg, &http.Client{}, logger, &libraryConsumerUserAgentSuffix)
+	cl, err := client.NewClient(cfg, &http.Client{}, logger, &libraryConsumerUserAgentSuffix, &meter)
 	if err != nil {
 		panic(err)
 	}
