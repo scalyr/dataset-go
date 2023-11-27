@@ -31,10 +31,10 @@ import (
 	"testing"
 	"time"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/metric"
+	"github.com/scalyr/dataset-go/pkg/meter_config"
 
 	"github.com/scalyr/dataset-go/pkg/server_host_config"
+	"go.opentelemetry.io/otel"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -241,7 +241,7 @@ func TestAddEvents(t *testing.T) {
 	meter := otel.Meter("test")
 	tests := []struct {
 		name  string
-		meter *metric.Meter
+		meter *meter_config.MeterConfig
 	}{
 		{
 			name:  "no meter",
@@ -249,7 +249,7 @@ func TestAddEvents(t *testing.T) {
 		},
 		{
 			name:  "with meter",
-			meter: &meter,
+			meter: meter_config.NewMeterConfig(&meter, "e", "n"),
 		},
 	}
 	for _, tt := range tests {

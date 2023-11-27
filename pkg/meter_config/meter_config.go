@@ -14,15 +14,32 @@
  * limitations under the License.
  */
 
-package version
+package meter_config
 
-import (
-	"testing"
+import "go.opentelemetry.io/otel/metric"
 
-	"github.com/stretchr/testify/assert"
-)
+type MeterConfig struct {
+	entity string
+	name   string
+	meter  *metric.Meter
+}
 
-func TestVersion(t *testing.T) {
-	assert.Equal(t, "0.17.0", Version)
-	assert.Equal(t, "2023-11-27", ReleasedDate)
+func NewMeterConfig(meter *metric.Meter, entity string, name string) *MeterConfig {
+	return &MeterConfig{
+		entity: entity,
+		name:   name,
+		meter:  meter,
+	}
+}
+
+func (c *MeterConfig) Entity() string {
+	return c.entity
+}
+
+func (c *MeterConfig) Name() string {
+	return c.name
+}
+
+func (c *MeterConfig) Meter() *metric.Meter {
+	return c.meter
 }

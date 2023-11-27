@@ -22,6 +22,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/meter_config"
+	"go.opentelemetry.io/otel/attribute"
+
 	"go.uber.org/zap"
 
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
@@ -44,8 +47,10 @@ type Statistics struct {
 	bytesAPISent     atomic.Uint64
 	bytesAPIAccepted atomic.Uint64
 
-	meter  *metric.Meter
-	logger *zap.Logger
+	config     *meter_config.MeterConfig
+	meter      *metric.Meter
+	logger     *zap.Logger
+	attributes []attribute.KeyValue
 
 	cBuffersEnqueued  metric.Int64UpDownCounter
 	cBuffersProcessed metric.Int64UpDownCounter
@@ -67,7 +72,7 @@ type Statistics struct {
 // NewStatistics creates structure to keep track of data processing.
 // If meter is not nil, then Open Telemetry is used for collecting metrics
 // as well.
-func NewStatistics(meter *metric.Meter, logger *zap.Logger) (*Statistics, error) {
+func NewStatistics(config *meter_config.MeterConfig, logger *zap.Logger) (*Statistics, error) {
 	logger.Info("Initialising statistics")
 	statistics := &Statistics{
 		buffersEnqueued:  atomic.Uint64{},
@@ -83,8 +88,10 @@ func NewStatistics(meter *metric.Meter, logger *zap.Logger) (*Statistics, error)
 		bytesAPIAccepted: atomic.Uint64{},
 		bytesAPISent:     atomic.Uint64{},
 
-		meter:  meter,
-		logger: logger,
+		config:     config,
+		meter:      nil,
+		logger:     logger,
+		attributes: []attribute.KeyValue{},
 	}
 
 	err := statistics.initMetrics()
@@ -97,54 +104,70 @@ func key(key string) string {
 }
 
 func (stats *Statistics) initMetrics() error {
+	// if there is no config, there is no need to initialise counters
+	if stats.config == nil {
+		stats.logger.Info("OTel metrics WILL NOT be collected (MeterConfig is nil)")
+		return nil
+	}
+
+	// update meter with config meter
+	stats.meter = stats.config.Meter()
 	meter := stats.meter
+
 	// if there is no meter, there is no need to initialise counters
 	if meter == nil {
-		stats.logger.Info("OTel metrics WILL NOT be collected")
+		stats.logger.Info("OTel metrics WILL NOT be collected (Meter is nil)")
 		return nil
 	}
 	stats.logger.Info("OTel metrics WILL be collected")
 
+	// set attributes so that we can track multiple instances
+	stats.attributes = []attribute.KeyValue{
+		{Key: "entity", Value: attribute.StringValue(stats.config.Entity())},
+		{Key: "name", Value: attribute.StringValue(stats.config.Name())},
+	}
+	metric.WithAttributes(stats.attributes...)
+
 	err := error(nil)
-	stats.cBuffersEnqueued, err = (*meter).Int64UpDownCounter(key("buffersEnqueued"))
+	stats.cBuffersEnqueued, err = (*meter).Int64UpDownCounter(key("buffers_enqueued"))
 	if err != nil {
 		return err
 	}
-	stats.cBuffersProcessed, err = (*meter).Int64UpDownCounter(key("buffersProcessed"))
+	stats.cBuffersProcessed, err = (*meter).Int64UpDownCounter(key("buffers_processed"))
 	if err != nil {
 		return err
 	}
-	stats.cBuffersDropped, err = (*meter).Int64UpDownCounter(key("buffersDropped"))
+	stats.cBuffersDropped, err = (*meter).Int64UpDownCounter(key("buffers_dropped"))
 	if err != nil {
 		return err
 	}
-	stats.cBuffersBroken, err = (*meter).Int64UpDownCounter(key("buffersBroken"))
-	if err != nil {
-		return err
-	}
-
-	stats.cEventsEnqueued, err = (*meter).Int64UpDownCounter(key("eventsEnqueued"))
-	if err != nil {
-		return err
-	}
-	stats.cEventsProcessed, err = (*meter).Int64UpDownCounter(key("eventsProcessed"))
-	if err != nil {
-		return err
-	}
-	stats.cEventsDropped, err = (*meter).Int64UpDownCounter(key("eventsDropped"))
-	if err != nil {
-		return err
-	}
-	stats.cEventsBroken, err = (*meter).Int64UpDownCounter(key("eventsBroken"))
+	stats.cBuffersBroken, err = (*meter).Int64UpDownCounter(key("buffers_broken"))
 	if err != nil {
 		return err
 	}
 
-	stats.cBytesAPISent, err = (*meter).Int64UpDownCounter(key("bytesAPISent"))
+	stats.cEventsEnqueued, err = (*meter).Int64UpDownCounter(key("events_enqueued"))
 	if err != nil {
 		return err
 	}
-	stats.cBytesAPIAccepted, err = (*meter).Int64UpDownCounter(key("bytesAPIAccepted"))
+	stats.cEventsProcessed, err = (*meter).Int64UpDownCounter(key("events_processed"))
+	if err != nil {
+		return err
+	}
+	stats.cEventsDropped, err = (*meter).Int64UpDownCounter(key("events_dropped"))
+	if err != nil {
+		return err
+	}
+	stats.cEventsBroken, err = (*meter).Int64UpDownCounter(key("events_broken"))
+	if err != nil {
+		return err
+	}
+
+	stats.cBytesAPISent, err = (*meter).Int64UpDownCounter(key("bytes_api_sent"))
+	if err != nil {
+		return err
+	}
+	stats.cBytesAPIAccepted, err = (*meter).Int64UpDownCounter(key("bytes_api_accepted"))
 	if err != nil {
 		return err
 	}
@@ -158,7 +181,7 @@ func (stats *Statistics) initMetrics() error {
 		zap.Float64s("buckets", payloadBuckets),
 	)
 	stats.hPayloadSize, err = (*meter).Int64Histogram(key(
-		"payloadSize"),
+		"payload_size"),
 		metric.WithExplicitBucketBoundaries(payloadBuckets...),
 		metric.WithUnit("b"),
 	)
@@ -175,7 +198,7 @@ func (stats *Statistics) initMetrics() error {
 		zap.Float64s("buckets", responseBuckets),
 	)
 	stats.hResponseTime, err = (*meter).Int64Histogram(key(
-		"responseTime"),
+		"response_time"),
 		metric.WithExplicitBucketBoundaries(responseBuckets...),
 		metric.WithUnit("ms"),
 	)
@@ -278,19 +301,31 @@ func (stats *Statistics) BytesAPIAcceptedAdd(i uint64) {
 
 func (stats *Statistics) PayloadSizeRecord(payloadSizeInBytes int64) {
 	if stats.hPayloadSize != nil {
-		stats.hPayloadSize.Record(context.Background(), payloadSizeInBytes)
+		stats.hPayloadSize.Record(
+			context.Background(),
+			payloadSizeInBytes,
+			metric.WithAttributes(stats.attributes...),
+		)
 	}
 }
 
 func (stats *Statistics) ResponseTimeRecord(duration time.Duration) {
 	if stats.hResponseTime != nil {
-		stats.hResponseTime.Record(context.Background(), duration.Milliseconds())
+		stats.hResponseTime.Record(
+			context.Background(),
+			duration.Milliseconds(),
+			metric.WithAttributes(stats.attributes...),
+		)
 	}
 }
 
 func (stats *Statistics) add(counter metric.Int64UpDownCounter, i uint64) {
 	if counter != nil {
-		counter.Add(context.Background(), int64(i))
+		counter.Add(
+			context.Background(),
+			int64(i),
+			metric.WithAttributes(stats.attributes...),
+		)
 	}
 }
 

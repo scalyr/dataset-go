@@ -21,28 +21,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/meter_config"
+
 	"go.uber.org/zap"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/metric"
-
-	"github.com/stretchr/testify/assert"
 )
 
 var (
 	meter = otel.Meter("test")
 	tests = []struct {
 		name  string
-		meter *metric.Meter
+		meter *meter_config.MeterConfig
 	}{
 		{
-			name:  "no meter",
+			name:  "no config",
 			meter: nil,
 		},
 		{
+			name:  "no meter",
+			meter: meter_config.NewMeterConfig(nil, "e", "n"),
+		},
+		{
 			name:  "with meter",
-			meter: &meter,
+			meter: meter_config.NewMeterConfig(&meter, "e", "n"),
 		},
 	}
 )

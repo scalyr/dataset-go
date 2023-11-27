@@ -27,6 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/meter_config"
+
 	"golang.org/x/exp/slices"
 
 	"github.com/scalyr/dataset-go/pkg/version"
@@ -43,7 +45,6 @@ import (
 
 	"github.com/cskr/pubsub"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -104,7 +105,7 @@ func NewClient(
 	client *http.Client,
 	logger *zap.Logger,
 	userAgentSuffix *string,
-	meter *metric.Meter,
+	meterConfig *meter_config.MeterConfig,
 ) (*DataSetClient, error) {
 	logger.Info(
 		"Using config: ",
@@ -158,7 +159,7 @@ func NewClient(
 	}
 	logger.Info("Using User-Agent: ", zap.String("User-Agent", userAgent))
 
-	stats, err := statistics.NewStatistics(meter, logger)
+	stats, err := statistics.NewStatistics(meterConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("it was not possible to create statistics: %w", err)
 	}
