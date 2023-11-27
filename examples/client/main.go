@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/meter_config"
+
 	"go.opentelemetry.io/otel"
 
 	"github.com/scalyr/dataset-go/pkg/server_host_config"
@@ -67,7 +69,7 @@ func main() {
 		&http.Client{},
 		zap.Must(zap.NewDevelopment()),
 		&libraryConsumerUserAgentSuffix,
-		&meter,
+		meter_config.NewMeterConfig(&meter, "all", "example"),
 	)
 	if err != nil {
 		panic(err)
