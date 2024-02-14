@@ -64,6 +64,8 @@ func isRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
+type Purge struct{}
+
 // DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
 	Id     uuid.UUID
@@ -189,15 +191,16 @@ func NewClient(
 	}
 
 	// run buffer sweeper if requested
-	if cfg.BufferSettings.MaxLifetime > 0 {
-		dataClient.Logger.Info("Buffer.MaxLifetime is positive => send buffers regularly",
+	if cfg.BufferSettings.MaxLifetime > 0 || cfg.BufferSettings.PurgeOlderThan > 0 {
+		dataClient.Logger.Info("Buffer sweeping is enabled",
 			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
+			zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
 		)
-		go dataClient.bufferSweeper(cfg.BufferSettings.MaxLifetime)
+		go dataClient.bufferSweeper(cfg.BufferSettings.MaxLifetime, cfg.BufferSettings.PurgeOlderThan)
 	} else {
-		dataClient.Logger.Warn(
-			"Buffer.MaxLifetime is not positive => do NOT send buffers regularly",
+		dataClient.Logger.Warn("Buffer sweeping is disabled",
 			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
+			zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
 		)
 	}
 
@@ -280,6 +283,8 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 		zap.String("session", session),
 	)
 
+	client.statistics.SessionsOpenedAdd(1)
+
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
 		if !channelReceiveSuccess {
@@ -314,6 +319,11 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				client.statistics.BuffersProcessedAdd(1)
 			}
 		} else {
+			_, purgeReadSuccess := msg.(Purge)
+			if purgeReadSuccess {
+				break
+			}
+
 			client.Logger.Error(
 				"Cannot convert message to Buffer",
 				zap.String("session", session),
@@ -323,6 +333,11 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 		}
 		client.lastAcceptedAt.Store(time.Now().UnixNano())
 	}
+
+	client.Logger.Info("Stopping to listen to submit buffer",
+		zap.String("session", session),
+	)
+	client.statistics.SessionsClosedAdd(1)
 }
 
 // Sends buffer to DataSet. If not succeeds and try is possible (it retryable), try retry until possible (timeout)
@@ -487,12 +502,34 @@ func (client *DataSetClient) logStatistics() {
 		zap.Float64("processingS", t.ProcessingTime().Seconds()),
 		zap.Duration("processing", t.ProcessingTime()),
 	)
+
+	// log session stats
+	s := stats.Sessions
+	client.Logger.Info(
+		"Sessions Stats:",
+		zap.Uint64("sessionsOpened", s.SessionsOpened()),
+		zap.Uint64("sessionsClosed", s.SessionsClosed()),
+		zap.Uint64("sessionsActive", s.SessionsActive()),
+	)
 }
 
-func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {
-	client.Logger.Info("Starting buffer sweeper with lifetime", zap.Duration("lifetime", lifetime))
+func (client *DataSetClient) bufferSweeper(
+	lifetime time.Duration,
+	purgeOlderThan time.Duration,
+) {
+	client.Logger.Info(
+		"Starting buffer sweeper",
+		zap.Duration("bufferLifetime", lifetime),
+		zap.Duration("purgeOlderThan", purgeOlderThan),
+	)
 	totalKept := atomic.Uint64{}
 	totalSwept := atomic.Uint64{}
+
+	sleepTime := lifetime
+	if sleepTime == 0 {
+		sleepTime = purgeOlderThan
+	}
+
 	for i := uint64(0); ; i++ {
 		// if everything was finished, there is no need to run buffer sweeper
 		//if client.finished.Load() {
@@ -501,12 +538,13 @@ func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {
 		//}
 		kept := atomic.Uint64{}
 		swept := atomic.Uint64{}
-		client.Logger.Debug("Buffer sweeping started", zap.Uint64("sweepId", i))
+		client.Logger.Debug(
+			"Buffer sweeping started", zap.Uint64("sweepId", i))
 		buffers := client.getBuffers()
 		for _, buf := range buffers {
 			// publish buffers that are ready only
 			// if we are actively adding events into this buffer skip it for now
-			if buf.ShouldSendAge(lifetime) {
+			if lifetime > 0 && buf.ShouldSendAge(lifetime) {
 				if buf.HasStatus(buffer.Ready) {
 					client.publishBuffer(buf)
 					swept.Add(1)
@@ -519,6 +557,10 @@ func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {
 			} else {
 				kept.Add(1)
 				totalKept.Add(1)
+
+				if buf.ShouldPurgeAge(purgeOlderThan) {
+					client.purgeBuffer(buf)
+				}
 			}
 		}
 
@@ -539,7 +581,7 @@ func (client *DataSetClient) bufferSweeper(lifetime time.Duration) {
 			zap.Uint64("totalCombined", totalKept.Load()+totalSwept.Load()),
 		)
 
-		time.Sleep(lifetime)
+		time.Sleep(sleepTime)
 	}
 }
 
@@ -547,7 +589,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	if buf.HasStatus(buffer.Publishing) {
 		// buffer is already publishing, this should not happen
 		// so lets skip it
-		client.Logger.Warn("Buffer is already beeing published", buf.ZapStats()...)
+		client.Logger.Warn("Buffer is already being published", buf.ZapStats()...)
 		return
 	}
 
@@ -576,6 +618,30 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	// publish buffer so it can be sent
 	client.statistics.BuffersEnqueuedAdd(+1)
 	client.BufferPerSessionTopic.Pub(buf, buf.Session)
+}
+
+func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
+	if !buf.HasStatus(buffer.Ready) {
+		// buffer is not ready => skip
+		client.Logger.Warn("Buffer cannot be purged", buf.ZapStats()...)
+		return
+	}
+
+	// we are manipulating with client.buffer, so lets lock it
+	client.buffersAllMutex.Lock()
+	buf.SetStatus(buffer.Purging)
+
+	// sent message to terminate go routines
+	client.BufferPerSessionTopic.Pub(Purge{}, buf.Session)
+	client.eventBundlePerKeyTopic.Pub(Purge{}, buf.Session)
+
+	client.eventBundlePerKeyTopic.Unsub(client.eventBundleSubscriptionChannels[buf.Session], buf.Session)
+
+	delete(client.eventBundleSubscriptionChannels, buf.Session)
+	delete(client.buffers, buf.Session)
+
+	client.buffersAllMutex.Unlock()
+	client.Logger.Debug("purging buffer", buf.ZapStats()...)
 }
 
 // Exporter rejects handling of incoming batches if is in error state

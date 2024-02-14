@@ -91,7 +91,9 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
 			MaxSize:                  1000,
+			GroupBy:                  []string{"batch"},
 			MaxLifetime:              5 * MaxDelay,
+			PurgeOlderThan:           15 * MaxDelay,
 			RetryRandomizationFactor: 1.0,
 			RetryMultiplier:          1.0,
 			RetryInitialInterval:     RetryBase,
@@ -109,6 +111,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		for lI := 0; lI < LogsPerBatch; lI++ {
 			key := fmt.Sprintf("%04d-%06d", bI, lI)
 			attrs := make(map[string]interface{})
+			attrs["batch"] = fmt.Sprintf("%d", bI)
 			attrs["body.str"] = key
 			attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
 
@@ -167,6 +170,10 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
 
 	assert.Equal(t, 1.0, stats.Transfer.SuccessRate())
+
+	assert.Equal(t, uint64(MaxBatchCount), stats.Sessions.SessionsOpened())
+	assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
+	assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
 
 	assert.Equal(t, seenKeys, expectedKeys)
 	assert.Equal(t, int(processedEvents.Load()), int(ExpectedLogs), "processed items")
