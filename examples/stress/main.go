@@ -26,7 +26,10 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
+
+	"github.com/scalyr/dataset-go/pkg/version"
 
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 
@@ -41,6 +44,9 @@ func main() {
 	sleep := flag.Duration("sleep", 10*time.Millisecond, "sleep between sending two events")
 	logFile := flag.String("log", fmt.Sprintf("log-%d.log", time.Now().UnixMilli()), "log file for stats")
 	logEvery := flag.Duration("log-every", time.Second, "how often log statistics")
+	enablePProf := flag.Bool("pprof", false, "enable pprof")
+
+	flag.Parse()
 
 	logger := zap.Must(zap.NewDevelopment())
 
@@ -50,10 +56,21 @@ func main() {
 		zap.Duration("sleep", *sleep),
 		zap.String("log", *logFile),
 		zap.Duration("log-every", *logEvery),
+		zap.Bool("pprof", *enablePProf),
+		zap.String("version", version.Version),
 	)
+
+	if *enablePProf {
+		go func() {
+			http.ListenAndServe("localhost:8080", nil)
+		}()
+	}
+
+	apiCalls := atomic.Uint64{}
 
 	// start dummy server that accepts everything
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		apiCalls.Add(1)
 		payload, err := json.Marshal(map[string]interface{}{
 			"status":       "success",
 			"bytesCharged": 42,
@@ -67,8 +84,12 @@ func main() {
 	cfg := config.NewDefaultDataSetConfig()
 	bufferCfg, err := cfg.BufferSettings.WithOptions(buffer_config.WithGroupBy([]string{"body.str"}))
 	check(err)
-	cfgUpdated, err := cfg.WithOptions(config.WithBufferSettings(*bufferCfg), config.WithEndpoint(server.URL))
+	cfgUpdated, err := cfg.WithOptions(
+		config.WithBufferSettings(*bufferCfg),
+		config.WithEndpoint(server.URL),
+	)
 	check(err)
+	cfgUpdated.Tokens.WriteLog = "foo"
 
 	dataSetClient, err := client.NewClient(
 		cfgUpdated,
@@ -79,7 +100,7 @@ func main() {
 	)
 	check(err)
 
-	go logStats(dataSetClient, *logFile, *logEvery)
+	go logStats(dataSetClient, &apiCalls, *logFile, *logEvery)
 
 	for i := 0; i < *eventsCount; i++ {
 		batch := make([]*add_events.EventBundle, 0)
@@ -115,13 +136,16 @@ func main() {
 
 	// wait until everything is processed
 	for {
+		processed := uint64(0)
 		stats := dataSetClient.Statistics()
-		processed := stats.Events.Processed()
+		if stats != nil {
+			processed = stats.Events.Processed()
+		}
 		logger.Info("Processed events",
 			zap.Uint64("processed", processed),
 			zap.Int("expecting", *eventsCount),
 		)
-		if stats.Events.Processed() >= uint64(*eventsCount) {
+		if processed >= uint64(*eventsCount) {
 			break
 		}
 		time.Sleep(time.Second)
@@ -147,11 +171,11 @@ func check(e error) {
 	}
 }
 
-func logStats(client *client.DataSetClient, logFile string, logEvery time.Duration) {
+func logStats(client *client.DataSetClient, apiCalls *atomic.Uint64, logFile string, logEvery time.Duration) {
 	f, err := os.Create(logFile)
 	check(err)
 
-	_, err = f.WriteString("i\tTime\tEnqueued\tProcessed\tHeapAlloc\tHeapSys\tMallocs\tFrees\tHeapObjects\n")
+	_, err = f.WriteString("i\tTime\tEnqueued\tProcessed\tCalls\tHeapAlloc\tHeapSys\tMallocs\tFrees\tHeapObjects\tVersion\n")
 	check(err)
 
 	for i := 0; ; i++ {
@@ -167,16 +191,18 @@ func logStats(client *client.DataSetClient, logFile string, logEvery time.Durati
 
 		_, err := f.WriteString(
 			fmt.Sprintf(
-				"%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+				"%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\n",
 				i,
 				time.Now().Unix(),
 				enqueued,
 				processed,
+				apiCalls.Load(),
 				memStats.HeapAlloc,
 				memStats.HeapSys,
 				memStats.Mallocs,
 				memStats.Frees,
 				memStats.HeapObjects,
+				version.Version,
 			),
 		)
 		check(err)

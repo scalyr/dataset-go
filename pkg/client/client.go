@@ -297,13 +297,15 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 			client.lastAcceptedAt.Store(time.Now().UnixNano())
 			continue
 		}
-		client.Logger.Debug("Received Buffer from channel",
-			zap.String("session", session),
-			zap.Int("processedMsgCnt", processedMsgCnt),
-			zap.Uint64("buffersEnqueued", client.statistics.BuffersEnqueued()),
-			zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
-			zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
-		)
+		if processedMsgCnt%100 == 0 {
+			client.Logger.Debug("Received message from channel",
+				zap.String("session", session),
+				zap.Int("processedMsgCnt", processedMsgCnt),
+				zap.Uint64("buffersEnqueued", client.statistics.BuffersEnqueued()),
+				zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
+				zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
+			)
+		}
 		buf, bufferReadSuccess := msg.(*buffer.Buffer)
 		if bufferReadSuccess {
 			// sleep until retry time
