@@ -31,8 +31,9 @@ jobs:
 
   build:
     strategy:
+      # keep in sync with https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/.github/workflows/build-and-test.yml#L237
       matrix:
-        go: ['1.20', '1.21']
+        go: ['1.21', '1.22']
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     needs: pre_job
