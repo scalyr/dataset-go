@@ -206,7 +206,7 @@ func (client *DataSetClient) newBufferForEvents(key string, info *add_events.Ses
 }
 
 func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan interface{}) {
-	client.Logger.Info("Listening to events with key",
+	client.Logger.Debug("Listening to events with key",
 		zap.String("key", key),
 	)
 

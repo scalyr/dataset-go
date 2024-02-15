@@ -279,7 +279,7 @@ func (client *DataSetClient) newBuffersSubscriberRoutine(session string) {
 }
 
 func (client *DataSetClient) listenAndSendBufferForSession(session string, ch chan interface{}) {
-	client.Logger.Info("Listening to submit buffer",
+	client.Logger.Debug("Listening to submit buffer",
 		zap.String("session", session),
 	)
 
@@ -334,7 +334,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 		client.lastAcceptedAt.Store(time.Now().UnixNano())
 	}
 
-	client.Logger.Info("Stopping to listen to submit buffer",
+	client.Logger.Debug("Stopping to listen to submit buffer",
 		zap.String("session", session),
 	)
 	client.statistics.SessionsClosedAdd(1)
