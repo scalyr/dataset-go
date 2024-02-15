@@ -1,6 +1,6 @@
 module client
 
-go 1.19
+go 1.21
 
 require (
 	github.com/scalyr/dataset-go v0.0.0
