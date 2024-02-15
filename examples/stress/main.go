@@ -42,7 +42,7 @@ import (
 func main() {
 	eventsCount := flag.Int("events", 1e5, "number of events")
 	sleep := flag.Duration("sleep", 10*time.Millisecond, "sleep between sending two events")
-	logFile := flag.String("log", fmt.Sprintf("log-%d.log", time.Now().UnixMilli()), "log file for stats")
+	logFile := flag.String("log", fmt.Sprintf("log-%s-%d.log", version.Version, time.Now().UnixMilli()), "log file for stats")
 	logEvery := flag.Duration("log-every", time.Second, "how often log statistics")
 	enablePProf := flag.Bool("pprof", false, "enable pprof")
 
