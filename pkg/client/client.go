@@ -629,20 +629,20 @@ func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
 		return
 	}
 
-	// we are manipulating with client.buffer, so lets lock it
-	client.buffersAllMutex.Lock()
-	buf.SetStatus(buffer.Purging)
-
 	// sent message to terminate go routines
 	client.BufferPerSessionTopic.Pub(Purge{}, buf.Session)
 	client.eventBundlePerKeyTopic.Pub(Purge{}, buf.Session)
 
-	client.eventBundlePerKeyTopic.Unsub(client.eventBundleSubscriptionChannels[buf.Session], buf.Session)
-
-	delete(client.eventBundleSubscriptionChannels, buf.Session)
+	client.buffersAllMutex.Lock()
+	buf.SetStatus(buffer.Purging)
 	delete(client.buffers, buf.Session)
-
 	client.buffersAllMutex.Unlock()
+
+	client.addEventsMutex.Lock()
+	client.eventBundlePerKeyTopic.Unsub(client.eventBundleSubscriptionChannels[buf.Session], buf.Session)
+	delete(client.eventBundleSubscriptionChannels, buf.Session)
+	client.addEventsMutex.Unlock()
+
 	client.Logger.Debug("purging buffer", buf.ZapStats()...)
 }
 

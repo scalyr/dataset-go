@@ -160,7 +160,6 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// add subscriber for events by key
 	// add subscriber for buffer by key
 	client.addEventsMutex.Lock()
-	defer client.addEventsMutex.Unlock()
 	for key, list := range bundlesWithMeta {
 		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
@@ -170,6 +169,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 			client.newEventBundleSubscriberRoutine(key)
 		}
 	}
+	client.addEventsMutex.Unlock()
 
 	// and as last step - publish them
 

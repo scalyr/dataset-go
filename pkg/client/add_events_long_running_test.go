@@ -43,8 +43,8 @@ import (
 func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	const MaxDelay = 200 * time.Millisecond
 
-	const MaxBatchCount = 20
-	const LogsPerBatch = 10000
+	const MaxBatchCount = 400
+	const LogsPerBatch = 500
 	const ExpectedLogs = uint64(MaxBatchCount * LogsPerBatch)
 
 	attempt := atomic.Uint64{}
@@ -62,8 +62,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 
 		for _, ev := range cer.Events {
 			processedEvents.Add(1)
-			key, found := ev.Attrs["body.str"]
-			assert.True(t, found)
+			key := ev.Attrs["body.str"]
 			seenMutex.Lock()
 			sKey := key.(string)
 			_, f := seenKeys[sKey]
@@ -73,6 +72,9 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			seenKeys[sKey] += 1
 			seenMutex.Unlock()
 		}
+
+		batch := (*cer.SessionInfo)["batch"]
+		t.Logf("Accepting batch: %s", batch.(string))
 
 		lastCall.Store(time.Now().UnixNano())
 		time.Sleep(time.Duration(float64(MaxDelay) * 0.6))
@@ -106,12 +108,14 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
 
+	lastCall.Store(time.Now().UnixNano())
 	for bI := 0; bI < MaxBatchCount; bI++ {
 		batch := make([]*add_events.EventBundle, 0)
+		batchKey := fmt.Sprintf("%d", bI)
 		for lI := 0; lI < LogsPerBatch; lI++ {
 			key := fmt.Sprintf("%04d-%06d", bI, lI)
 			attrs := make(map[string]interface{})
-			attrs["batch"] = fmt.Sprintf("%d", bI)
+			attrs["batch"] = batchKey
 			attrs["body.str"] = key
 			attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
 
@@ -138,12 +142,12 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			expectedKeys[key] = 1
 		}
 
-		t.Logf("Consuming batch: %d", bI)
+		t.Logf("Adding batch: %s", batchKey)
 		go (func(batch []*add_events.EventBundle) {
 			err := sc.AddEvents(batch)
 			assert.Nil(t, err)
 		})(batch)
-		time.Sleep(time.Duration(float64(MaxDelay) * 0.3))
+		time.Sleep(time.Duration(float64(MaxDelay)))
 	}
 
 	for {
