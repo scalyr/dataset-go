@@ -533,7 +533,7 @@ func (stats TransferStats) ProcessingTime() time.Duration {
 	return stats.processingTime
 }
 
-// SessionsStats stores statistics related to sessions
+// SessionsStats stores statistics related to sessions.
 type SessionsStats struct {
 	// sessionsOpened is the number of opened sessions
 	sessionsOpened uint64 `mapstructure:"sessionsOpened"`

@@ -595,6 +595,13 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 		return
 	}
 
+	if buf.HasStatus(buffer.Purging) {
+		// buffer is already purging, this should not happen
+		// so lets skip it
+		client.Logger.Warn("Buffer is already being purged", buf.ZapStats()...)
+		return
+	}
+
 	// we are manipulating with client.buffer, so lets lock it
 	client.buffersAllMutex.Lock()
 	originalStatus := buf.Status()

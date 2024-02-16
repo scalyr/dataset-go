@@ -42,10 +42,12 @@ import (
 
 func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	const MaxDelay = 200 * time.Millisecond
+	const PurgeOlderThan = 15 * MaxDelay
 
-	const MaxBatchCount = 400
-	const LogsPerBatch = 500
-	const ExpectedLogs = uint64(MaxBatchCount * LogsPerBatch)
+	const Cycles = 3
+	const MaxBatchCount = 40
+	const LogsPerBatch = 200
+	const ExpectedLogs = uint64(Cycles * MaxBatchCount * LogsPerBatch)
 
 	attempt := atomic.Uint64{}
 	lastCall := atomic.Int64{}
@@ -95,7 +97,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			MaxSize:                  1000,
 			GroupBy:                  []string{"batch"},
 			MaxLifetime:              5 * MaxDelay,
-			PurgeOlderThan:           15 * MaxDelay,
+			PurgeOlderThan:           PurgeOlderThan,
 			RetryRandomizationFactor: 1.0,
 			RetryMultiplier:          1.0,
 			RetryInitialInterval:     RetryBase,
@@ -109,45 +111,51 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	require.Nil(t, err)
 
 	lastCall.Store(time.Now().UnixNano())
-	for bI := 0; bI < MaxBatchCount; bI++ {
-		batch := make([]*add_events.EventBundle, 0)
-		batchKey := fmt.Sprintf("%d", bI)
-		for lI := 0; lI < LogsPerBatch; lI++ {
-			key := fmt.Sprintf("%04d-%06d", bI, lI)
-			attrs := make(map[string]interface{})
-			attrs["batch"] = batchKey
-			attrs["body.str"] = key
-			attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
+	for cI := 0; cI < Cycles; cI++ {
+		for bI := 0; bI < MaxBatchCount; bI++ {
+			batch := make([]*add_events.EventBundle, 0)
+			batchKey := fmt.Sprintf("%d", bI)
+			for lI := 0; lI < LogsPerBatch; lI++ {
+				key := fmt.Sprintf("%04d-%04d-%06d", cI, bI, lI)
+				attrs := make(map[string]interface{})
+				attrs["batch"] = batchKey
+				attrs["body.str"] = key
+				attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
 
-			event := &add_events.Event{
-				Thread: "5",
-				Sev:    3,
-				Ts:     fmt.Sprintf("%d", time.Now().Nanosecond()),
-				Attrs:  attrs,
+				event := &add_events.Event{
+					Thread: "5",
+					Sev:    3,
+					Ts:     fmt.Sprintf("%d", time.Now().Nanosecond()),
+					Attrs:  attrs,
+				}
+
+				thread := &add_events.Thread{
+					Id:   "5",
+					Name: "fred",
+				}
+				log := &add_events.Log{
+					Id: "LO",
+					Attrs: map[string]interface{}{
+						"key": strings.Repeat("A", rand.Intn(200)),
+					},
+				}
+				eventBundle := &add_events.EventBundle{Event: event, Thread: thread, Log: log}
+
+				batch = append(batch, eventBundle)
+				expectedKeys[key] = 1
 			}
 
-			thread := &add_events.Thread{
-				Id:   "5",
-				Name: "fred",
-			}
-			log := &add_events.Log{
-				Id: "LO",
-				Attrs: map[string]interface{}{
-					"key": strings.Repeat("A", rand.Intn(200)),
-				},
-			}
-			eventBundle := &add_events.EventBundle{Event: event, Thread: thread, Log: log}
-
-			batch = append(batch, eventBundle)
-			expectedKeys[key] = 1
+			t.Logf("Adding batch: %s (%d)", batchKey, cI)
+			go (func(batch []*add_events.EventBundle) {
+				err := sc.AddEvents(batch)
+				assert.Nil(t, err)
+			})(batch)
+			time.Sleep(MaxDelay)
 		}
-
-		t.Logf("Adding batch: %s", batchKey)
-		go (func(batch []*add_events.EventBundle) {
-			err := sc.AddEvents(batch)
-			assert.Nil(t, err)
-		})(batch)
-		time.Sleep(time.Duration(float64(MaxDelay)))
+		time.Sleep(2 * PurgeOlderThan)
+		stats := sc.Statistics()
+		assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
+		assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
 	}
 
 	for {

@@ -33,7 +33,9 @@ const (
 	MinimalMultiplier           = 0.0
 	MinimalRandomizationFactor  = 0.0
 	MinimalRetryShutdownTimeout = 2 * MinimalMaxElapsedTime
-	PurgeToLifetimeRatio        = 3
+	// MinimalPurgeToLifetimeRatio is the minimal ratio between buffer lifetime (when it's sent to server)
+	// and when the whole session is destroyed.
+	MinimalPurgeToLifetimeRatio = 3
 )
 
 type DataSetBufferSettings struct {
@@ -173,11 +175,11 @@ func (cfg *DataSetBufferSettings) String() string {
 }
 
 func (cfg *DataSetBufferSettings) Validate() error {
-	if PurgeToLifetimeRatio*cfg.MaxLifetime > cfg.PurgeOlderThan {
+	if MinimalPurgeToLifetimeRatio*cfg.MaxLifetime > cfg.PurgeOlderThan {
 		return fmt.Errorf(
 			"MaxLifetime %d has to be at least %d times smaller than PurgeOlderThan %d",
 			cfg.MaxSize,
-			PurgeToLifetimeRatio,
+			MinimalPurgeToLifetimeRatio,
 			cfg.PurgeOlderThan,
 		)
 	}
