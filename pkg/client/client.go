@@ -75,13 +75,14 @@ type DataSetClient struct {
 	buffers         map[string]*buffer.Buffer
 	buffersAllMutex sync.Mutex
 	// Pub/Sub topics of Buffers based on its session
-	BufferPerSessionTopic *pubsub.PubSub
-	LastHttpStatus        atomic.Uint32
-	lastError             error
-	lastErrorTs           time.Time
-	lastErrorMu           sync.RWMutex
-	retryAfter            time.Time
-	retryAfterMu          sync.RWMutex
+	BufferPerSessionTopic      *pubsub.PubSub
+	bufferSubscriptionChannels map[string]chan interface{}
+	LastHttpStatus             atomic.Uint32
+	lastError                  error
+	lastErrorTs                time.Time
+	lastErrorMu                sync.RWMutex
+	retryAfter                 time.Time
+	retryAfterMu               sync.RWMutex
 	// indicates that client has been shut down and no further processing is possible
 	finished       atomic.Bool
 	Logger         *zap.Logger
@@ -173,6 +174,7 @@ func NewClient(
 		buffers:                         make(map[string]*buffer.Buffer),
 		buffersAllMutex:                 sync.Mutex{},
 		BufferPerSessionTopic:           pubsub.New(0),
+		bufferSubscriptionChannels:      make(map[string]chan interface{}),
 		LastHttpStatus:                  atomic.Uint32{},
 		retryAfter:                      time.Now(),
 		retryAfterMu:                    sync.RWMutex{},
@@ -245,8 +247,7 @@ func adjustGroupByWithSpecialAttributes(cfg *config.DataSetConfig) {
 	cfg.BufferSettings.GroupBy = groupBy
 }
 
-func (client *DataSetClient) getBuffer(key string) *buffer.Buffer {
-	session := fmt.Sprintf("%s-%s", client.Id, key)
+func (client *DataSetClient) getBuffer(session string) *buffer.Buffer {
 	client.buffersAllMutex.Lock()
 	defer client.buffersAllMutex.Unlock()
 	return client.buffers[session]
@@ -273,6 +274,7 @@ func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.Se
 
 func (client *DataSetClient) newBuffersSubscriberRoutine(session string) {
 	ch := client.BufferPerSessionTopic.Sub(session)
+	client.bufferSubscriptionChannels[session] = ch
 	go (func(session string, ch chan interface{}) {
 		client.listenAndSendBufferForSession(session, ch)
 	})(session, ch)
@@ -642,6 +644,9 @@ func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
 
 	client.buffersAllMutex.Lock()
 	buf.SetStatus(buffer.Purging)
+	client.BufferPerSessionTopic.Unsub(client.bufferSubscriptionChannels[buf.Session], buf.Session)
+	delete(client.bufferSubscriptionChannels, buf.Session)
+
 	delete(client.buffers, buf.Session)
 	client.buffersAllMutex.Unlock()
 

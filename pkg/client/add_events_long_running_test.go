@@ -45,8 +45,8 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	const PurgeOlderThan = 15 * MaxDelay
 
 	const Cycles = 3
-	const MaxBatchCount = 40
-	const LogsPerBatch = 200
+	const MaxBatchCount = 400
+	const LogsPerBatch = 2000
 	const ExpectedLogs = uint64(Cycles * MaxBatchCount * LogsPerBatch)
 
 	attempt := atomic.Uint64{}
@@ -183,7 +183,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 
 	assert.Equal(t, 1.0, stats.Transfer.SuccessRate())
 
-	assert.Equal(t, uint64(MaxBatchCount), stats.Sessions.SessionsOpened())
+	assert.Equal(t, uint64(Cycles*MaxBatchCount), stats.Sessions.SessionsOpened())
 	assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
 	assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
 

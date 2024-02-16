@@ -143,11 +143,12 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	for _, bundle := range bundles {
 		bWM := NewEventWithMeta(bundle, client.Config.BufferSettings.GroupBy, client.serverHost, client.Config.Debug)
 
-		list, found := bundlesWithMeta[bWM.Key]
+		session := fmt.Sprintf("%s-%s", client.Id, bWM.Key)
+		list, found := bundlesWithMeta[session]
 		if !found {
-			bundlesWithMeta[bWM.Key] = []EventWithMeta{bWM}
+			bundlesWithMeta[session] = []EventWithMeta{bWM}
 		} else {
-			bundlesWithMeta[bWM.Key] = append(list, bWM)
+			bundlesWithMeta[session] = append(list, bWM)
 		}
 	}
 
@@ -191,8 +192,7 @@ func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	})(key, ch)
 }
 
-func (client *DataSetClient) newBufferForEvents(key string, info *add_events.SessionInfo) {
-	session := fmt.Sprintf("%s-%s", client.Id, key)
+func (client *DataSetClient) newBufferForEvents(session string, info *add_events.SessionInfo) {
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 
 	client.initBuffer(buf, info)
@@ -290,6 +290,10 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				client.publishBuffer(buf)
 			}
 		} else {
+			_, purgeReadSuccess := msg.(Purge)
+			if purgeReadSuccess {
+				break
+			}
 			client.Logger.Error(
 				"Cannot convert message to EventWithMeta",
 				zap.String("key", key),
