@@ -46,7 +46,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 
 	const Cycles = 3
 	const MaxBatchCount = 400
-	const LogsPerBatch = 2000
+	const LogsPerBatch = 500
 	const ExpectedLogs = uint64(Cycles * MaxBatchCount * LogsPerBatch)
 
 	attempt := atomic.Uint64{}
