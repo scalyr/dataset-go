@@ -175,6 +175,30 @@ func TestBytesAPIAccepted(t *testing.T) {
 	}
 }
 
+func TestSessionsOpened(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
+			require.Nil(t, err)
+			v := uint64(rand.Int())
+			stats.SessionsOpenedAdd(v)
+			assert.Equal(t, v, stats.SessionsOpened())
+		})
+	}
+}
+
+func TestSessionsClosed(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			stats, err := NewStatistics(tt.meter, zap.Must(zap.NewDevelopment()))
+			require.Nil(t, err)
+			v := uint64(rand.Int())
+			stats.SessionsClosedAdd(v)
+			assert.Equal(t, v, stats.SessionsClosed())
+		})
+	}
+}
+
 func TestExport(t *testing.T) {
 	stats, err := NewStatistics(nil, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
@@ -191,6 +215,9 @@ func TestExport(t *testing.T) {
 
 	stats.BytesAPISentAdd(3000)
 	stats.BytesAPIAcceptedAdd(300)
+
+	stats.SessionsOpenedAdd(4000)
+	stats.SessionsClosedAdd(400)
 
 	exp := stats.Export(time.Second)
 	assert.Equal(t, &ExportedStatistics{
@@ -213,6 +240,10 @@ func TestExport(t *testing.T) {
 			bytesAccepted:    300,
 			buffersProcessed: 100,
 			processingTime:   time.Second,
+		},
+		Sessions: SessionsStats{
+			sessionsOpened: 4000,
+			sessionsClosed: 400,
 		},
 	}, exp)
 
@@ -239,6 +270,10 @@ func TestExport(t *testing.T) {
 	assert.Equal(t, exp.Transfer.ThroughputBpS(), float64(300))
 	assert.Equal(t, exp.Transfer.AvgBufferBytes(), float64(3))
 	assert.Equal(t, exp.Transfer.ProcessingTime(), time.Second)
+
+	assert.Equal(t, exp.Sessions.SessionsOpened(), uint64(4000))
+	assert.Equal(t, exp.Sessions.SessionsClosed(), uint64(400))
+	assert.Equal(t, exp.Sessions.SessionsActive(), uint64(3600))
 }
 
 func TestExportNoTraffic(t *testing.T) {

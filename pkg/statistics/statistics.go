@@ -47,6 +47,9 @@ type Statistics struct {
 	bytesAPISent     atomic.Uint64
 	bytesAPIAccepted atomic.Uint64
 
+	sessionsOpened atomic.Uint64
+	sessionsClosed atomic.Uint64
+
 	config     *meter_config.MeterConfig
 	meter      *metric.Meter
 	logger     *zap.Logger
@@ -64,6 +67,9 @@ type Statistics struct {
 
 	cBytesAPISent     metric.Int64UpDownCounter
 	cBytesAPIAccepted metric.Int64UpDownCounter
+
+	cSessionsOpened metric.Int64UpDownCounter
+	cSessionsClosed metric.Int64UpDownCounter
 
 	hPayloadSize  metric.Int64Histogram
 	hResponseTime metric.Int64Histogram
@@ -87,6 +93,9 @@ func NewStatistics(config *meter_config.MeterConfig, logger *zap.Logger) (*Stati
 
 		bytesAPIAccepted: atomic.Uint64{},
 		bytesAPISent:     atomic.Uint64{},
+
+		sessionsOpened: atomic.Uint64{},
+		sessionsClosed: atomic.Uint64{},
 
 		config:     config,
 		meter:      nil,
@@ -172,6 +181,15 @@ func (stats *Statistics) initMetrics() error {
 		return err
 	}
 
+	stats.cSessionsOpened, err = (*meter).Int64UpDownCounter(key("sessions_started"))
+	if err != nil {
+		return err
+	}
+	stats.cSessionsClosed, err = (*meter).Int64UpDownCounter(key("sessions_finished"))
+	if err != nil {
+		return err
+	}
+
 	var payloadBuckets []float64
 	for _, r := range [11]float64{0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.6, 0.85, 1.0, 1.1, 2} {
 		payloadBuckets = append(payloadBuckets, r*buffer_config.LimitBufferSize)
@@ -249,6 +267,14 @@ func (stats *Statistics) BytesAPIAccepted() uint64 {
 	return stats.bytesAPIAccepted.Load()
 }
 
+func (stats *Statistics) SessionsOpened() uint64 {
+	return stats.sessionsOpened.Load()
+}
+
+func (stats *Statistics) SessionsClosed() uint64 {
+	return stats.sessionsClosed.Load()
+}
+
 func (stats *Statistics) BuffersEnqueuedAdd(i uint64) {
 	stats.buffersEnqueued.Add(i)
 	stats.add(stats.cBuffersEnqueued, i)
@@ -297,6 +323,16 @@ func (stats *Statistics) BytesAPISentAdd(i uint64) {
 func (stats *Statistics) BytesAPIAcceptedAdd(i uint64) {
 	stats.bytesAPIAccepted.Add(i)
 	stats.add(stats.cBytesAPIAccepted, i)
+}
+
+func (stats *Statistics) SessionsOpenedAdd(i uint64) {
+	stats.sessionsOpened.Add(i)
+	stats.add(stats.cSessionsOpened, i)
+}
+
+func (stats *Statistics) SessionsClosedAdd(i uint64) {
+	stats.sessionsClosed.Add(i)
+	stats.add(stats.cSessionsClosed, i)
 }
 
 func (stats *Statistics) PayloadSizeRecord(payloadSizeInBytes int64) {
@@ -369,10 +405,17 @@ func (stats *Statistics) Export(processingDur time.Duration) *ExportedStatistics
 		processingDur,
 	}
 
+	// log session stats
+	sessionsStats := SessionsStats{
+		sessionsOpened: stats.SessionsOpened(),
+		sessionsClosed: stats.SessionsClosed(),
+	}
+
 	return &ExportedStatistics{
 		Buffers:  buffersStats,
 		Events:   eventsStats,
 		Transfer: transferStats,
+		Sessions: sessionsStats,
 	}
 }
 
@@ -490,7 +533,30 @@ func (stats TransferStats) ProcessingTime() time.Duration {
 	return stats.processingTime
 }
 
-// Statistics store statistics about queues and transferred data
+// SessionsStats stores statistics related to sessions.
+type SessionsStats struct {
+	// sessionsOpened is the number of opened sessions
+	sessionsOpened uint64 `mapstructure:"sessionsOpened"`
+	// sessionsClosed is the number of closed sessions
+	sessionsClosed uint64 `mapstructure:"sessionsClosed"`
+}
+
+// SessionsOpened is the number of opened sessions
+func (stats SessionsStats) SessionsOpened() uint64 {
+	return stats.sessionsOpened
+}
+
+// SessionsClosed is the number of closed sessions
+func (stats SessionsStats) SessionsClosed() uint64 {
+	return stats.sessionsClosed
+}
+
+// SessionsActive is the number of active sessions
+func (stats SessionsStats) SessionsActive() uint64 {
+	return stats.sessionsOpened - stats.sessionsClosed
+}
+
+// ExportedStatistics store statistics related to the library execution
 // These are statistics from the beginning of the processing
 type ExportedStatistics struct {
 	// Events stores statistics about processing events
@@ -499,4 +565,6 @@ type ExportedStatistics struct {
 	Buffers QueueStats `mapstructure:"buffers"`
 	// Transfer stores statistics about data transfers
 	Transfer TransferStats `mapstructure:"transfer"`
+	// Sessions stores statistics about sessions
+	Sessions SessionsStats `mapstructure:"sessions"`
 }

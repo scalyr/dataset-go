@@ -737,6 +737,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 		BufferSettings: buffer_config.DataSetBufferSettings{
 			MaxSize:                  1000,
 			MaxLifetime:              2 * sentDelay,
+			PurgeOlderThan:           10 * sentDelay,
 			RetryRandomizationFactor: 1.0,
 			RetryMultiplier:          1.0,
 			RetryInitialInterval:     RetryBase,
@@ -873,6 +874,7 @@ func TestAddEventsAreNotRejectedOncePreviousReqRetriesMaxLifetimeExpired(t *test
 	defer server.Close()
 	dataSetConfig := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithMaxLifetime(time.Second),
+		buffer_config.WithPurgeOlderThan(5*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
 	), server_host_config.NewDefaultDataSetServerHostSettings())
@@ -902,6 +904,7 @@ func TestAddEventsAreRejectedOncePreviousReqRetriesMaxLifetimeNotExpired(t *test
 	defer server.Close()
 	dataSetConfig := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithMaxLifetime(time.Second),
+		buffer_config.WithPurgeOlderThan(5*time.Second),
 		buffer_config.WithRetryMaxElapsedTime(time.Duration(maxElapsedTime)*time.Second),
 		buffer_config.WithRetryRandomizationFactor(0.000000001),
 	), server_host_config.NewDefaultDataSetServerHostSettings())

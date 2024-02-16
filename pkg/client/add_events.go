@@ -143,11 +143,12 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	for _, bundle := range bundles {
 		bWM := NewEventWithMeta(bundle, client.Config.BufferSettings.GroupBy, client.serverHost, client.Config.Debug)
 
-		list, found := bundlesWithMeta[bWM.Key]
+		session := fmt.Sprintf("%s-%s", client.Id, bWM.Key)
+		list, found := bundlesWithMeta[session]
 		if !found {
-			bundlesWithMeta[bWM.Key] = []EventWithMeta{bWM}
+			bundlesWithMeta[session] = []EventWithMeta{bWM}
 		} else {
-			bundlesWithMeta[bWM.Key] = append(list, bWM)
+			bundlesWithMeta[session] = append(list, bWM)
 		}
 	}
 
@@ -160,7 +161,6 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// add subscriber for events by key
 	// add subscriber for buffer by key
 	client.addEventsMutex.Lock()
-	defer client.addEventsMutex.Unlock()
 	for key, list := range bundlesWithMeta {
 		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
@@ -170,6 +170,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 			client.newEventBundleSubscriberRoutine(key)
 		}
 	}
+	client.addEventsMutex.Unlock()
 
 	// and as last step - publish them
 
@@ -191,8 +192,7 @@ func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	})(key, ch)
 }
 
-func (client *DataSetClient) newBufferForEvents(key string, info *add_events.SessionInfo) {
-	session := fmt.Sprintf("%s-%s", client.Id, key)
+func (client *DataSetClient) newBufferForEvents(session string, info *add_events.SessionInfo) {
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 
 	client.initBuffer(buf, info)
@@ -206,7 +206,7 @@ func (client *DataSetClient) newBufferForEvents(key string, info *add_events.Ses
 }
 
 func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan interface{}) {
-	client.Logger.Info("Listening to events with key",
+	client.Logger.Debug("Listening to events with key",
 		zap.String("key", key),
 	)
 
@@ -290,6 +290,10 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				client.publishBuffer(buf)
 			}
 		} else {
+			_, purgeReadSuccess := msg.(Purge)
+			if purgeReadSuccess {
+				break
+			}
 			client.Logger.Error(
 				"Cannot convert message to EventWithMeta",
 				zap.String("key", key),
