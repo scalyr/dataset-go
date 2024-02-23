@@ -63,6 +63,8 @@ func main() {
 	)
 
 	if *enablePProf {
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(1)
 		go func() {
 			http.ListenAndServe("localhost:8080", nil)
 		}()
