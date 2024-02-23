@@ -642,18 +642,23 @@ func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
 	client.BufferPerSessionTopic.Pub(Purge{}, buf.Session)
 	client.eventBundlePerKeyTopic.Pub(Purge{}, buf.Session)
 
+	// unsubscribe and remove buffer consumer
 	client.buffersAllMutex.Lock()
 	buf.SetStatus(buffer.Purging)
 	client.BufferPerSessionTopic.Unsub(client.bufferSubscriptionChannels[buf.Session], buf.Session)
 	delete(client.bufferSubscriptionChannels, buf.Session)
-
-	delete(client.buffers, buf.Session)
 	client.buffersAllMutex.Unlock()
 
+	// unsubscribe and remove events consumer
 	client.addEventsMutex.Lock()
 	client.eventBundlePerKeyTopic.Unsub(client.eventBundleSubscriptionChannels[buf.Session], buf.Session)
 	delete(client.eventBundleSubscriptionChannels, buf.Session)
 	client.addEventsMutex.Unlock()
+
+	// remove buffer itself
+	client.buffersAllMutex.Lock()
+	delete(client.buffers, buf.Session)
+	client.buffersAllMutex.Unlock()
 
 	client.Logger.Debug("purging buffer", buf.ZapStats()...)
 }
