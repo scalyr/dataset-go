@@ -13,7 +13,7 @@ EVENTS="${1:=10000}"
 BUCKETS="${2:=10000}"
 
 echo "Run stress test for ${EVENTS} events and ${BUCKETS} buckets"
-/usr/bin/time -al ./stress \
+./stress \
   --events="${EVENTS}" \
   --buckets="${BUCKETS}" \
   --sleep=10ms 2>&1 | tee "out-${EVENTS}-${BUCKETS}.log"
