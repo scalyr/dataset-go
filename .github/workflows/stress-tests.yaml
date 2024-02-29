@@ -45,11 +45,6 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           cache: true
-          cache-dependency-path: |
-            go.sum
-      - name: Run go mod vendor
-        run: |
-          go mod vendor
       - name: Run Stress Test - Each bucket used once
         run: |
           EVENTS=100 BUCKETS=10000 ./scripts/run-stress-test.sh
