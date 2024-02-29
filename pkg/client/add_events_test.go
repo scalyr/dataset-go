@@ -342,11 +342,6 @@ func TestAddEventsRetry(t *testing.T) {
 	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
 	assert.Equal(t, 1.0/float64(succeedInAttempt), stats.Transfer.SuccessRate())
 	assert.Equal(t, uint64(1), stats.Transfer.BuffersProcessed())
-	/* TODO: on my Mac it's 337 in GitHub action on ubuntu-latest it's 339
-	assert.Equal(t, uint64(0x3f3), stats.Transfer.BytesSent())
-	assert.Equal(t, uint64(0x151), stats.Transfer.BytesAccepted())
-	assert.Equal(t, 337.0, stats.Transfer.AvgBufferBytes())
-	*/
 }
 
 func TestAddEventsRetryAfterSec(t *testing.T) {
@@ -427,8 +422,6 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	assert.Equal(t, attempt.Load(), int32(2))
 	assert.Nil(t, err1)
 	assert.Nil(t, sc.LastError())
-	// info1 := httpmock.GetCallCountInfo()
-	// assert.CmpDeeply(info1, map[string]int{"POST https://example.com/api/addEvents": 2})
 
 	// send second request to make sure that nothing is blocked
 	event2 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 22"}}
@@ -507,8 +500,70 @@ func TestAddEventsRetryAfterTime(t *testing.T) {
 	assert.True(t, wasSuccessful.Load())
 	assert.Nil(t, err)
 	assert.Nil(t, sc.LastError())
-	// info := httpmock.GetCallCountInfo()
-	// assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": 2})
+}
+
+func TestAddEventsRetryWhenNonJSONResponseIsReturned(t *testing.T) {
+	attempt.Store(0)
+	wasSuccessful := atomic.Bool{}
+	wasSuccessful.Store(false)
+	const succeedInAttempt = int32(3)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		attempt.Add(1)
+		_, err := extract(req)
+
+		assert.Nil(t, err, "Error reading request: %v", err)
+
+		payload := make([]byte, 0)
+		if attempt.Load() < succeedInAttempt {
+			w.WriteHeader(500)
+			payload, err = json.Marshal("this is not JSON")
+		} else {
+			wasSuccessful.Store(true)
+			payload, err = json.Marshal(map[string]interface{}{
+				"status":       "success",
+				"bytesCharged": 42,
+			})
+		}
+
+		assert.NoError(t, err)
+		l, err := w.Write(payload)
+		assert.Greater(t, l, 1)
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
+		buffer_config.WithRetryInitialInterval(RetryBase),
+		buffer_config.WithRetryMaxInterval(RetryBase),
+	), server_host_config.NewDefaultDataSetServerHostSettings())
+	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
+	require.Nil(t, err)
+
+	event1 := &add_events.Event{Thread: "5", Sev: 3, Ts: "0", Attrs: map[string]interface{}{"message": "test - 1"}}
+	eventBundle1 := &add_events.EventBundle{Event: event1, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
+	err = sc.AddEvents([]*add_events.EventBundle{eventBundle1})
+	assert.Nil(t, err)
+	err = sc.Shutdown()
+	assert.Nil(t, err)
+	assert.True(t, wasSuccessful.Load())
+	assert.Equal(t, attempt.Load(), succeedInAttempt)
+
+	stats := sc.Statistics()
+	assert.Equal(t, uint64(1), stats.Events.Enqueued())
+	assert.Equal(t, uint64(1), stats.Events.Processed())
+	assert.Equal(t, uint64(0), stats.Events.Waiting())
+	assert.Equal(t, uint64(0), stats.Events.Dropped())
+	assert.Equal(t, uint64(0), stats.Events.Broken())
+	assert.Equal(t, 1.0, stats.Events.SuccessRate())
+	assert.Equal(t, uint64(1), stats.Buffers.Enqueued())
+	assert.Equal(t, uint64(1), stats.Buffers.Processed())
+	assert.Equal(t, uint64(0), stats.Buffers.Waiting())
+	assert.Equal(t, uint64(0), stats.Buffers.Dropped())
+	assert.Equal(t, uint64(0), stats.Buffers.Broken())
+	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
+	assert.Equal(t, 1.0/float64(succeedInAttempt), stats.Transfer.SuccessRate())
+	assert.Equal(t, uint64(1), stats.Transfer.BuffersProcessed())
 }
 
 func TestAddEventsLargeEvent(t *testing.T) {

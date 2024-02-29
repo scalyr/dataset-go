@@ -49,8 +49,8 @@ import (
 )
 
 const (
-	HttpErrorCannotConnect   = 600
-	HttpErrorHasErrorMessage = 499
+	HttpErrorCannotConnect = 600
+	HttpErrorCannotProcess = 601
 )
 
 // isOkStatus returns true if status code is 200, false otherwise.
@@ -366,13 +366,11 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 		if err != nil {
 			client.Logger.Error("unable to send addEvents buffers", zap.Error(err))
 			client.setLastErrorTimestamp(time.Now())
-			if !strings.Contains(err.Error(), "Unable to send request") {
-				lastHttpStatus = HttpErrorHasErrorMessage
-				client.LastHttpStatus.Store(lastHttpStatus)
-				client.onBufferDrop(buf, lastHttpStatus, err)
-				return false // exit loop (failed to send buffer)
+			if strings.Contains(err.Error(), errMsgUnableToSentRequest) {
+				lastHttpStatus = HttpErrorCannotConnect
+			} else {
+				lastHttpStatus = HttpErrorCannotProcess
 			}
-			lastHttpStatus = HttpErrorCannotConnect
 			client.LastHttpStatus.Store(lastHttpStatus)
 		}
 		zaps := make([]zap.Field, 0)
