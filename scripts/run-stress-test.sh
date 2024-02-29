@@ -9,8 +9,8 @@ rm -rfv stress
 go build -o stress
 ls -l stress
 
-EVENTS="${EVENTS:=10000}"
-BUCKETS="${BUCKETS:=10000}"
+EVENTS="${1:=10000}"
+BUCKETS="${2:=10000}"
 
 echo "Run stress test for ${EVENTS} events and ${BUCKETS} buckets"
 /usr/bin/time -al ./stress \
