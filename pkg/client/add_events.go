@@ -39,9 +39,9 @@ import (
 )
 
 const (
-	errMsgUnableToSentRequest   = "Unable to send request"
-	errMsgUnableToReadResponse  = "Unable to read response"
-	errMsgUnableToParseResponse = "Unable to parse response"
+	errMsgUnableToSentRequest   = "unable to send request"
+	errMsgUnableToReadResponse  = "unable to read response"
+	errMsgUnableToParseResponse = "unable to parse response"
 )
 
 /*

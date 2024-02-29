@@ -882,7 +882,7 @@ func TestAddEventsLogResponseBodyOnInvalidJson(t *testing.T) {
 	lastError := sc.LastError()
 
 	assert.NotNil(t, lastError)
-	assert.Equal(t, fmt.Errorf("unable to parse response body: invalid character '<' looking for beginning of value, url: %s, response: <html>not valid json</html>", sc.addEventsEndpointUrl).Error(), lastError.Error())
+	assert.Equal(t, fmt.Errorf("unable to parse response: invalid character '<' looking for beginning of value, url: %s, status: 503, response: <html>not valid json</html>", sc.addEventsEndpointUrl).Error(), lastError.Error())
 
 	assert.NotNil(t, err)
 	assert.Errorf(t, err, "some buffers were dropped during finishing - 1")
