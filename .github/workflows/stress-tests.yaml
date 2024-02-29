@@ -54,5 +54,5 @@ jobs:
           EVENTS=100 BUCKETS=15 ./scripts/run-stress-test.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: logs
+          name: logs-${{ matrix.os }}-${{ matrix.go }}
           path: examples/stress/*.log
