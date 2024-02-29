@@ -48,10 +48,10 @@ jobs:
           cache: true
       - name: Run Stress Test - Each bucket used once
         run: |
-          ./scripts/run-stress-test.sh 100 10000
+          ./scripts/run-stress-test.sh 10000 10000
       - name: Run Stress Test - Max congestion
         run: |
-          ./scripts/run-stress-test.sh 100 15
+          ./scripts/run-stress-test.sh 10000 -1
       - uses: actions/upload-artifact@v4
         with:
           name: logs-${{ matrix.os }}-${{ matrix.go }}

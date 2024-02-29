@@ -39,6 +39,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	MaxLifeTimeMultiplier    = 5
+	PurgeOlderThanMultiplier = 15
+)
+
 func main() {
 	eventsCount := flag.Int("events", 1e5, "number of events")
 	bucketsCount := flag.Int("buckets", 1e5, "number of buckets")
@@ -52,7 +57,21 @@ func main() {
 	logger := zap.Must(zap.NewDevelopment())
 
 	// log input parameters
-	logger.Info("Running stress test with:",
+	logger.Info("Running stress test - input:",
+		zap.Int("events", *eventsCount),
+		zap.Int("buckets", *bucketsCount),
+		zap.Duration("sleep", *sleep),
+		zap.String("log", *logFile),
+		zap.Duration("log-every", *logEvery),
+		zap.Bool("pprof", *enablePProf),
+		zap.String("version", version.Version),
+	)
+
+	if *bucketsCount == -1 {
+		*bucketsCount = PurgeOlderThanMultiplier
+	}
+
+	logger.Info("Running stress test - adjusted:",
 		zap.Int("events", *eventsCount),
 		zap.Int("buckets", *bucketsCount),
 		zap.Duration("sleep", *sleep),
@@ -88,8 +107,8 @@ func main() {
 	cfg := config.NewDefaultDataSetConfig()
 	bufferCfg, err := cfg.BufferSettings.WithOptions(
 		buffer_config.WithGroupBy([]string{"body.str"}),
-		buffer_config.WithMaxLifetime(5**sleep),
-		buffer_config.WithPurgeOlderThan(15**sleep),
+		buffer_config.WithMaxLifetime(MaxLifeTimeMultiplier**sleep),
+		buffer_config.WithPurgeOlderThan(PurgeOlderThanMultiplier**sleep),
 	)
 	check(err)
 	cfgUpdated, err := cfg.WithOptions(
