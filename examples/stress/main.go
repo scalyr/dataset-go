@@ -110,9 +110,20 @@ func main() {
 
 	go logStats(dataSetClient, &apiCalls, *logFile, *logEvery)
 
+	// start sending events
+	logger.Info(
+		"STRESS - Start adding events",
+	)
 	for i := 0; i < *eventsCount; i++ {
 		batch := make([]*add_events.EventBundle, 0)
 		key := fmt.Sprintf("%d", i%*bucketsCount)
+
+		logger.Debug(
+			"STRESS - Creating event",
+			zap.Int("i", i),
+			zap.String("key", key),
+		)
+
 		attrs := make(map[string]interface{})
 		attrs["body.str"] = key
 		attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
@@ -143,6 +154,9 @@ func main() {
 	}
 
 	// wait until everything is processed
+	logger.Info(
+		"STRESS - Wait for everything to finish",
+	)
 	for {
 		processed := uint64(0)
 		stats := dataSetClient.Statistics()
@@ -160,6 +174,9 @@ func main() {
 	}
 
 	// wait for extra 1 minute to see how the memory will behave
+	logger.Info(
+		"STRESS - Extra sleep at the end",
+	)
 	extraSleepFor := 60
 	for i := 0; i <= extraSleepFor; i++ {
 		time.Sleep(time.Second)
