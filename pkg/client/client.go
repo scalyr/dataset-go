@@ -64,8 +64,6 @@ func isRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
-type Purge struct{}
-
 // DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
 	Id     uuid.UUID
@@ -307,35 +305,6 @@ func (client *DataSetClient) buffersSubscriptionMutexUnlock(reason string, sessi
 	)
 }
 
-/*
-	func (client *DataSetClient) addEventsMutexLock(reason string, session string) {
-		client.Logger.Debug(
-			"addEvents lock",
-			zap.String("reason", reason),
-			zap.String("session", session),
-		)
-		client.addEventsMutex.Lock()
-		client.Logger.Debug(
-			"addEvents locked",
-			zap.String("reason", reason),
-			zap.String("session", session),
-		)
-	}
-
-	func (client *DataSetClient) addEventsMutexUnlock(reason string, session string) {
-		client.Logger.Debug(
-			"addEvents unlock",
-			zap.String("reason", reason),
-			zap.String("session", session),
-		)
-		client.addEventsMutex.Unlock()
-		client.Logger.Debug(
-			"addEvents unlocked",
-			zap.String("reason", reason),
-			zap.String("session", session),
-		)
-	}
-*/
 func (client *DataSetClient) eventBundleSubscriptionMutexLock(reason string, session string) {
 	client.Logger.Debug(
 		"eventBundleSubscription lock",
@@ -415,17 +384,8 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
 		if !channelReceiveSuccess {
+			// channel was unsubscribed during the purge
 			break
-			/*
-				client.Logger.Error(
-					"Cannot receive Buffer from channel",
-					zap.String("session", session),
-					zap.Any("msg", msg),
-				)
-				client.statistics.BuffersBrokenAdd(1)
-				client.lastAcceptedAt.Store(time.Now().UnixNano())
-				continue
-			*/
 		}
 		if processedMsgCnt%100 == 0 {
 			client.Logger.Debug("Received message from channel",
@@ -451,11 +411,6 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				client.statistics.BuffersProcessedAdd(1)
 			}
 		} else {
-			_, purgeReadSuccess := msg.(Purge)
-			if purgeReadSuccess {
-				break
-			}
-
 			client.Logger.Error(
 				"Cannot convert message to Buffer",
 				zap.String("session", session),
@@ -768,17 +723,20 @@ func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
 		return
 	}
 
-	// remove buffer itself
-
-	timeBeforeLock := time.Now()
+	// first we have to lock it
 	client.buffersMutexLock("purgeBuffer", buf.Session)
-	if buf.TouchedSince(timeBeforeLock) {
+	defer client.buffersMutexUnlock("purgeBuffer", buf.Session)
+	// if there was some interaction with the buffer recently, then we skip purging
+	// it's not big deal, we can purge it in the next cycle
+	// otherwise there is chance that we will purge entries that
+	// are still needed
+	if buf.TouchedInLast(100 * time.Millisecond) {
 		// buffer is still in use => do not purge
-		client.buffersMutexUnlock("purgeBuffer", buf.Session)
 		client.Logger.Debug("purging buffer - ABORT", buf.ZapStats()...)
 		return
 	}
 
+	// delete buffer from the dictionary
 	delete(client.buffers, buf.Session)
 
 	// mark the buffer as purging
@@ -801,7 +759,6 @@ func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
 
 	buf.SetStatus(buffer.Purged)
 	client.eventBundleSubscriptionMutexUnlock("purgeBuffer", buf.Session)
-	client.buffersMutexUnlock("purgeBuffer", buf.Session)
 
 	client.Logger.Debug("purging buffer - END", buf.ZapStats()...)
 }

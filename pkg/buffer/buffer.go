@@ -187,8 +187,10 @@ func (buffer *Buffer) SessionInfo() *add_events.SessionInfo {
 }
 
 func (buffer *Buffer) AddBundle(bundle *add_events.EventBundle) (AddStatus, error) {
+	// update time, when there was last interaction with the buffer
 	defer buffer.Touch()
 
+	// lock data
 	buffer.dataMutex.Lock()
 	defer buffer.dataMutex.Unlock()
 	status := buffer.Status()
@@ -458,6 +460,6 @@ func (buffer *Buffer) Touch() {
 	buffer.lastTouchedAt.Store(time.Now().UnixNano())
 }
 
-func (buffer *Buffer) TouchedSince(t time.Time) bool {
-	return buffer.lastTouchedAt.Load() > t.UnixNano()
+func (buffer *Buffer) TouchedInLast(d time.Duration) bool {
+	return (time.Now().UnixNano() - buffer.lastTouchedAt.Load()) <= d.Nanoseconds()
 }

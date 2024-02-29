@@ -164,19 +164,22 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		client.buffersMutexLock("addEvents - Search", key)
 		buf, found := client.buffers[key]
 		if !found {
+			// buffer does not exist yet, so let create required
+			// entities
+
 			// add information about the host to the sessionInfo
 			client.newBufferForEvents(key, &list[0].SessionInfo)
 
+			// add subscriber
 			client.newEventBundleSubscriberRoutine(key)
 		} else {
 			buf.Touch()
 		}
 		client.buffersMutexUnlock("addEvents - Search", key)
-	}
 
-	// and as last step - publish them
-
-	for key, list := range bundlesWithMeta {
+		// publish all the bundles
+		// when event is added to the bundle it updates the
+		// LastTouched as well
 		for _, bundle := range list {
 			client.eventBundlePerKeyTopic.Pub(bundle, key)
 			client.statistics.EventsEnqueuedAdd(1)
@@ -201,9 +204,8 @@ func (client *DataSetClient) newBufferForEvents(session string, info *add_events
 
 	client.initBuffer(buf, info)
 
-	// client.buffersMutexLock("newBufferForEvents", session)
+	// there is no need to lock here, it's locked by the caller
 	client.buffers[session] = buf
-	// client.buffersMutexUnlock("newBufferForEvents", session)
 
 	// create subscriber, so all the upcoming buffers are processed as well
 	client.newBuffersSubscriberRoutine(session)
@@ -231,17 +233,8 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
 		if !channelReceiveSuccess {
+			// channel was unsubscribed during the purge
 			break
-			/*
-				client.Logger.Error(
-					"Cannot receive EventWithMeta from channel",
-					zap.String("key", key),
-					zap.Any("msg", msg),
-				)
-				client.statistics.EventsBrokenAdd(1)
-				client.lastAcceptedAt.Store(time.Now().UnixNano())
-				continue
-			*/
 		}
 
 		bundle, ok := msg.(EventWithMeta)
@@ -297,10 +290,6 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				client.publishBuffer(buf)
 			}
 		} else {
-			_, purgeReadSuccess := msg.(Purge)
-			if purgeReadSuccess {
-				break
-			}
 			client.Logger.Error(
 				"Cannot convert message to EventWithMeta",
 				zap.String("key", key),
