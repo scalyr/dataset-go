@@ -747,8 +747,13 @@ func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
 
 	// unsubscribe and remove events consumer
 	client.Logger.Debug("purgeBuffer - Unsubscribe EventBundle topic", zap.String("session", buf.Session))
-	client.eventBundlePerKeyTopic.Unsub(client.eventBundleSubscriptionChannels[buf.Session], buf.Session)
-	delete(client.eventBundleSubscriptionChannels, buf.Session)
+	ch, found := client.eventBundleSubscriptionChannels[buf.Session]
+	if found {
+		client.eventBundlePerKeyTopic.Unsub(ch, buf.Session)
+		delete(client.eventBundleSubscriptionChannels, buf.Session)
+	} else {
+		client.Logger.Warn("EventBundle already purged", zap.String("session", buf.Session))
+	}
 
 	// unsubscribe and remove buffer consumer
 	client.buffersSubscriptionMutexLock("purgeBuffer", buf.Session)
