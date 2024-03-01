@@ -69,7 +69,8 @@ type DataSetClient struct {
 	Id     uuid.UUID
 	Config *config.DataSetConfig
 	Client *http.Client
-	// map of known Buffer //TODO introduce cleanup
+
+	// map of known Buffer
 	buffers      map[string]*buffer.Buffer
 	buffersMutex sync.Mutex
 	// Pub/Sub topics of Buffers based on its session
@@ -330,6 +331,26 @@ func (client *DataSetClient) eventBundleSubscriptionMutexUnlock(reason string, s
 		"eventBundleSubscription unlocked",
 		zap.String("reason", reason),
 		zap.String("session", session),
+	)
+}
+
+func (client *DataSetClient) addEventsMutexLock() {
+	client.Logger.Debug(
+		"AddEvents lock",
+	)
+	client.addEventsMutex.Lock()
+	client.Logger.Debug(
+		"AddEvents locked",
+	)
+}
+
+func (client *DataSetClient) addEventsMutexUnlock() {
+	client.Logger.Debug(
+		"AddEvents unlock",
+	)
+	client.addEventsMutex.Unlock()
+	client.Logger.Debug(
+		"AddEvents unlocked",
 	)
 }
 
@@ -749,6 +770,7 @@ func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
 	client.Logger.Debug("purgeBuffer - Unsubscribe EventBundle topic", zap.String("session", buf.Session))
 	ch, found := client.eventBundleSubscriptionChannels[buf.Session]
 	if found {
+		// TODO: This is the place, where it gets stuck
 		client.eventBundlePerKeyTopic.Unsub(ch, buf.Session)
 		delete(client.eventBundleSubscriptionChannels, buf.Session)
 	} else {

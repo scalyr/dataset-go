@@ -114,7 +114,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	for cI := 0; cI < Cycles; cI++ {
 		for bI := 0; bI < MaxBatchCount; bI++ {
 			batch := make([]*add_events.EventBundle, 0)
-			batchKey := fmt.Sprintf("%d", bI)
+			batchKey := fmt.Sprintf("long-running-test-%d", bI)
 			for lI := 0; lI < LogsPerBatch; lI++ {
 				key := fmt.Sprintf("%04d-%04d-%06d", cI, bI, lI)
 				attrs := make(map[string]interface{})

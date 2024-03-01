@@ -157,6 +157,8 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		client.firstReceivedAt.Store(time.Now().UnixNano())
 	}
 
+	client.addEventsMutexLock()
+
 	// then create all subscribers
 	// add subscriber for events by key
 	// add subscriber for buffer by key
@@ -177,23 +179,26 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 			buf.Touch()
 		}
 		client.buffersMutexUnlock("addEvents - Search", key)
+	}
 
-		// publish all the bundles
-		// when event is added to the bundle it updates the
-		// LastTouched as well
+	client.addEventsMutexUnlock()
+
+	// publish all the bundles
+	// when event is added to the bundle it updates the
+	// LastTouched as well
+	for key, list := range bundlesWithMeta {
 		for _, bundle := range list {
 			client.eventBundlePerKeyTopic.Pub(bundle, key)
 			client.statistics.EventsEnqueuedAdd(1)
 		}
 	}
-
 	return nil
 }
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	client.Logger.Debug("newEventBundleSubscriberRoutine - BEGIN", zap.String("session", key))
-	ch := client.eventBundlePerKeyTopic.Sub(key)
 	client.eventBundleSubscriptionMutexLock("newEventBundle", key)
+	ch := client.eventBundlePerKeyTopic.Sub(key)
 	client.eventBundleSubscriptionChannels[key] = ch
 	client.eventBundleSubscriptionMutexUnlock("newEventBundle", key)
 	go (func(session string, ch chan interface{}) {
