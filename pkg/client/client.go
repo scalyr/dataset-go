@@ -475,7 +475,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 			zap.String("message", response.Message),
 		)
 		client.Logger.Debug("Events were sent to DataSet",
-			zaps...,
+			buf.ZapStats(zaps...)...,
 		)
 
 		if isOkStatus(lastHttpStatus) {

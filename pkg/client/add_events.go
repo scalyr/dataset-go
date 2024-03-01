@@ -191,6 +191,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 }
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
+	client.Logger.Debug("newEventBundleSubscriberRoutine - BEGIN", zap.String("session", key))
 	ch := client.eventBundlePerKeyTopic.Sub(key)
 	client.eventBundleSubscriptionMutexLock("newEventBundle", key)
 	client.eventBundleSubscriptionChannels[key] = ch
@@ -198,6 +199,7 @@ func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	go (func(session string, ch chan interface{}) {
 		client.listenAndSendBundlesForKey(key, ch)
 	})(key, ch)
+	client.Logger.Debug("newEventBundleSubscriberRoutine - END", zap.String("session", key))
 }
 
 func (client *DataSetClient) newBufferForEvents(session string, info *add_events.SessionInfo) {
