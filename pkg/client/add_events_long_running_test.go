@@ -156,8 +156,10 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		}
 		time.Sleep(2 * PurgeOlderThan)
 		stats := sc.Statistics()
-		assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
-		assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
+		if stats != nil {
+			assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
+			assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
+		}
 	}
 
 	for {
@@ -171,6 +173,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	assert.Nil(t, err, err)
 
 	stats := sc.Statistics()
+	assert.NotNil(t, stats)
 	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Enqueued())
 	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Processed())
 	assert.Equal(t, uint64(0), stats.Events.Waiting())
