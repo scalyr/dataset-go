@@ -38,6 +38,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	errMsgUnableToSentRequest   = "unable to send request"
+	errMsgUnableToReadResponse  = "unable to read response"
+	errMsgUnableToParseResponse = "unable to parse response"
+)
+
 /*
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
@@ -566,7 +572,7 @@ func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 func (client *DataSetClient) apiCall(req *http.Request, response response.ResponseObjSetter) error {
 	resp, err := client.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("unable to send request: %w", err)
+		return fmt.Errorf("%s: %w", errMsgUnableToSentRequest, err)
 	}
 
 	defer func() {
@@ -591,12 +597,12 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.Respon
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("unable to read response: %w", err)
+		return fmt.Errorf("%s: %w", errMsgUnableToReadResponse, err)
 	}
 
 	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
-		return fmt.Errorf("unable to parse response body: %w, url: %s, response: %s", err, client.addEventsEndpointUrl, truncateText(string(responseBody), 1000))
+		return fmt.Errorf("%s: %w, url: %s, status: %d, response: %s", errMsgUnableToParseResponse, err, client.addEventsEndpointUrl, resp.StatusCode, truncateText(string(responseBody), 1000))
 	}
 
 	response.SetResponseObj(resp)
