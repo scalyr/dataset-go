@@ -168,9 +168,10 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 			// entities
 
 			// add information about the host to the sessionInfo
+			// creates new buffer and creates subscriber for the buffers
 			client.newBufferForEvents(key, &list[0].SessionInfo)
 
-			// add subscriber
+			// add subscriber for events
 			client.newEventBundleSubscriberRoutine(key)
 		} else {
 			buf.Touch()
@@ -191,9 +192,9 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	ch := client.eventBundlePerKeyTopic.Sub(key)
-	// client.eventBundleSubscriptionMutexLock("newEventBundle", key)
+	client.eventBundleSubscriptionMutexLock("newEventBundle", key)
 	client.eventBundleSubscriptionChannels[key] = ch
-	// client.eventBundleSubscriptionMutexUnlock("newEventBundle", key)
+	client.eventBundleSubscriptionMutexUnlock("newEventBundle", key)
 	go (func(session string, ch chan interface{}) {
 		client.listenAndSendBundlesForKey(key, ch)
 	})(key, ch)
