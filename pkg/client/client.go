@@ -64,18 +64,18 @@ func isRetryableStatus(status uint32) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
-type Purge struct{}
-
 // DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
 	Id     uuid.UUID
 	Config *config.DataSetConfig
 	Client *http.Client
-	// map of known Buffer //TODO introduce cleanup
-	buffers         map[string]*buffer.Buffer
-	buffersAllMutex sync.Mutex
+
+	// map of known Buffer
+	buffers      map[string]*buffer.Buffer
+	buffersMutex sync.Mutex
 	// Pub/Sub topics of Buffers based on its session
 	BufferPerSessionTopic      *pubsub.PubSub
+	buffersSubscriptionMutex   sync.Mutex
 	bufferSubscriptionChannels map[string]chan interface{}
 	LastHttpStatus             atomic.Uint32
 	lastError                  error
@@ -90,6 +90,7 @@ type DataSetClient struct {
 	// Pub/Sub topics of EventBundles based on its key
 	eventBundlePerKeyTopic *pubsub.PubSub
 	// map of known Subscription channels of eventBundlePerKeyTopic
+	eventBundleSubscriptionMutex    sync.Mutex
 	eventBundleSubscriptionChannels map[string]chan interface{}
 	// timestamp of first event processed by client
 	firstReceivedAt atomic.Int64
@@ -172,8 +173,9 @@ func NewClient(
 		Config:                          cfg,
 		Client:                          client,
 		buffers:                         make(map[string]*buffer.Buffer),
-		buffersAllMutex:                 sync.Mutex{},
+		buffersMutex:                    sync.Mutex{},
 		BufferPerSessionTopic:           pubsub.New(0),
+		buffersSubscriptionMutex:        sync.Mutex{},
 		bufferSubscriptionChannels:      make(map[string]chan interface{}),
 		LastHttpStatus:                  atomic.Uint32{},
 		retryAfter:                      time.Now(),
@@ -183,6 +185,7 @@ func NewClient(
 		finished:                        atomic.Bool{},
 		addEventsMutex:                  sync.Mutex{},
 		eventBundlePerKeyTopic:          pubsub.New(0),
+		eventBundleSubscriptionMutex:    sync.Mutex{},
 		eventBundleSubscriptionChannels: make(map[string]chan interface{}),
 		firstReceivedAt:                 atomic.Int64{},
 		lastAcceptedAt:                  atomic.Int64{},
@@ -247,10 +250,120 @@ func adjustGroupByWithSpecialAttributes(cfg *config.DataSetConfig) {
 	cfg.BufferSettings.GroupBy = groupBy
 }
 
+func (client *DataSetClient) buffersMutexLock(reason string, session string) {
+	client.Logger.Debug(
+		"Buffers lock",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+	client.buffersMutex.Lock()
+	client.Logger.Debug(
+		"Buffers locked",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+}
+
+func (client *DataSetClient) buffersMutexUnlock(reason string, session string) {
+	client.Logger.Debug(
+		"Buffers unlock",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+	client.buffersMutex.Unlock()
+	client.Logger.Debug(
+		"Buffers unlocked",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+}
+
+func (client *DataSetClient) buffersSubscriptionMutexLock(reason string, session string) {
+	client.Logger.Debug(
+		"BuffersSubscription lock",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+	client.buffersSubscriptionMutex.Lock()
+	client.Logger.Debug(
+		"BuffersSubscription locked",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+}
+
+func (client *DataSetClient) buffersSubscriptionMutexUnlock(reason string, session string) {
+	client.Logger.Debug(
+		"BuffersSubscription unlock",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+	client.buffersSubscriptionMutex.Unlock()
+	client.Logger.Debug(
+		"BuffersSubscription unlocked",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+}
+
+func (client *DataSetClient) eventBundleSubscriptionMutexLock(reason string, session string) {
+	client.Logger.Debug(
+		"eventBundleSubscription lock",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+	client.eventBundleSubscriptionMutex.Lock()
+	client.Logger.Debug(
+		"eventBundleSubscription locked",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+}
+
+func (client *DataSetClient) eventBundleSubscriptionMutexUnlock(reason string, session string) {
+	client.Logger.Debug(
+		"eventBundleSubscription unlock",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+	client.eventBundleSubscriptionMutex.Unlock()
+	client.Logger.Debug(
+		"eventBundleSubscription unlocked",
+		zap.String("reason", reason),
+		zap.String("session", session),
+	)
+}
+
+func (client *DataSetClient) addEventsMutexLock() {
+	client.Logger.Debug(
+		"AddEvents lock",
+	)
+	client.addEventsMutex.Lock()
+	client.Logger.Debug(
+		"AddEvents locked",
+	)
+}
+
+func (client *DataSetClient) addEventsMutexUnlock() {
+	client.Logger.Debug(
+		"AddEvents unlock",
+	)
+	client.addEventsMutex.Unlock()
+	client.Logger.Debug(
+		"AddEvents unlocked",
+	)
+}
+
 func (client *DataSetClient) getBuffer(session string) *buffer.Buffer {
-	client.buffersAllMutex.Lock()
-	defer client.buffersAllMutex.Unlock()
-	return client.buffers[session]
+	client.buffersMutexLock("getBuffer", session)
+	buf := client.buffers[session]
+	client.Logger.Debug(
+		"Get buffer",
+		zap.String("session", session),
+		zap.Bool("is_null", buf == nil),
+	)
+	client.buffersMutexUnlock("getBuffer", session)
+	return buf
 }
 
 func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.SessionInfo) {
@@ -273,15 +386,17 @@ func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.Se
 }
 
 func (client *DataSetClient) newBuffersSubscriberRoutine(session string) {
+	client.buffersSubscriptionMutexLock("newBuffer", session)
 	ch := client.BufferPerSessionTopic.Sub(session)
 	client.bufferSubscriptionChannels[session] = ch
 	go (func(session string, ch chan interface{}) {
 		client.listenAndSendBufferForSession(session, ch)
 	})(session, ch)
+	client.buffersSubscriptionMutexUnlock("newBuffer", session)
 }
 
 func (client *DataSetClient) listenAndSendBufferForSession(session string, ch chan interface{}) {
-	client.Logger.Debug("Listening to submit buffer",
+	client.Logger.Debug("Subscriber - Buffer - BEGIN",
 		zap.String("session", session),
 	)
 
@@ -290,14 +405,8 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
 		if !channelReceiveSuccess {
-			client.Logger.Error(
-				"Cannot receive Buffer from channel",
-				zap.String("session", session),
-				zap.Any("msg", msg),
-			)
-			client.statistics.BuffersBrokenAdd(1)
-			client.lastAcceptedAt.Store(time.Now().UnixNano())
-			continue
+			// channel was unsubscribed during the purge
+			break
 		}
 		if processedMsgCnt%100 == 0 {
 			client.Logger.Debug("Received message from channel",
@@ -323,11 +432,6 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 				client.statistics.BuffersProcessedAdd(1)
 			}
 		} else {
-			_, purgeReadSuccess := msg.(Purge)
-			if purgeReadSuccess {
-				break
-			}
-
 			client.Logger.Error(
 				"Cannot convert message to Buffer",
 				zap.String("session", session),
@@ -338,7 +442,7 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 		client.lastAcceptedAt.Store(time.Now().UnixNano())
 	}
 
-	client.Logger.Debug("Stopping to listen to submit buffer",
+	client.Logger.Debug("Subscriber - Buffer - END",
 		zap.String("session", session),
 	)
 	client.statistics.SessionsClosedAdd(1)
@@ -390,7 +494,7 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 			zap.String("message", response.Message),
 		)
 		client.Logger.Debug("Events were sent to DataSet",
-			zaps...,
+			buf.ZapStats(zaps...)...,
 		)
 
 		if isOkStatus(lastHttpStatus) {
@@ -603,7 +707,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	}
 
 	// we are manipulating with client.buffer, so lets lock it
-	client.buffersAllMutex.Lock()
+	client.buffersMutexLock("publishingBuffer", buf.Session)
 	originalStatus := buf.Status()
 	buf.SetStatus(buffer.Publishing)
 
@@ -620,7 +724,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 		client.initBuffer(newBuf, buf.SessionInfo())
 		client.buffers[buf.Session] = newBuf
 	}
-	client.buffersAllMutex.Unlock()
+	client.buffersMutexUnlock("publishingBuffer", buf.Session)
 
 	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
 
@@ -630,30 +734,58 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 }
 
 func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
+	client.Logger.Debug("purging buffer - BEGIN", buf.ZapStats()...)
+
 	if !buf.HasStatus(buffer.Ready) {
 		// buffer is not ready => skip
 		client.Logger.Warn("Buffer cannot be purged", buf.ZapStats()...)
 		return
 	}
 
-	// sent message to terminate go routines
-	client.BufferPerSessionTopic.Pub(Purge{}, buf.Session)
-	client.eventBundlePerKeyTopic.Pub(Purge{}, buf.Session)
+	// first we have to lock it
+	client.buffersMutexLock("purgeBuffer", buf.Session)
+	defer client.buffersMutexUnlock("purgeBuffer", buf.Session)
+	// if there was some interaction with the buffer recently, then we skip purging
+	// it's not big deal, we can purge it in the next cycle
+	// otherwise there is chance that we will purge entries that
+	// are still needed
+	if buf.TouchedInLast(100 * time.Millisecond) {
+		// buffer is still in use => do not purge
+		client.Logger.Debug("purging buffer - ABORT", buf.ZapStats()...)
+		return
+	}
 
-	client.buffersAllMutex.Lock()
+	// delete buffer from the dictionary
+	delete(client.buffers, buf.Session)
+
+	// mark the buffer as purging
 	buf.SetStatus(buffer.Purging)
+
+	// lock the subscriber for bundles
+	client.eventBundleSubscriptionMutexLock("purgeBuffer", buf.Session)
+
+	// unsubscribe and remove events consumer
+	client.Logger.Debug("purgeBuffer - Unsubscribe EventBundle topic", zap.String("session", buf.Session))
+	ch, found := client.eventBundleSubscriptionChannels[buf.Session]
+	if found {
+		// TODO: This is the place, where it gets stuck
+		client.eventBundlePerKeyTopic.Unsub(ch, buf.Session)
+		delete(client.eventBundleSubscriptionChannels, buf.Session)
+	} else {
+		client.Logger.Warn("EventBundle already purged", zap.String("session", buf.Session))
+	}
+
+	// unsubscribe and remove buffer consumer
+	client.buffersSubscriptionMutexLock("purgeBuffer", buf.Session)
+	client.Logger.Debug("purgeBuffer - Unsubscribe Buffer topic", zap.String("session", buf.Session))
 	client.BufferPerSessionTopic.Unsub(client.bufferSubscriptionChannels[buf.Session], buf.Session)
 	delete(client.bufferSubscriptionChannels, buf.Session)
+	client.buffersSubscriptionMutexUnlock("purgeBuffer", buf.Session)
 
-	delete(client.buffers, buf.Session)
-	client.buffersAllMutex.Unlock()
+	buf.SetStatus(buffer.Purged)
+	client.eventBundleSubscriptionMutexUnlock("purgeBuffer", buf.Session)
 
-	client.addEventsMutex.Lock()
-	client.eventBundlePerKeyTopic.Unsub(client.eventBundleSubscriptionChannels[buf.Session], buf.Session)
-	delete(client.eventBundleSubscriptionChannels, buf.Session)
-	client.addEventsMutex.Unlock()
-
-	client.Logger.Debug("purging buffer", buf.ZapStats()...)
+	client.Logger.Debug("purging buffer - END", buf.ZapStats()...)
 }
 
 // Exporter rejects handling of incoming batches if is in error state
