@@ -631,8 +631,8 @@ func (client *DataSetClient) publishAllBuffers() {
 
 func (client *DataSetClient) getBuffers() []*buffer.Buffer {
 	buffers := make([]*buffer.Buffer, 0)
-	client.buffersMutexLock("getBuffers", "all")
-	defer client.buffersMutexUnlock("getBuffers", "all")
+	client.buffersMutexRLock("getBuffers", "all")
+	defer client.buffersMutexRUnlock("getBuffers", "all")
 	for _, buf := range client.buffers {
 		buffers = append(buffers, buf)
 	}

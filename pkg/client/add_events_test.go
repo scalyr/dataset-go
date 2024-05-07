@@ -513,7 +513,7 @@ func TestAddEventsRetryWhenNonJSONResponseIsReturned(t *testing.T) {
 
 		assert.Nil(t, err, "Error reading request: %v", err)
 
-		payload := make([]byte, 0)
+		var payload []byte
 		if attempt.Load() < succeedInAttempt {
 			w.WriteHeader(500)
 			payload, err = json.Marshal("this is not JSON")
