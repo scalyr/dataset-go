@@ -38,6 +38,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	errMsgUnableToSentRequest   = "unable to send request"
+	errMsgUnableToReadResponse  = "unable to read response"
+	errMsgUnableToParseResponse = "unable to parse response"
+)
+
 /*
 Wrapper around: https://app.scalyr.com/help/api#addEvents
 */
@@ -143,11 +149,12 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	for _, bundle := range bundles {
 		bWM := NewEventWithMeta(bundle, client.Config.BufferSettings.GroupBy, client.serverHost, client.Config.Debug)
 
-		list, found := bundlesWithMeta[bWM.Key]
+		session := fmt.Sprintf("%s-%s", client.Id, bWM.Key)
+		list, found := bundlesWithMeta[session]
 		if !found {
-			bundlesWithMeta[bWM.Key] = []EventWithMeta{bWM}
+			bundlesWithMeta[session] = []EventWithMeta{bWM}
 		} else {
-			bundlesWithMeta[bWM.Key] = append(list, bWM)
+			bundlesWithMeta[session] = append(list, bWM)
 		}
 	}
 
@@ -160,7 +167,6 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// add subscriber for events by key
 	// add subscriber for buffer by key
 	client.addEventsMutex.Lock()
-	defer client.addEventsMutex.Unlock()
 	for key, list := range bundlesWithMeta {
 		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
@@ -170,6 +176,7 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 			client.newEventBundleSubscriberRoutine(key)
 		}
 	}
+	client.addEventsMutex.Unlock()
 
 	// and as last step - publish them
 
@@ -191,8 +198,7 @@ func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	})(key, ch)
 }
 
-func (client *DataSetClient) newBufferForEvents(key string, info *add_events.SessionInfo) {
-	session := fmt.Sprintf("%s-%s", client.Id, key)
+func (client *DataSetClient) newBufferForEvents(session string, info *add_events.SessionInfo) {
 	buf := buffer.NewEmptyBuffer(session, client.Config.Tokens.WriteLog)
 
 	client.initBuffer(buf, info)
@@ -206,7 +212,7 @@ func (client *DataSetClient) newBufferForEvents(key string, info *add_events.Ses
 }
 
 func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan interface{}) {
-	client.Logger.Info("Listening to events with key",
+	client.Logger.Debug("Listening to events with key",
 		zap.String("key", key),
 	)
 
@@ -290,6 +296,10 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				client.publishBuffer(buf)
 			}
 		} else {
+			_, purgeReadSuccess := msg.(Purge)
+			if purgeReadSuccess {
+				break
+			}
 			client.Logger.Error(
 				"Cannot convert message to EventWithMeta",
 				zap.String("key", key),
@@ -562,7 +572,7 @@ func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 func (client *DataSetClient) apiCall(req *http.Request, response response.ResponseObjSetter) error {
 	resp, err := client.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("unable to send request: %w", err)
+		return fmt.Errorf("%s: %w", errMsgUnableToSentRequest, err)
 	}
 
 	defer func() {
@@ -587,12 +597,12 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.Respon
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("unable to read response: %w", err)
+		return fmt.Errorf("%s: %w", errMsgUnableToReadResponse, err)
 	}
 
 	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
-		return fmt.Errorf("unable to parse response body: %w, url: %s, response: %s", err, client.addEventsEndpointUrl, truncateText(string(responseBody), 1000))
+		return fmt.Errorf("%s: %w, url: %s, status: %d, response: %s", errMsgUnableToParseResponse, err, client.addEventsEndpointUrl, resp.StatusCode, truncateText(string(responseBody), 1000))
 	}
 
 	response.SetResponseObj(resp)
