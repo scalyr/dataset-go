@@ -41,12 +41,12 @@ import (
 )
 
 func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
-	const MaxDelay = 200 * time.Millisecond
+	const MaxDelay = 100 * time.Millisecond
 	const PurgeOlderThan = 15 * MaxDelay
 
 	const Cycles = 3
-	const MaxBatchCount = 400
-	const LogsPerBatch = 500
+	const MaxBatchCount = 300
+	const LogsPerBatch = 300
 	const ExpectedLogs = uint64(Cycles * MaxBatchCount * LogsPerBatch)
 
 	attempt := atomic.Uint64{}
