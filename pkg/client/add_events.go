@@ -42,6 +42,8 @@ const (
 	errMsgUnableToSentRequest   = "unable to send request"
 	errMsgUnableToReadResponse  = "unable to read response"
 	errMsgUnableToParseResponse = "unable to parse response"
+	logEveryNthEvent            = 1
+	logEveryNthBuffer           = 1
 )
 
 /*
@@ -246,6 +248,17 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
+		if processedMsgCnt%logEveryNthEvent == 0 {
+			client.Logger.Debug("Received Event from channel",
+				zap.String("session", key),
+				zap.Bool("channelReceiveSuccess", channelReceiveSuccess),
+				zap.Int("processedMsgCnt", processedMsgCnt),
+				zap.Uint64("buffersEnqueued", client.statistics.EventsEnqueued()),
+				zap.Uint64("buffersProcessed", client.statistics.EventsProcessed()),
+				zap.Uint64("buffersDropped", client.statistics.EventsDropped()),
+			)
+		}
+
 		if !channelReceiveSuccess {
 			// channel was unsubscribed during the purge
 			break

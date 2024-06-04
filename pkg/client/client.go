@@ -432,19 +432,22 @@ func (client *DataSetClient) listenAndSendBufferForSession(session string, ch ch
 
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
-		if !channelReceiveSuccess {
-			// channel was unsubscribed during the purge
-			break
-		}
-		if processedMsgCnt%100 == 0 {
-			client.Logger.Debug("Received message from channel",
+		if processedMsgCnt%logEveryNthBuffer == 0 {
+			client.Logger.Debug("Received Buffer from channel",
 				zap.String("session", session),
+				zap.Bool("channelReceiveSuccess", channelReceiveSuccess),
 				zap.Int("processedMsgCnt", processedMsgCnt),
 				zap.Uint64("buffersEnqueued", client.statistics.BuffersEnqueued()),
 				zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
 				zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
 			)
 		}
+
+		if !channelReceiveSuccess {
+			// channel was unsubscribed during the purge
+			break
+		}
+
 		buf, bufferReadSuccess := msg.(*buffer.Buffer)
 		if bufferReadSuccess {
 			// sleep until retry time
