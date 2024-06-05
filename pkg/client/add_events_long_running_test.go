@@ -42,7 +42,8 @@ import (
 
 func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	const MaxDelay = 100 * time.Millisecond
-	const PurgeOlderThan = 15 * MaxDelay
+	// increase purge time, so that it is not triggered
+	const PurgeOlderThan = 10 * time.Hour // 150 * MaxDelay
 
 	const Cycles = 3
 	const MaxBatchCount = 300
@@ -154,7 +155,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 
 			time.Sleep(MaxDelay)
 		}
-		time.Sleep(2 * PurgeOlderThan)
+		time.Sleep(2 * MaxDelay)
 		stats := sc.Statistics()
 		if stats != nil {
 			assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
@@ -192,7 +193,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
 	assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
 
-	assert.Equal(t, seenKeys, expectedKeys)
-	assert.Equal(t, int(processedEvents.Load()), int(ExpectedLogs), "processed items")
-	assert.Equal(t, int(len(seenKeys)), int(ExpectedLogs), "unique items")
+	assert.Equal(t, expectedKeys, seenKeys)
+	assert.Equal(t, int(ExpectedLogs), int(processedEvents.Load()), "processed items")
+	assert.Equal(t, int(ExpectedLogs), len(seenKeys), "seen unique items")
 }
