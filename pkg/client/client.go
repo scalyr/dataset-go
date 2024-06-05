@@ -808,7 +808,7 @@ func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
 	// unsubscribe and remove buffer consumer
 	client.buffersSubscriptionMutexLock("purgeBuffer", buf.Session)
 	client.Logger.Debug("purgeBuffer - Unsubscribe Buffer topic", zap.String("session", buf.Session))
-	client.BufferPerSessionTopic.Unsub(client.bufferSubscriptionChannels[buf.Session], buf.Session)
+	go client.BufferPerSessionTopic.Unsub(client.bufferSubscriptionChannels[buf.Session], buf.Session)
 	delete(client.bufferSubscriptionChannels, buf.Session)
 	client.buffersSubscriptionMutexUnlock("purgeBuffer", buf.Session)
 

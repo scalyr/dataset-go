@@ -206,8 +206,13 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
 	client.Logger.Debug("newEventBundleSubscriberRoutine - BEGIN", zap.String("session", key))
 	client.eventBundleSubscriptionMutexLock("newEventBundle", key)
+	// MM: 2024-06-05 - here is the deadlock, sub is called, but the line that
+	// unlocks the mutex is not reached, because the go routine is not started.
+	client.Logger.Debug("newEventBundleSubscriberRoutine - SUBSCRIBE - BEFORE", zap.String("session", key))
 	ch := client.eventBundlePerKeyTopic.Sub(key)
+	client.Logger.Debug("newEventBundleSubscriberRoutine - SUBSCRIBE - AFTER", zap.String("session", key))
 	client.eventBundleSubscriptionChannels[key] = ch
+	client.Logger.Debug("newEventBundleSubscriberRoutine - SUBSCRIBE - BEFORE", zap.String("session", key))
 	client.eventBundleSubscriptionMutexUnlock("newEventBundle", key)
 	go (func(session string, ch chan interface{}) {
 		client.listenAndSendBundlesForKey(key, ch)
