@@ -195,10 +195,12 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	// when event is added to the bundle it updates the
 	// LastTouched as well
 	for key, list := range bundlesWithMeta {
+		client.eventBundleSubscriptionMutexRLock("addEvents - Publish", key)
 		for _, bundle := range list {
 			client.eventBundlePerKeyTopic.Pub(bundle, key)
 			client.statistics.EventsEnqueuedAdd(1)
 		}
+		client.eventBundleSubscriptionMutexRUnlock("addEvents - Publish", key)
 	}
 	return nil
 }
