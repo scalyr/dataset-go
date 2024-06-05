@@ -94,7 +94,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		Endpoint: server.URL,
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  1000,
+			MaxSize:                  1024 * 1024,
 			GroupBy:                  []string{"batch"},
 			MaxLifetime:              5 * MaxDelay,
 			PurgeOlderThan:           PurgeOlderThan,
