@@ -49,11 +49,11 @@ test: test-all
 
 .PHONY: test-unit
 test-unit:
-	/usr/bin/time $(GOTEST) $(GOTEST_OPT) ./...
+	time $(GOTEST) $(GOTEST_OPT) ./...
 
 .PHONY: test-all
 test-all:
-	/usr/bin/time $(GOTEST) $(GOTEST_LONG_RUNNING_OPT) ./...
+	time $(GOTEST) $(GOTEST_LONG_RUNNING_OPT) ./...
 
 .PHONY: test-many-times
 test-many-times:
