@@ -106,10 +106,10 @@ func TestPayloadFull(t *testing.T) {
 	added, err := buffer.AddBundle(&bundle)
 	assert.Nil(t, err)
 	assert.Equal(t, added, Added)
-	assert.Equal(t, buffer.countLogs.Load(), int32(1))
-	assert.Equal(t, buffer.lenLogs.Load(), int32(57))
-	assert.Equal(t, buffer.countThreads.Load(), int32(1))
-	assert.Equal(t, buffer.lenThreads.Load(), int32(28))
+	assert.Equal(t, buffer.countLogs, int32(1))
+	assert.Equal(t, buffer.lenLogs, int32(57))
+	assert.Equal(t, buffer.countThreads, int32(1))
+	assert.Equal(t, buffer.lenThreads, int32(28))
 
 	payload, err := buffer.Payload()
 	assert.Nil(t, err)
@@ -171,11 +171,11 @@ func TestPayloadInjection(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, added, Added)
 
-	assert.Equal(t, buffer.countLogs.Load(), int32(1))
-	assert.Equal(t, buffer.lenLogs.Load(), int32(117))
+	assert.Equal(t, buffer.countLogs, int32(1))
+	assert.Equal(t, buffer.lenLogs, int32(117))
 
-	assert.Equal(t, buffer.countThreads.Load(), int32(1))
-	assert.Equal(t, buffer.lenThreads.Load(), int32(52))
+	assert.Equal(t, buffer.countThreads, int32(1))
+	assert.Equal(t, buffer.lenThreads, int32(52))
 
 	payload, err := buffer.Payload()
 	assert.Nil(t, err)

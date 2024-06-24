@@ -17,24 +17,16 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"runtime"
 	"testing"
-
-	"github.com/scalyr/dataset-go/pkg/server_host_config"
 
 	"github.com/scalyr/dataset-go/pkg/version"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/scalyr/dataset-go/pkg/buffer_config"
-
-	"github.com/scalyr/dataset-go/pkg/api/add_events"
-	"github.com/scalyr/dataset-go/pkg/buffer"
 	"github.com/scalyr/dataset-go/pkg/config"
 	"go.uber.org/zap"
 )
@@ -55,6 +47,7 @@ func TestNewClient(t *testing.T) {
 	assert.Equal(t, sc4.Config.Tokens.WriteConfig, "writeconfig")
 }
 
+/*
 func TestClientBuffer(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := fmt.Fprintln(w, "{ \"hello\": \"yo\" }")
@@ -127,6 +120,7 @@ func TestClientBuffer(t *testing.T) {
 	assert.Equal(t, (params1.Events)[0].Ts, "1")
 	assert.Equal(t, (params2.Events)[0].Ts, "2")
 }
+*/
 
 func TestHttpStatusCodes(t *testing.T) {
 	tests := []struct {

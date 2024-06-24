@@ -43,7 +43,6 @@ import (
 	"github.com/scalyr/dataset-go/pkg/server_host_config"
 	"github.com/scalyr/dataset-go/pkg/statistics"
 
-	"github.com/cskr/pubsub"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -68,30 +67,19 @@ type Purge struct{}
 
 // DataSetClient represent a DataSet REST API client
 type DataSetClient struct {
-	Id     uuid.UUID
-	Config *config.DataSetConfig
-	Client *http.Client
-	// map of known Buffer //TODO introduce cleanup
-	buffers         map[string]*buffer.Buffer
-	buffersAllMutex sync.Mutex
-	// Pub/Sub topics of Buffers based on its session
-	BufferPerSessionTopic      *pubsub.PubSub
-	bufferSubscriptionChannels map[string]chan interface{}
-	LastHttpStatus             atomic.Uint32
-	lastError                  error
-	lastErrorTs                time.Time
-	lastErrorMu                sync.RWMutex
-	retryAfter                 time.Time
-	retryAfterMu               sync.RWMutex
+	Id             uuid.UUID
+	Config         *config.DataSetConfig
+	Client         *http.Client
+	LastHttpStatus atomic.Uint32
+	lastError      error
+	lastErrorTs    time.Time
+	lastErrorMu    sync.RWMutex
+	retryAfter     time.Time
+	retryAfterMu   sync.RWMutex
 	// indicates that client has been shut down and no further processing is possible
-	finished       atomic.Bool
-	Logger         *zap.Logger
-	addEventsMutex sync.Mutex
-	// Pub/Sub topics of EventBundles based on its key
-	eventBundlePerKeyTopic *pubsub.PubSub
-	// map of known Subscription channels of eventBundlePerKeyTopic
-	eventBundleSubscriptionChannels map[string]chan interface{}
-	// timestamp of first event processed by client
+	finished atomic.Bool
+	Logger   *zap.Logger
+
 	firstReceivedAt atomic.Int64
 	// timestamp of last event so far processed by client
 	lastAcceptedAt atomic.Int64
@@ -101,6 +89,12 @@ type DataSetClient struct {
 	userAgent            string
 	serverHost           string
 	statistics           *statistics.Statistics
+	memo                 *Memo
+
+	done chan struct{}
+
+	bufferSendingSema chan struct{}
+	bufferChannel     chan *buffer.Buffer
 }
 
 func NewClient(
@@ -168,46 +162,53 @@ func NewClient(
 	}
 
 	dataClient := &DataSetClient{
-		Id:                              id,
-		Config:                          cfg,
-		Client:                          client,
-		buffers:                         make(map[string]*buffer.Buffer),
-		buffersAllMutex:                 sync.Mutex{},
-		BufferPerSessionTopic:           pubsub.New(0),
-		bufferSubscriptionChannels:      make(map[string]chan interface{}),
-		LastHttpStatus:                  atomic.Uint32{},
-		retryAfter:                      time.Now(),
-		retryAfterMu:                    sync.RWMutex{},
-		lastErrorMu:                     sync.RWMutex{},
-		Logger:                          logger,
-		finished:                        atomic.Bool{},
-		addEventsMutex:                  sync.Mutex{},
-		eventBundlePerKeyTopic:          pubsub.New(0),
-		eventBundleSubscriptionChannels: make(map[string]chan interface{}),
-		firstReceivedAt:                 atomic.Int64{},
-		lastAcceptedAt:                  atomic.Int64{},
-		addEventsEndpointUrl:            addEventsEndpointUrl,
-		userAgent:                       userAgent,
-		serverHost:                      serverHost,
-		statistics:                      stats,
+		Id:                   id,
+		Config:               cfg,
+		Client:               client,
+		LastHttpStatus:       atomic.Uint32{},
+		retryAfter:           time.Now(),
+		retryAfterMu:         sync.RWMutex{},
+		lastErrorMu:          sync.RWMutex{},
+		Logger:               logger,
+		finished:             atomic.Bool{},
+		firstReceivedAt:      atomic.Int64{},
+		lastAcceptedAt:       atomic.Int64{},
+		addEventsEndpointUrl: addEventsEndpointUrl,
+		userAgent:            userAgent,
+		serverHost:           serverHost,
+		statistics:           stats,
+
+		done: make(chan struct{}),
+
+		bufferSendingSema: make(chan struct{}, 20),
+		bufferChannel:     make(chan *buffer.Buffer),
 	}
 
+	dataClient.memo = New(
+		logger,
+		dataClient.listenAndSendBundlesForKey,
+	)
+
 	// run buffer sweeper if requested
-	if cfg.BufferSettings.MaxLifetime > 0 || cfg.BufferSettings.PurgeOlderThan > 0 {
-		dataClient.Logger.Info("Buffer sweeping is enabled",
-			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
-			zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
-		)
-		go dataClient.bufferSweeper(cfg.BufferSettings.MaxLifetime, cfg.BufferSettings.PurgeOlderThan)
-	} else {
-		dataClient.Logger.Warn("Buffer sweeping is disabled",
-			zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
-			zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
-		)
-	}
+	/*
+		if cfg.BufferSettings.MaxLifetime > 0 || cfg.BufferSettings.PurgeOlderThan > 0 {
+			dataClient.Logger.Info("Buffer sweeping is enabled",
+				zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
+				zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
+			)
+			go dataClient.bufferSweeper(cfg.BufferSettings.MaxLifetime, cfg.BufferSettings.PurgeOlderThan)
+		} else {
+			dataClient.Logger.Warn("Buffer sweeping is disabled",
+				zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
+				zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
+			)
+		}
+	*/
 
 	// run statistics sweeper
 	go dataClient.statisticsSweeper()
+
+	go dataClient.mainLoop()
 
 	dataClient.Logger.Info("DataSetClient was created",
 		zap.String("id", dataClient.Id.String()),
@@ -247,12 +248,6 @@ func adjustGroupByWithSpecialAttributes(cfg *config.DataSetConfig) {
 	cfg.BufferSettings.GroupBy = groupBy
 }
 
-func (client *DataSetClient) getBuffer(session string) *buffer.Buffer {
-	client.buffersAllMutex.Lock()
-	defer client.buffersAllMutex.Unlock()
-	return client.buffers[session]
-}
-
 func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.SessionInfo) {
 	client.Logger.Debug("Creating new buf",
 		zap.String("uuid", buff.Id.String()),
@@ -272,76 +267,23 @@ func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.Se
 	}
 }
 
-func (client *DataSetClient) newBuffersSubscriberRoutine(session string) {
-	ch := client.BufferPerSessionTopic.Sub(session)
-	client.bufferSubscriptionChannels[session] = ch
-	go (func(session string, ch chan interface{}) {
-		client.listenAndSendBufferForSession(session, ch)
-	})(session, ch)
-}
+func (client *DataSetClient) callServer(buf *buffer.Buffer) {
+	client.bufferSendingSema <- struct{}{}
+	defer func() { <-client.bufferSendingSema }() // release token
 
-func (client *DataSetClient) listenAndSendBufferForSession(session string, ch chan interface{}) {
-	client.Logger.Debug("Listening to submit buffer",
-		zap.String("session", session),
-	)
-
-	client.statistics.SessionsOpenedAdd(1)
-
-	for processedMsgCnt := 0; ; processedMsgCnt++ {
-		msg, channelReceiveSuccess := <-ch
-		if !channelReceiveSuccess {
-			client.Logger.Error(
-				"Cannot receive Buffer from channel",
-				zap.String("session", session),
-				zap.Any("msg", msg),
-			)
-			client.statistics.BuffersBrokenAdd(1)
-			client.lastAcceptedAt.Store(time.Now().UnixNano())
-			continue
-		}
-		if processedMsgCnt%100 == 0 {
-			client.Logger.Debug("Received message from channel",
-				zap.String("session", session),
-				zap.Int("processedMsgCnt", processedMsgCnt),
-				zap.Uint64("buffersEnqueued", client.statistics.BuffersEnqueued()),
-				zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
-				zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
-			)
-		}
-		buf, bufferReadSuccess := msg.(*buffer.Buffer)
-		if bufferReadSuccess {
-			// sleep until retry time
-			for client.RetryAfter().After(time.Now()) {
-				client.sleep(client.RetryAfter(), buf)
-			}
-			if !buf.HasEvents() {
-				client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
-				client.statistics.BuffersProcessedAdd(1)
-				continue
-			}
-			if client.sendBufferWithRetryPolicy(buf) {
-				client.statistics.BuffersProcessedAdd(1)
-			}
-		} else {
-			_, purgeReadSuccess := msg.(Purge)
-			if purgeReadSuccess {
-				break
-			}
-
-			client.Logger.Error(
-				"Cannot convert message to Buffer",
-				zap.String("session", session),
-				zap.Any("msg", msg),
-			)
-			client.statistics.BuffersBrokenAdd(1)
-		}
-		client.lastAcceptedAt.Store(time.Now().UnixNano())
+	// sleep until retry time
+	for client.RetryAfter().After(time.Now()) {
+		client.sleep(client.RetryAfter(), buf)
+	}
+	if !buf.HasEvents() {
+		client.Logger.Warn("Buffer is empty, skipping", buf.ZapStats()...)
+		client.statistics.BuffersProcessedAdd(1)
+	}
+	if client.sendBufferWithRetryPolicy(buf) {
+		client.statistics.BuffersProcessedAdd(1)
 	}
 
-	client.Logger.Debug("Stopping to listen to submit buffer",
-		zap.String("session", session),
-	)
-	client.statistics.SessionsClosedAdd(1)
+	client.lastAcceptedAt.Store(time.Now().UnixNano())
 }
 
 // Sends buffer to DataSet. If not succeeds and try is possible (it retryable), try retry until possible (timeout)
@@ -423,7 +365,6 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 			}
 
 			client.sleep(retryAfter, buf)
-			buf.SetStatus(buffer.Retrying)
 		} else {
 			err = fmt.Errorf("non recoverable error %w", err)
 			client.onBufferDrop(buf, lastHttpStatus, err)
@@ -434,10 +375,39 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 }
 
 func (client *DataSetClient) statisticsSweeper() {
+	// TODO: remove me :)
 	for i := uint64(0); ; i++ {
 		client.logStatistics()
 		// wait for some time before new sweep
 		time.Sleep(15 * time.Second)
+	}
+}
+
+func (client *DataSetClient) mainLoop() {
+	statsTicker := time.NewTicker(30 * time.Second)
+loop:
+	//!+3
+	for {
+		select {
+		case <-client.done:
+			client.Logger.Debug("Stopping main loop")
+			// Drain fileSizes to allow existing goroutines to finish.
+			for buf := range client.bufferChannel {
+				client.callServer(buf)
+			}
+			return
+		case buf, ok := <-client.bufferChannel:
+			// ...
+			//!-3
+			if !ok {
+				break loop // fileSizes was closed
+			}
+			client.Logger.Debug("Processing buffer", buf.ZapStats()...)
+			client.callServer(buf)
+
+		case <-statsTicker.C:
+			client.logStatistics()
+		}
 	}
 }
 
@@ -515,6 +485,8 @@ func (client *DataSetClient) logStatistics() {
 	)
 }
 
+// TODO: This should be somewhere else completely
+/*
 func (client *DataSetClient) bufferSweeper(
 	lifetime time.Duration,
 	purgeOlderThan time.Duration,
@@ -561,7 +533,7 @@ func (client *DataSetClient) bufferSweeper(
 				totalKept.Add(1)
 
 				if buf.ShouldPurgeAge(purgeOlderThan) {
-					client.purgeBuffer(buf)
+					// client.purgeBuffer(buf)
 				}
 			}
 		}
@@ -586,74 +558,14 @@ func (client *DataSetClient) bufferSweeper(
 		time.Sleep(sleepTime)
 	}
 }
+*/
 
 func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
-	if buf.HasStatus(buffer.Publishing) {
-		// buffer is already publishing, this should not happen
-		// so lets skip it
-		client.Logger.Warn("Buffer is already being published", buf.ZapStats()...)
-		return
-	}
-
-	if buf.HasStatus(buffer.Purging) {
-		// buffer is already purging, this should not happen
-		// so lets skip it
-		client.Logger.Warn("Buffer is already being purged", buf.ZapStats()...)
-		return
-	}
-
-	// we are manipulating with client.buffer, so lets lock it
-	client.buffersAllMutex.Lock()
-	originalStatus := buf.Status()
-	buf.SetStatus(buffer.Publishing)
-
-	// if the buffer is being used, lets create new one as replacement
-	if originalStatus.IsActive() {
-		newBuf := buffer.NewEmptyBuffer(buf.Session, buf.Token)
-		client.Logger.Debug(
-			"Removing buffer for session",
-			zap.String("session", buf.Session),
-			zap.String("oldUuid", buf.Id.String()),
-			zap.String("newUuid", newBuf.Id.String()),
-		)
-
-		client.initBuffer(newBuf, buf.SessionInfo())
-		client.buffers[buf.Session] = newBuf
-	}
-	client.buffersAllMutex.Unlock()
-
 	client.Logger.Debug("publishing buffer", buf.ZapStats()...)
 
 	// publish buffer so it can be sent
 	client.statistics.BuffersEnqueuedAdd(+1)
-	client.BufferPerSessionTopic.Pub(buf, buf.Session)
-}
-
-func (client *DataSetClient) purgeBuffer(buf *buffer.Buffer) {
-	if !buf.HasStatus(buffer.Ready) {
-		// buffer is not ready => skip
-		client.Logger.Warn("Buffer cannot be purged", buf.ZapStats()...)
-		return
-	}
-
-	// sent message to terminate go routines
-	client.BufferPerSessionTopic.Pub(Purge{}, buf.Session)
-	client.eventBundlePerKeyTopic.Pub(Purge{}, buf.Session)
-
-	client.buffersAllMutex.Lock()
-	buf.SetStatus(buffer.Purging)
-	client.BufferPerSessionTopic.Unsub(client.bufferSubscriptionChannels[buf.Session], buf.Session)
-	delete(client.bufferSubscriptionChannels, buf.Session)
-
-	delete(client.buffers, buf.Session)
-	client.buffersAllMutex.Unlock()
-
-	client.addEventsMutex.Lock()
-	client.eventBundlePerKeyTopic.Unsub(client.eventBundleSubscriptionChannels[buf.Session], buf.Session)
-	delete(client.eventBundleSubscriptionChannels, buf.Session)
-	client.addEventsMutex.Unlock()
-
-	client.Logger.Debug("purging buffer", buf.ZapStats()...)
+	client.bufferChannel <- buf
 }
 
 // Exporter rejects handling of incoming batches if is in error state

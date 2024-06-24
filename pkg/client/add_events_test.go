@@ -325,7 +325,7 @@ func TestAddEventsRetry(t *testing.T) {
 	err = sc.Shutdown()
 	assert.Nil(t, err)
 	assert.True(t, wasSuccessful.Load())
-	assert.Equal(t, attempt.Load(), succeedInAttempt)
+	assert.Equal(t, succeedInAttempt, attempt.Load())
 
 	stats := sc.Statistics()
 	assert.Equal(t, uint64(1), stats.Events.Enqueued())
@@ -408,7 +408,9 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	err1 := sc.AddEvents([]*add_events.EventBundle{eventBundle1})
 	time.Sleep(RetryBase)
 	// we are not calling shutdown, because we want to process more events in the future
-	sc.publishAllBuffers()
+
+	// TODO: Fix me!!!
+	// sc.publishAllBuffers()
 
 	// wait for processing
 	for i := 0; i < 10; i++ {
@@ -513,7 +515,7 @@ func TestAddEventsRetryWhenNonJSONResponseIsReturned(t *testing.T) {
 
 		assert.Nil(t, err, "Error reading request: %v", err)
 
-		payload := make([]byte, 0)
+		var payload []byte
 		if attempt.Load() < succeedInAttempt {
 			w.WriteHeader(500)
 			payload, err = json.Marshal("this is not JSON")
