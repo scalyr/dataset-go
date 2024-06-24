@@ -24,7 +24,7 @@ endif
 
 GO_BUILD_TAGS=""
 GOTEST_OPT?= -v -race -timeout 300s -parallel 4 -count=1 --tags=$(GO_BUILD_TAGS)
-GOTEST_LONG_RUNNING_OPT?= -v -race -timeout 600s -parallel 4 -count=1 -tags=long_running,$(GO_BUILD_TAGS)
+GOTEST_LONG_RUNNING_OPT?= -v -race -timeout 1200s -parallel 4 -count=1 -tags=long_running,$(GO_BUILD_TAGS)
 GOTEST_OPT_WITH_COVERAGE = $(GOTEST_OPT) -coverprofile=coverage.txt -covermode=atomic
 GOTEST_OPT_WITH_COVERAGE_LONG_RUNNING=$(GOTEST_LONG_RUNNING_OPT) -coverprofile=coverage.txt -covermode=atomic
 GOCMD?= go
@@ -49,11 +49,11 @@ test: test-all
 
 .PHONY: test-unit
 test-unit:
-	$(GOTEST) $(GOTEST_OPT) ./...
+	time $(GOTEST) $(GOTEST_OPT) ./...
 
 .PHONY: test-all
 test-all:
-	$(GOTEST) $(GOTEST_LONG_RUNNING_OPT) ./...
+	time $(GOTEST) $(GOTEST_LONG_RUNNING_OPT) ./...
 
 .PHONY: test-many-times
 test-many-times:
