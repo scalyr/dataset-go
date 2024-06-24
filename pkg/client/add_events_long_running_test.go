@@ -41,13 +41,12 @@ import (
 )
 
 func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
-	const MaxDelay = 100 * time.Millisecond
-	// increase purge time, so that it is not triggered
-	const PurgeOlderThan = 10 * time.Hour // 150 * MaxDelay
+	const MaxDelay = 200 * time.Millisecond
+	const PurgeOlderThan = 15 * MaxDelay
 
 	const Cycles = 3
-	const MaxBatchCount = 300
-	const LogsPerBatch = 300
+	const MaxBatchCount = 400
+	const LogsPerBatch = 500
 	const ExpectedLogs = uint64(Cycles * MaxBatchCount * LogsPerBatch)
 
 	attempt := atomic.Uint64{}
@@ -95,7 +94,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 		Endpoint: server.URL,
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
-			MaxSize:                  1024 * 1024,
+			MaxSize:                  1000,
 			GroupBy:                  []string{"batch"},
 			MaxLifetime:              5 * MaxDelay,
 			PurgeOlderThan:           PurgeOlderThan,
@@ -115,7 +114,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	for cI := 0; cI < Cycles; cI++ {
 		for bI := 0; bI < MaxBatchCount; bI++ {
 			batch := make([]*add_events.EventBundle, 0)
-			batchKey := fmt.Sprintf("long-running-test-%d", bI)
+			batchKey := fmt.Sprintf("%d", bI)
 			for lI := 0; lI < LogsPerBatch; lI++ {
 				key := fmt.Sprintf("%04d-%04d-%06d", cI, bI, lI)
 				attrs := make(map[string]interface{})
@@ -147,20 +146,16 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			}
 
 			t.Logf("Adding batch: %s (%d)", batchKey, cI)
-
 			go (func(batch []*add_events.EventBundle) {
 				err := sc.AddEvents(batch)
 				assert.Nil(t, err)
 			})(batch)
-
 			time.Sleep(MaxDelay)
 		}
-		time.Sleep(2 * MaxDelay)
+		time.Sleep(2 * PurgeOlderThan)
 		stats := sc.Statistics()
-		if stats != nil {
-			assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
-			assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
-		}
+		assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
+		assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
 	}
 
 	for {
@@ -174,7 +169,6 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	assert.Nil(t, err, err)
 
 	stats := sc.Statistics()
-	assert.NotNil(t, stats)
 	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Enqueued())
 	assert.Equal(t, uint64(ExpectedLogs), stats.Events.Processed())
 	assert.Equal(t, uint64(0), stats.Events.Waiting())
@@ -193,7 +187,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	assert.Greater(t, stats.Sessions.SessionsClosed(), uint64(0))
 	assert.LessOrEqual(t, stats.Sessions.SessionsClosed(), stats.Sessions.SessionsOpened())
 
-	assert.Equal(t, expectedKeys, seenKeys)
-	assert.Equal(t, int(ExpectedLogs), int(processedEvents.Load()), "processed items")
-	assert.Equal(t, int(ExpectedLogs), len(seenKeys), "seen unique items")
+	assert.Equal(t, seenKeys, expectedKeys)
+	assert.Equal(t, int(processedEvents.Load()), int(ExpectedLogs), "processed items")
+	assert.Equal(t, int(len(seenKeys)), int(ExpectedLogs), "unique items")
 }

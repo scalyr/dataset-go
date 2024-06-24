@@ -48,11 +48,10 @@ const (
 	Publishing
 	Retrying
 	Purging
-	Purged
 )
 
 func (s Status) String() string {
-	return [...]string{"Initialising", "Ready", "AddingBundles", "Publishing", "Retrying", "Purging", "Purged"}[s]
+	return [...]string{"Initialising", "Ready", "AddingBundles", "Publishing", "Retrying", "Purging"}[s]
 }
 
 func (s Status) IsActive() bool {
@@ -86,10 +85,9 @@ type Buffer struct {
 	Session string
 	Token   string
 
-	createdAt     atomic.Int64
-	lastTouchedAt atomic.Int64
-	status        atomic.Uint32
-	PublishAsap   atomic.Bool
+	createdAt   atomic.Int64
+	status      atomic.Uint32
+	PublishAsap atomic.Bool
 
 	sessionInfo *add_events.SessionInfo
 	threads     map[string]*add_events.Thread
@@ -111,19 +109,18 @@ func NewEmptyBuffer(session string, token string) *Buffer {
 	id, _ := uuid.NewRandom()
 
 	return &Buffer{
-		Id:            id,
-		Session:       session,
-		Token:         token,
-		status:        atomic.Uint32{},
-		PublishAsap:   atomic.Bool{},
-		countThreads:  atomic.Int32{},
-		countLogs:     atomic.Int32{},
-		countEvents:   atomic.Int32{},
-		lenThreads:    atomic.Int32{},
-		lenLogs:       atomic.Int32{},
-		lenEvents:     atomic.Int32{},
-		createdAt:     atomic.Int64{},
-		lastTouchedAt: atomic.Int64{},
+		Id:           id,
+		Session:      session,
+		Token:        token,
+		status:       atomic.Uint32{},
+		PublishAsap:  atomic.Bool{},
+		countThreads: atomic.Int32{},
+		countLogs:    atomic.Int32{},
+		countEvents:  atomic.Int32{},
+		lenThreads:   atomic.Int32{},
+		lenLogs:      atomic.Int32{},
+		lenEvents:    atomic.Int32{},
+		createdAt:    atomic.Int64{},
 	}
 }
 
@@ -187,10 +184,6 @@ func (buffer *Buffer) SessionInfo() *add_events.SessionInfo {
 }
 
 func (buffer *Buffer) AddBundle(bundle *add_events.EventBundle) (AddStatus, error) {
-	// update time, when there was last interaction with the buffer
-	defer buffer.Touch()
-
-	// lock data
 	buffer.dataMutex.Lock()
 	defer buffer.dataMutex.Unlock()
 	status := buffer.Status()
@@ -437,14 +430,12 @@ func (buffer *Buffer) ZapStats(fields ...zap.Field) []zap.Field {
 		zap.Int32("bufferLength", buffer.BufferLengths()),
 		zap.Float64("bufferRatio", float64(buffer.BufferLengths())/ShouldSentBufferSize),
 		zap.Int64("sinceCreatedAtMs", time.Since(time.Unix(0, buffer.createdAt.Load())).Milliseconds()),
-		zap.Int64("sinceLastTouchedAtMs", time.Since(time.Unix(0, buffer.lastTouchedAt.Load())).Milliseconds()),
 	}
 	res = append(res, fields...)
 	return res
 }
 
 func (buffer *Buffer) SetStatus(status Status) {
-	defer buffer.Touch()
 	buffer.status.Store(uint32(status))
 }
 
@@ -454,12 +445,4 @@ func (buffer *Buffer) Status() Status {
 
 func (buffer *Buffer) HasStatus(status Status) bool {
 	return buffer.status.Load() == uint32(status)
-}
-
-func (buffer *Buffer) Touch() {
-	buffer.lastTouchedAt.Store(time.Now().UnixNano())
-}
-
-func (buffer *Buffer) TouchedInLast(d time.Duration) bool {
-	return (time.Now().UnixNano() - buffer.lastTouchedAt.Load()) <= d.Nanoseconds()
 }

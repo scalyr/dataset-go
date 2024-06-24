@@ -42,8 +42,6 @@ const (
 	errMsgUnableToSentRequest   = "unable to send request"
 	errMsgUnableToReadResponse  = "unable to read response"
 	errMsgUnableToParseResponse = "unable to parse response"
-	logEveryNthEvent            = 1
-	logEveryNthBuffer           = 1
 )
 
 /*
@@ -165,61 +163,39 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 		client.firstReceivedAt.Store(time.Now().UnixNano())
 	}
 
-	client.addEventsMutexLock()
-
 	// then create all subscribers
 	// add subscriber for events by key
 	// add subscriber for buffer by key
+	client.addEventsMutex.Lock()
 	for key, list := range bundlesWithMeta {
-		client.buffersMutexLock("addEvents - Search", key)
-		buf, found := client.buffers[key]
+		_, found := client.eventBundleSubscriptionChannels[key]
 		if !found {
-			// buffer does not exist yet, so let create required
-			// entities
-
 			// add information about the host to the sessionInfo
-			// creates new buffer and creates subscriber for the buffers
 			client.newBufferForEvents(key, &list[0].SessionInfo)
 
-			// add subscriber for events
 			client.newEventBundleSubscriberRoutine(key)
-		} else {
-			buf.Touch()
 		}
-		client.buffersMutexUnlock("addEvents - Search", key)
 	}
+	client.addEventsMutex.Unlock()
 
-	client.addEventsMutexUnlock()
+	// and as last step - publish them
 
-	// publish all the bundles
-	// when event is added to the bundle it updates the
-	// LastTouched as well
 	for key, list := range bundlesWithMeta {
-		client.eventBundleSubscriptionMutexRLock("addEvents - Publish", key)
 		for _, bundle := range list {
 			client.eventBundlePerKeyTopic.Pub(bundle, key)
 			client.statistics.EventsEnqueuedAdd(1)
 		}
-		client.eventBundleSubscriptionMutexRUnlock("addEvents - Publish", key)
 	}
+
 	return nil
 }
 
 func (client *DataSetClient) newEventBundleSubscriberRoutine(key string) {
-	client.Logger.Debug("newEventBundleSubscriberRoutine - BEGIN", zap.String("session", key))
-	client.eventBundleSubscriptionMutexLock("newEventBundle", key)
-	// MM: 2024-06-05 - here is the deadlock, sub is called, but the line that
-	// unlocks the mutex is not reached, because the go routine is not started.
-	client.Logger.Debug("newEventBundleSubscriberRoutine - SUBSCRIBE - BEFORE", zap.String("session", key))
 	ch := client.eventBundlePerKeyTopic.Sub(key)
-	client.Logger.Debug("newEventBundleSubscriberRoutine - SUBSCRIBE - AFTER", zap.String("session", key))
 	client.eventBundleSubscriptionChannels[key] = ch
-	client.Logger.Debug("newEventBundleSubscriberRoutine - SUBSCRIBE - BEFORE", zap.String("session", key))
-	client.eventBundleSubscriptionMutexUnlock("newEventBundle", key)
 	go (func(session string, ch chan interface{}) {
 		client.listenAndSendBundlesForKey(key, ch)
 	})(key, ch)
-	client.Logger.Debug("newEventBundleSubscriberRoutine - END", zap.String("session", key))
 }
 
 func (client *DataSetClient) newBufferForEvents(session string, info *add_events.SessionInfo) {
@@ -227,16 +203,17 @@ func (client *DataSetClient) newBufferForEvents(session string, info *add_events
 
 	client.initBuffer(buf, info)
 
-	// there is no need to lock here, it's locked by the caller
+	client.buffersAllMutex.Lock()
 	client.buffers[session] = buf
+	defer client.buffersAllMutex.Unlock()
 
 	// create subscriber, so all the upcoming buffers are processed as well
 	client.newBuffersSubscriberRoutine(session)
 }
 
 func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan interface{}) {
-	client.Logger.Debug("Subscriber - EventWithMeta - BEGIN",
-		zap.String("session", key),
+	client.Logger.Debug("Listening to events with key",
+		zap.String("key", key),
 	)
 
 	// this function has to be called from AddEvents - inner loop
@@ -255,20 +232,15 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		msg, channelReceiveSuccess := <-ch
-		if processedMsgCnt%logEveryNthEvent == 0 {
-			client.Logger.Debug("Received Event from channel",
-				zap.String("session", key),
-				zap.Bool("channelReceiveSuccess", channelReceiveSuccess),
-				zap.Int("processedMsgCnt", processedMsgCnt),
-				zap.Uint64("buffersEnqueued", client.statistics.EventsEnqueued()),
-				zap.Uint64("buffersProcessed", client.statistics.EventsProcessed()),
-				zap.Uint64("buffersDropped", client.statistics.EventsDropped()),
-			)
-		}
-
 		if !channelReceiveSuccess {
-			// channel was unsubscribed during the purge
-			break
+			client.Logger.Error(
+				"Cannot receive EventWithMeta from channel",
+				zap.String("key", key),
+				zap.Any("msg", msg),
+			)
+			client.statistics.EventsBrokenAdd(1)
+			client.lastAcceptedAt.Store(time.Now().UnixNano())
+			continue
 		}
 
 		bundle, ok := msg.(EventWithMeta)
@@ -324,6 +296,10 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 				client.publishBuffer(buf)
 			}
 		} else {
+			_, purgeReadSuccess := msg.(Purge)
+			if purgeReadSuccess {
+				break
+			}
 			client.Logger.Error(
 				"Cannot convert message to EventWithMeta",
 				zap.String("key", key),
@@ -332,9 +308,6 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, ch chan inte
 			client.statistics.EventsBrokenAdd(1)
 		}
 	}
-	client.Logger.Debug("Subscriber - EventWithMeta - END",
-		zap.String("session", key),
-	)
 }
 
 // isProcessingBuffers returns True if there are still some unprocessed buffers.
@@ -651,8 +624,8 @@ func (client *DataSetClient) publishAllBuffers() {
 
 func (client *DataSetClient) getBuffers() []*buffer.Buffer {
 	buffers := make([]*buffer.Buffer, 0)
-	client.buffersMutexRLock("getBuffers", "all")
-	defer client.buffersMutexRUnlock("getBuffers", "all")
+	client.buffersAllMutex.Lock()
+	defer client.buffersAllMutex.Unlock()
 	for _, buf := range client.buffers {
 		buffers = append(buffers, buf)
 	}
