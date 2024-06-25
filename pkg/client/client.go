@@ -388,21 +388,17 @@ func (client *DataSetClient) statisticsSweeper() {
 func (client *DataSetClient) mainLoop() {
 	statsTicker := time.NewTicker(30 * time.Second)
 loop:
-	//!+3
 	for {
 		select {
 		case <-client.buffersProcessingDone:
 			client.Logger.Debug("Stopping main loop")
-			// Drain fileSizes to allow existing goroutines to finish.
 			for buf := range client.bufferChannel {
 				client.callServer(buf)
 			}
 			return
 		case buf, ok := <-client.bufferChannel:
-			// ...
-			//!-3
 			if !ok {
-				break loop // fileSizes was closed
+				break loop
 			}
 			client.Logger.Debug("Processing buffer", buf.ZapStats()...)
 			client.callServer(buf)

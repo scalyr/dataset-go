@@ -207,6 +207,8 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, bundlesChann
 		}
 		if buf.HasEvents() {
 			client.publishBuffer(buf)
+		} else {
+			return buf
 		}
 		return client.newBufferForEvents(buf.Session, buf.SessionInfo())
 	}
@@ -300,7 +302,9 @@ loopEvents:
 				continue
 			}
 			if buf.ShouldPurgeAge(purgeTime) {
+				client.Logger.Debug("AAAAAA - sending key to purge channel", zap.String("key", key))
 				purgeChannel <- key
+				client.Logger.Debug("AAAAAA - sent key to purge channel", zap.String("key", key))
 				break loopEvents
 			}
 		}

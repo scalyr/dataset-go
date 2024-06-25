@@ -45,7 +45,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 	const PurgeOlderThan = 15 * MaxDelay
 
 	const Cycles = 3
-	const MaxBatchCount = 40
+	const MaxBatchCount = 400
 	const LogsPerBatch = 50
 	const ExpectedLogs = Cycles * MaxBatchCount * LogsPerBatch
 
@@ -120,7 +120,7 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 				attrs := make(map[string]interface{})
 				attrs["batch"] = batchKey
 				attrs["body.str"] = key
-				attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(2000))
+				attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(buffer_config.LimitBufferSize/(0.1*LogsPerBatch)))
 
 				event := &add_events.Event{
 					Thread: "5",
