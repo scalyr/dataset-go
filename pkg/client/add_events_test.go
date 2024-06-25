@@ -395,6 +395,8 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	defer server.Close()
 
 	config := newDataSetConfig(server.URL, *newBufferSettings(
+		buffer_config.WithMaxLifetime(RetryBase),
+		buffer_config.WithPurgeOlderThan(5*RetryBase),
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
 		buffer_config.WithRetryMaxInterval(5*RetryBase),
@@ -653,17 +655,17 @@ func TestAddEventsLargeEvent(t *testing.T) {
 	assert.Equal(t, uint64(0), stats.Events.Dropped())
 	assert.Equal(t, uint64(0), stats.Events.Broken())
 	assert.Equal(t, 1.0, stats.Events.SuccessRate())
-	assert.Equal(t, uint64(2), stats.Buffers.Enqueued())
-	assert.Equal(t, uint64(2), stats.Buffers.Processed())
+	assert.Equal(t, uint64(1), stats.Buffers.Enqueued())
+	assert.Equal(t, uint64(1), stats.Buffers.Processed())
 	assert.Equal(t, uint64(0), stats.Buffers.Waiting())
 	assert.Equal(t, uint64(0), stats.Buffers.Dropped())
 	assert.Equal(t, uint64(0), stats.Buffers.Broken())
 	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
 	assert.Equal(t, 1.0, stats.Transfer.SuccessRate())
-	assert.Equal(t, uint64(2), stats.Transfer.BuffersProcessed())
+	assert.Equal(t, uint64(1), stats.Transfer.BuffersProcessed())
 	assert.Equal(t, uint64(0x5f0073), stats.Transfer.BytesSent())
 	assert.Equal(t, uint64(0x5f0073), stats.Transfer.BytesAccepted())
-	assert.Equal(t, 3113017.5, stats.Transfer.AvgBufferBytes())
+	assert.Equal(t, 6226035.0, stats.Transfer.AvgBufferBytes())
 }
 
 func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {

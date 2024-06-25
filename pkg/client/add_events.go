@@ -135,7 +135,7 @@ func adjustServerHost(bundle *add_events.EventBundle, serverHost string) {
 // It returns an error if the batch was not accepted (e.g. exporter in error state and retrying handle previous batches or client is being shutdown).
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
 	client.statistics.AddEventsEnteredAdd(1)
-	defer func() { client.statistics.AddEventsExistedAdd(1) }()
+	defer func() { client.statistics.AddEventsExitedAdd(1) }()
 
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
@@ -187,12 +187,17 @@ func (client *DataSetClient) newBufferForEvents(session string, info *add_events
 }
 
 func (client *DataSetClient) listenAndSendBundlesForKey(key string, bundlesChannel <-chan interface{}, purgeChannel chan<- string) {
-	client.Logger.Debug("Listening to events with key",
-		zap.String("key", key),
-	)
+	func() {
+		client.Logger.Debug("Listening to events with key - BEGIN",
+			zap.String("key", key),
+		)
+		client.statistics.SessionsOpenedAdd(1)
+	}()
 
-	client.statistics.SessionsOpenedAdd(1)
 	defer func() {
+		client.Logger.Debug("Listening to events with key - END",
+			zap.String("key", key),
+		)
 		client.statistics.SessionsClosedAdd(1)
 	}()
 
@@ -200,7 +205,9 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, bundlesChann
 		if buf == nil {
 			return nil
 		}
-		client.publishBuffer(buf)
+		if buf.HasEvents() {
+			client.publishBuffer(buf)
+		}
 		return client.newBufferForEvents(buf.Session, buf.SessionInfo())
 	}
 
@@ -294,8 +301,8 @@ loopEvents:
 			}
 			if buf.ShouldPurgeAge(purgeTime) {
 				purgeChannel <- key
+				break loopEvents
 			}
-			break loopEvents
 		}
 	}
 }

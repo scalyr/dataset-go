@@ -203,6 +203,9 @@ func TestExport(t *testing.T) {
 	stats, err := NewStatistics(nil, zap.Must(zap.NewDevelopment()))
 	require.Nil(t, err)
 
+	stats.AddEventsEnteredAdd(5000)
+	stats.AddEventsExitedAdd(500)
+
 	stats.BuffersEnqueuedAdd(1000)
 	stats.BuffersProcessedAdd(100)
 	stats.BuffersDroppedAdd(10)
@@ -221,6 +224,11 @@ func TestExport(t *testing.T) {
 
 	exp := stats.Export(time.Second)
 	assert.Equal(t, &ExportedStatistics{
+		AddEvents: AddEventsStats{
+			entered:        5000,
+			exited:         500,
+			processingTime: time.Second,
+		},
 		Buffers: QueueStats{
 			enqueued:       1000,
 			processed:      100,
@@ -246,6 +254,11 @@ func TestExport(t *testing.T) {
 			sessionsClosed: 400,
 		},
 	}, exp)
+
+	assert.Equal(t, exp.AddEvents.Entered(), uint64(5000))
+	assert.Equal(t, exp.AddEvents.Exited(), uint64(500))
+	assert.Equal(t, exp.AddEvents.Waiting(), uint64(4500))
+	assert.Equal(t, exp.Buffers.ProcessingTime(), time.Second)
 
 	assert.Equal(t, exp.Buffers.Enqueued(), uint64(1000))
 	assert.Equal(t, exp.Buffers.Processed(), uint64(100))

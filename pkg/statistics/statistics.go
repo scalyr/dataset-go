@@ -305,7 +305,7 @@ func (stats *Statistics) AddEventsEnteredAdd(i uint64) {
 	stats.add(stats.cAddEventsEntered, i)
 }
 
-func (stats *Statistics) AddEventsExistedAdd(i uint64) {
+func (stats *Statistics) AddEventsExitedAdd(i uint64) {
 	stats.addEventsExited.Add(i)
 	stats.add(stats.cAddEventsExited, i)
 }
@@ -478,7 +478,7 @@ func (stats AddEventsStats) Exited() uint64 {
 }
 
 func (stats AddEventsStats) Waiting() uint64 {
-	return stats.Exited() - stats.Entered()
+	return stats.Entered() - stats.Exited()
 }
 
 // ProcessingTime is duration of the processing

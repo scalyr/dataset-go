@@ -94,6 +94,7 @@ func (memo *Memo) unsub(key string) {
 func (memo *Memo) purge() {
 	for {
 		key := <-memo.purgeChannel
+		memo.logger.Info("Purging key", zap.String("key", key))
 		memo.unsub(key)
 	}
 }
