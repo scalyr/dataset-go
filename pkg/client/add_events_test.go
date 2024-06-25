@@ -1056,7 +1056,6 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				},
 			},
 		},
-
 		// when serverHost is specified and is different from global one, there are two calls
 		{
 			name: "serverHost is different from global",
@@ -1443,6 +1442,7 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 
 			err = sc.AddEvents(bundles)
 			assert.Nil(t, err)
+			time.Sleep(RetryBase)
 			err = sc.Shutdown()
 			assert.Nil(t, err)
 
