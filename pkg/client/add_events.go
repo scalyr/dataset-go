@@ -134,9 +134,13 @@ func adjustServerHost(bundle *add_events.EventBundle, serverHost string) {
 // AddEvents enqueues given events for processing (sending to Dataset).
 // It returns an error if the batch was not accepted (e.g. exporter in error state and retrying handle previous batches or client is being shutdown).
 func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error {
+	client.statistics.AddEventsEnteredAdd(1)
+	defer func() { client.statistics.AddEventsExistedAdd(1) }()
+
 	if client.finished.Load() {
 		return fmt.Errorf("client has finished - rejecting all new events")
 	}
+
 	shouldReject, errR := client.isInErrorState()
 	if shouldReject {
 		return fmt.Errorf("AddEvents - reject batch: %w", errR)
@@ -232,7 +236,8 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, bundlesChann
 				return buf
 			}
 		}
-		client.statistics.EventsProcessedAdd(1)
+		// TODO: Remove from adding to buffer and move to publish
+		// client.statistics.EventsProcessedAdd(1)
 		return buf
 	}
 
@@ -252,14 +257,16 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, bundlesChann
 loopEvents:
 	for processedMsgCnt := 0; ; processedMsgCnt++ {
 		select {
-		case <-client.done:
+		case <-client.eventsProcessingDone:
 			client.Logger.Debug("Shutting down listener for key", zap.String("key", key))
+			buf = publish(key, buf)
 			for msg := range bundlesChannel {
 				bundle, ok := msg.(EventWithMeta)
 				if !ok {
 					client.statistics.EventsBrokenAdd(1)
 				} else {
 					buf = process(buf, bundle)
+					buf = publish(key, buf)
 				}
 			}
 			buf = publish(key, buf)
@@ -305,6 +312,12 @@ func (client *DataSetClient) isProcessingEvents() bool {
 	return client.statistics.EventsEnqueued() > (client.statistics.EventsProcessed() + client.statistics.EventsDropped() + client.statistics.EventsBroken())
 }
 
+// isProcessingEvents returns True if there are still some unprocessed events.
+// False otherwise.
+func (client *DataSetClient) isProcessingAddEvents() bool {
+	return client.statistics.AddEventsEntered() > client.statistics.AddEventsExited()
+}
+
 // Shutdown takes care of shutdown of client. It does following steps
 // - stops processing of new events,
 // - tries (with 1st half of shutdownMaxTimeout period) to process (add into buffers) all the events,
@@ -323,7 +336,7 @@ func (client *DataSetClient) Shutdown() error {
 	retryShutdownTimeout := client.Config.BufferSettings.RetryShutdownTimeout
 	maxElapsedTime := retryShutdownTimeout/2 - 100*time.Millisecond
 	client.Logger.Info(
-		"Shutting down - waiting for events",
+		"Shutting down - waiting for incoming add_events",
 		zap.Duration("maxElapsedTime", maxElapsedTime),
 		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
 		zap.Duration("elapsedTime", time.Since(processingStart)),
@@ -343,6 +356,37 @@ func (client *DataSetClient) Shutdown() error {
 	// try (with timeout) to process (add into buffers) events,
 	retryNum := 0
 	expBackoff.Reset()
+	for client.isProcessingAddEvents() {
+		// log statistics
+		client.logStatistics()
+
+		backoffDelay := expBackoff.NextBackOff()
+		client.Logger.Info(
+			"Shutting down - processing incoming add_events",
+			zap.Int("retryNum", retryNum),
+			zap.Duration("backoffDelay", backoffDelay),
+			zap.Uint64("addEventsEntered", client.statistics.AddEventsEntered()),
+			zap.Uint64("addEventsExited", client.statistics.AddEventsExited()),
+			zap.Duration("elapsedTime", time.Since(processingStart)),
+			zap.Duration("maxElapsedTime", maxElapsedTime),
+		)
+		if backoffDelay == expBackoff.Stop {
+			break
+		}
+		time.Sleep(backoffDelay)
+		retryNum++
+	}
+
+	client.Logger.Info(
+		"Shutting down - waiting processing events",
+		zap.Duration("maxElapsedTime", maxElapsedTime),
+		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
+		zap.Duration("elapsedTime", time.Since(processingStart)),
+	)
+
+	// try (with timeout) to process (add into buffers) events,
+	expBackoff.Reset()
+	close(client.eventsProcessingDone)
 	initialEventsDropped := client.statistics.EventsDropped()
 	for client.isProcessingEvents() {
 		// log statistics
@@ -371,7 +415,7 @@ func (client *DataSetClient) Shutdown() error {
 		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
 		zap.Duration("elapsedTime", time.Since(processingStart)),
 	)
-	close(client.done)
+	close(client.buffersProcessingDone)
 
 	// reinitialize expBackoff with MaxElapsedTime based on actually elapsed time of processing (previous phase)
 	processingElapsed := time.Since(processingStart)

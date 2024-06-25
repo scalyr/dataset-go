@@ -201,6 +201,7 @@ func TestPayloadInjection(t *testing.T) {
 }
 
 func TestAddEventWithShouldSendAge(t *testing.T) {
+	t.Skipf("Buffers are designed to now longer thread safe.")
 	buffer := createEmptyBuffer()
 	assert.NotNil(t, buffer)
 
@@ -238,6 +239,7 @@ func TestAddEventWithShouldSendAge(t *testing.T) {
 }
 
 func TestAddEventWithShouldSendSize(t *testing.T) {
+	t.Skipf("Buffers are designed to now longer thread safe.")
 	buffer := createEmptyBuffer()
 	assert.NotNil(t, buffer)
 

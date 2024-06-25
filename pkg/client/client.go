@@ -91,7 +91,8 @@ type DataSetClient struct {
 	statistics           *statistics.Statistics
 	memo                 *Memo
 
-	done chan struct{}
+	eventsProcessingDone  chan struct{}
+	buffersProcessingDone chan struct{}
 
 	bufferSendingSema chan struct{}
 	bufferChannel     chan *buffer.Buffer
@@ -178,7 +179,8 @@ func NewClient(
 		serverHost:           serverHost,
 		statistics:           stats,
 
-		done: make(chan struct{}),
+		eventsProcessingDone:  make(chan struct{}),
+		buffersProcessingDone: make(chan struct{}),
 
 		bufferSendingSema: make(chan struct{}, 20),
 		bufferChannel:     make(chan *buffer.Buffer),
@@ -389,7 +391,7 @@ loop:
 	//!+3
 	for {
 		select {
-		case <-client.done:
+		case <-client.buffersProcessingDone:
 			client.Logger.Debug("Stopping main loop")
 			// Drain fileSizes to allow existing goroutines to finish.
 			for buf := range client.bufferChannel {
@@ -433,17 +435,14 @@ func (client *DataSetClient) logStatistics() {
 		return
 	}
 
-	b := stats.Buffers
+	a := stats.AddEvents
 	client.Logger.Info(
-		"Buffers' Queue Stats:",
-		zap.Uint64("processed", b.Processed()),
-		zap.Uint64("enqueued", b.Enqueued()),
-		zap.Uint64("dropped", b.Dropped()),
-		zap.Uint64("broken", b.Broken()),
-		zap.Uint64("waiting", b.Waiting()),
-		zap.Float64("successRate", b.SuccessRate()),
-		zap.Float64("processingS", b.ProcessingTime().Seconds()),
-		zap.Duration("processing", b.ProcessingTime()),
+		"Add Events' Stats:",
+		zap.Uint64("entered", a.Entered()),
+		zap.Uint64("exited", a.Exited()),
+		zap.Uint64("waiting", a.Waiting()),
+		zap.Float64("processingS", a.ProcessingTime().Seconds()),
+		zap.Duration("processing", a.ProcessingTime()),
 	)
 
 	// log events stats
@@ -458,6 +457,19 @@ func (client *DataSetClient) logStatistics() {
 		zap.Float64("successRate", e.SuccessRate()),
 		zap.Float64("processingS", e.ProcessingTime().Seconds()),
 		zap.Duration("processing", e.ProcessingTime()),
+	)
+
+	b := stats.Buffers
+	client.Logger.Info(
+		"Buffers' Queue Stats:",
+		zap.Uint64("processed", b.Processed()),
+		zap.Uint64("enqueued", b.Enqueued()),
+		zap.Uint64("dropped", b.Dropped()),
+		zap.Uint64("broken", b.Broken()),
+		zap.Uint64("waiting", b.Waiting()),
+		zap.Float64("successRate", b.SuccessRate()),
+		zap.Float64("processingS", b.ProcessingTime().Seconds()),
+		zap.Duration("processing", b.ProcessingTime()),
 	)
 
 	// log transferred stats
@@ -565,6 +577,7 @@ func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 
 	// publish buffer so it can be sent
 	client.statistics.BuffersEnqueuedAdd(+1)
+	client.statistics.EventsProcessedAdd(uint64(buf.CountEvents()))
 	client.bufferChannel <- buf
 }
 

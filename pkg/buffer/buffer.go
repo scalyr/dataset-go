@@ -338,6 +338,10 @@ func (buffer *Buffer) BufferLengths() int32 {
 	return int32(buffer.lenSessionInfo) + buffer.lenThreads + buffer.lenLogs + buffer.lenEvents
 }
 
+func (buffer *Buffer) CountEvents() int32 {
+	return buffer.countEvents
+}
+
 func (buffer *Buffer) Payload() ([]byte, error) {
 	if len(buffer.Token) == 0 {
 		return nil, fmt.Errorf("token is missing")

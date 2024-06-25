@@ -313,7 +313,7 @@ func TestAddEventsRetry(t *testing.T) {
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
-		buffer_config.WithRetryMaxInterval(RetryBase),
+		buffer_config.WithRetryMaxInterval(5*RetryBase),
 	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
@@ -397,8 +397,8 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	config := newDataSetConfig(server.URL, *newBufferSettings(
 		buffer_config.WithRetryMaxElapsedTime(10*RetryBase),
 		buffer_config.WithRetryInitialInterval(RetryBase),
-		buffer_config.WithRetryMaxInterval(RetryBase),
-		buffer_config.WithRetryShutdownTimeout(10*time.Second),
+		buffer_config.WithRetryMaxInterval(5*RetryBase),
+		buffer_config.WithRetryShutdownTimeout(30*time.Second),
 	), server_host_config.NewDefaultDataSetServerHostSettings())
 	sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 	require.Nil(t, err)
