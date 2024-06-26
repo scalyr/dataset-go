@@ -93,7 +93,7 @@ coverage-all:
 build-examples:
 	for d in examples/*; do \
   		echo "Build example: $${d}"; \
-		(cd $${d}; go mod tidy && go build) || exit 1; \
+		(cd $${d}; go mod tidy && go build -race) || exit 1; \
 	done;
 
 .PHONY: test-ssl-certificates
