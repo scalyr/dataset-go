@@ -27,6 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scalyr/dataset-go/pkg/session_manager"
+
 	"github.com/scalyr/dataset-go/pkg/meter_config"
 
 	"golang.org/x/exp/slices"
@@ -88,8 +90,9 @@ type DataSetClient struct {
 	addEventsEndpointUrl string
 	userAgent            string
 	serverHost           string
-	statistics           *statistics.Statistics
-	memo                 *Memo
+
+	statistics     *statistics.Statistics
+	sessionManager *session_manager.SessionManager
 
 	eventsProcessingDone  chan struct{}
 	buffersProcessingDone chan struct{}
@@ -186,26 +189,10 @@ func NewClient(
 		bufferChannel:     make(chan *buffer.Buffer),
 	}
 
-	dataClient.memo = New(
+	dataClient.sessionManager = session_manager.New(
 		logger,
 		dataClient.listenAndSendBundlesForKey,
 	)
-
-	// run buffer sweeper if requested
-	/*
-		if cfg.BufferSettings.MaxLifetime > 0 || cfg.BufferSettings.PurgeOlderThan > 0 {
-			dataClient.Logger.Info("Buffer sweeping is enabled",
-				zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
-				zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
-			)
-			go dataClient.bufferSweeper(cfg.BufferSettings.MaxLifetime, cfg.BufferSettings.PurgeOlderThan)
-		} else {
-			dataClient.Logger.Warn("Buffer sweeping is disabled",
-				zap.Duration("Buffer.MaxLifetime", cfg.BufferSettings.MaxLifetime),
-				zap.Duration("Buffer.PurgeOlderThan", cfg.BufferSettings.PurgeOlderThan),
-			)
-		}
-	*/
 
 	// run statistics sweeper
 	go dataClient.statisticsSweeper()

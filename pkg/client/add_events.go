@@ -167,10 +167,10 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	}
 
 	for key, list := range bundlesWithMeta {
-		client.memo.Sub(key)
+		client.sessionManager.Sub(key)
 
 		for _, bundle := range list {
-			client.memo.Pub(key, bundle)
+			client.sessionManager.Pub(key, bundle)
 			client.statistics.EventsEnqueuedAdd(1)
 		}
 	}
