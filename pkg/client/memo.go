@@ -3,7 +3,6 @@ package client
 import (
 	"sync"
 
-	"github.com/cskr/pubsub"
 	"go.uber.org/zap"
 )
 
@@ -20,7 +19,6 @@ type command struct {
 }
 
 type Memo struct {
-	ps             *pubsub.PubSub
 	eventCallback  EventCallback
 	mu             sync.Mutex // guards cache
 	channels       map[string]chan interface{}
@@ -35,7 +33,6 @@ func New(
 	eventsCallback EventCallback,
 ) *Memo {
 	memo := &Memo{
-		ps:             pubsub.New(0),
 		eventCallback:  eventsCallback,
 		mu:             sync.Mutex{},
 		channels:       make(map[string]chan interface{}),
@@ -67,8 +64,7 @@ func (memo *Memo) sub(key string) chan interface{} {
 		memo.logger.Debug("AAAAA - Memo - Subscribing to key", zap.String("key", key))
 
 		memo.logger.Debug("AAAAA - Memo - sub - pubsub.sub - before", zap.String("key", key))
-		// here is the pub sub adding
-		ch = memo.ps.Sub(key)
+		ch := make(chan interface{})
 		memo.channels[key] = ch
 		memo.logger.Debug("AAAAA - Memo - sub - pubsub.sub - after", zap.String("key", key))
 		go memo.eventCallback(key, ch, memo.purgeChannel)
@@ -85,7 +81,12 @@ func (memo *Memo) Pub(key string, value interface{}) {
 
 func (memo *Memo) pub(key string, value interface{}) {
 	memo.logger.Debug("AAAAA - Memo - pub - START", zap.String("key", key))
-	memo.ps.Pub(value, key)
+	ch, found := memo.channels[key]
+	if found {
+		ch <- value
+	} else {
+		memo.logger.Warn("AAAAA - Memo - pub - does not exist", zap.String("key", key))
+	}
 	memo.logger.Debug("AAAAA - Memo - pub - END", zap.String("key", key))
 }
 
@@ -95,10 +96,9 @@ func (memo *Memo) unsub(key string) {
 	if found {
 		memo.logger.Debug("AAAAA - Memo - Unsubscribing to key", zap.String("key", key))
 		delete(memo.channels, key)
-		memo.logger.Debug("AAAAA - Memo - pubsub.unsub - before", zap.String("key", key))
-		// This is not necessary, and may cause problems
-		go memo.ps.Unsub(ch)
-		memo.logger.Debug("AAAAA - Memo - pubsub.unsub - after", zap.String("key", key))
+		memo.logger.Debug("AAAAA - Memo - close - before", zap.String("key", key))
+		close(ch)
+		memo.logger.Debug("AAAAA - Memo - close - after", zap.String("key", key))
 	} else {
 		memo.logger.Warn("AAAAA - Memo - Unsubscribing to key - already unsubscribed", zap.String("key", key))
 	}

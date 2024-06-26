@@ -274,6 +274,12 @@ func TestAddEvents(t *testing.T) {
 			assert.Nil(t, errShutdown)
 			lastError := client.LastError()
 			assert.Nil(t, lastError)
+			stats := client.Statistics()
+			assert.NotNil(t, stats)
+			assert.Equal(t, uint64(1), stats.Events.Enqueued())
+			assert.Equal(t, uint64(1), stats.Events.Processed())
+			assert.Equal(t, uint64(1), stats.Buffers.Enqueued())
+			assert.Equal(t, uint64(1), stats.Buffers.Processed())
 		})
 	}
 }
