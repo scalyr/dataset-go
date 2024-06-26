@@ -16,6 +16,7 @@
 package buffer_config
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -117,4 +118,86 @@ func TestDataConfigNewDefaultToString(t *testing.T) {
 func TestDataConfigNewDefaultIsValid(t *testing.T) {
 	cfg := NewDefaultDataSetBufferSettings()
 	assert.Nil(t, cfg.Validate())
+}
+
+func TestValidate(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  []DataSetBufferSettingsOption
+		expError error
+	}{
+		// default config is valid
+		{
+			name:     "default",
+			options:  []DataSetBufferSettingsOption{},
+			expError: nil,
+		},
+		{
+			name: "shorter purge",
+			options: []DataSetBufferSettingsOption{
+				WithMaxLifetime(time.Second),
+				WithPurgeOlderThan(time.Second),
+			},
+			expError: fmt.Errorf("MaxLifetime 1s has to be at least 3 times smaller than PurgeOlderThan 1s"),
+		},
+		{
+			name: "buffer size too large",
+			options: []DataSetBufferSettingsOption{
+				WithMaxSize(LimitBufferSize + 1),
+			},
+			expError: fmt.Errorf("MaxSize has value %d which is more than %d", LimitBufferSize+1, LimitBufferSize),
+		},
+		{
+			name: "retry initial interval too short",
+			options: []DataSetBufferSettingsOption{
+				WithRetryInitialInterval(MinimalInitialInterval / 2),
+			},
+			expError: fmt.Errorf("RetryInitialInterval has value %s which is less than %s", MinimalInitialInterval/2, MinimalInitialInterval),
+		},
+		{
+			name: "retry max interval too short",
+			options: []DataSetBufferSettingsOption{
+				WithRetryMaxInterval(MinimalMaxInterval / 2),
+			},
+			expError: fmt.Errorf("RetryMaxInterval has value %s which is less than %s", MinimalMaxInterval/2, MinimalMaxInterval),
+		},
+		{
+			name: "retry max elapsed time too short",
+			options: []DataSetBufferSettingsOption{
+				WithRetryMaxElapsedTime(MinimalMaxElapsedTime / 2),
+			},
+			expError: fmt.Errorf("RetryMaxElapsedTime has value %s which is less than %s", MinimalMaxElapsedTime/2, MinimalMaxElapsedTime),
+		},
+		{
+			name: "retry multiplier too small",
+			options: []DataSetBufferSettingsOption{
+				WithRetryMultiplier(MinimalMultiplier / 2),
+			},
+			expError: fmt.Errorf("RetryMultiplier has value %f which is less or equal than %f", MinimalMultiplier/2, MinimalMultiplier),
+		},
+		{
+			name: "retry randomization factor too small",
+			options: []DataSetBufferSettingsOption{
+				WithRetryRandomizationFactor(MinimalRandomizationFactor / 2),
+			},
+			expError: fmt.Errorf("RetryRandomizationFactor has value %f which is less or equal than %f", MinimalRandomizationFactor/2, MinimalRandomizationFactor),
+		},
+		{
+			name: "retry shutdown timeout too small",
+			options: []DataSetBufferSettingsOption{
+				WithRetryShutdownTimeout(MinimalRetryShutdownTimeout / 2),
+			},
+			expError: fmt.Errorf("RetryShutdownTimeout has value %s which is less than %s", MinimalRetryShutdownTimeout/2, MinimalRetryShutdownTimeout),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			defCfg := NewDefaultDataSetBufferSettings()
+			cfg, err := (&defCfg).WithOptions(tt.options...)
+			assert.Nil(t, err)
+			err = cfg.Validate()
+			assert.Equal(t, tt.expError, err)
+		})
+	}
 }

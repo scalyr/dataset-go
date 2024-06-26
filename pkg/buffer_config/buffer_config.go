@@ -177,8 +177,8 @@ func (cfg *DataSetBufferSettings) String() string {
 func (cfg *DataSetBufferSettings) Validate() error {
 	if MinimalPurgeToLifetimeRatio*cfg.MaxLifetime > cfg.PurgeOlderThan {
 		return fmt.Errorf(
-			"MaxLifetime %d has to be at least %d times smaller than PurgeOlderThan %d",
-			cfg.MaxSize,
+			"MaxLifetime %s has to be at least %d times smaller than PurgeOlderThan %s",
+			cfg.MaxLifetime,
 			MinimalPurgeToLifetimeRatio,
 			cfg.PurgeOlderThan,
 		)
