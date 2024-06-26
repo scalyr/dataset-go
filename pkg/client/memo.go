@@ -77,7 +77,9 @@ func (memo *Memo) sub(key string) chan interface{} {
 }
 
 func (memo *Memo) Pub(key string, value interface{}) {
+	memo.logger.Debug("AAAAA - Memo - Pub - START", zap.String("key", key))
 	memo.ps.Pub(value, key)
+	memo.logger.Debug("AAAAA - Memo - Pub - END", zap.String("key", key))
 }
 
 func (memo *Memo) unsub(key string) {
