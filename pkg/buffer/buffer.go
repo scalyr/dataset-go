@@ -33,8 +33,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type Status uint32
-
 const (
 	ShouldSentBufferSize = buffer_config.ShouldSentBufferSize
 	LimitBufferSize      = buffer_config.LimitBufferSize
@@ -50,14 +48,6 @@ const (
 
 func (s AddStatus) String() string {
 	return [...]string{"Added", "Skipped", "TooMuch"}[s]
-}
-
-type NotAcceptingError struct {
-	status Status
-}
-
-func (e *NotAcceptingError) Error() string {
-	return fmt.Sprintf("Buffer has status %d => not accepting new events", e.status)
 }
 
 // Buffer represent a batch of Events grouped under certain session.

@@ -30,6 +30,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestAddStatusString(t *testing.T) {
+	assert.Equal(t, "Added", Added.String())
+	assert.NotEmpty(t, "Skipped", Skipped.String())
+	assert.NotEmpty(t, "TooMuch", TooMuch.String())
+}
+
 func loadJson(name string) string {
 	dat, err := os.ReadFile("../../test/testdata/" + name)
 	if err != nil {
@@ -79,12 +85,16 @@ func createTestBundle() add_events.EventBundle {
 	}
 }
 
-func createEmptyBuffer() *Buffer {
-	sessionInfo := &add_events.SessionInfo{
+func createSessionInfo() *add_events.SessionInfo {
+	return &add_events.SessionInfo{
 		"serverId":   "serverId",
 		"serverType": "serverType",
 		"region":     "region",
 	}
+}
+
+func createEmptyBuffer() *Buffer {
+	sessionInfo := createSessionInfo()
 	session := "session"
 	token := "token"
 	buffer, err := NewBuffer(
@@ -397,6 +407,24 @@ func TestAddEventWithShouldSendSize(t *testing.T) {
 	assert.True(t, buffer.HasEvents())
 	assert.Greater(t, buffer.CountEvents(), int32(10))
 	assert.Greater(t, buffer.BufferLengths(), int32(ShouldSentBufferSize-1000))
+}
+
+func TestNewEmpty(t *testing.T) {
+	buffer := createEmptyBuffer()
+	assert.NotNil(t, buffer)
+
+	bundle := createTestBundle()
+	added, err := buffer.AddBundle(&bundle)
+	assert.Nil(t, err)
+	assert.Equal(t, added, Added)
+	assert.Equal(t, int32(1), buffer.CountEvents())
+	assert.Equal(t, int32(646), buffer.BufferLengths())
+
+	newBuf, err := buffer.NewEmpty()
+	assert.Nil(t, err)
+	assert.NotNil(t, newBuf)
+	assert.Equal(t, int32(0), newBuf.CountEvents())
+	assert.Equal(t, int32(67), newBuf.BufferLengths())
 }
 
 func TestZapStats(t *testing.T) {
