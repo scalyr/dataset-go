@@ -219,7 +219,7 @@ func (buffer *Buffer) addThread(thread *add_events.Thread) (AddStatus, error) {
 			buffer.countThreads += 1
 			return Added, nil
 		} else {
-			return Skipped, nil
+			return TooMuch, nil
 		}
 	}
 	return Skipped, nil

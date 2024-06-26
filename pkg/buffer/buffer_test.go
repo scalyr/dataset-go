@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 	"github.com/stretchr/testify/assert"
 )
@@ -93,6 +95,149 @@ func createEmptyBuffer() *Buffer {
 		return nil
 	}
 	return buffer
+}
+
+func TestAddBundle(t *testing.T) {
+	tests := []struct {
+		name      string
+		bundle    add_events.EventBundle
+		expStatus AddStatus
+		expError  error
+	}{
+		{
+			name: "Add small",
+			bundle: add_events.EventBundle{
+				Log: &add_events.Log{Id: "LId", Attrs: map[string]interface{}{
+					"LAttr1": "LVal1",
+					"LAttr2": "LVal2",
+				}},
+				Thread: &add_events.Thread{Id: "TId-2", Name: "TName"},
+				Event: &add_events.Event{
+					Thread: "TId",
+					Sev:    3,
+					Ts:     "0",
+					Attrs: map[string]interface{}{
+						"message": "test",
+						"s1web":   "aaa",
+					},
+				},
+			},
+			expStatus: Added,
+			expError:  nil,
+		},
+		{
+			name: "Add with large thread name",
+			bundle: add_events.EventBundle{
+				Log: &add_events.Log{Id: "LId", Attrs: map[string]interface{}{
+					"LAttr1": "LVal1",
+					"LAttr2": "LVal2",
+				}},
+				Thread: &add_events.Thread{Id: "TId-2", Name: strings.Repeat("T", LimitBufferSize)},
+				Event: &add_events.Event{
+					Thread: "TId",
+					Sev:    3,
+					Ts:     "0",
+					Attrs: map[string]interface{}{
+						"message": "test",
+						"s1web":   "aaa",
+					},
+				},
+			},
+			expStatus: TooMuch,
+			expError:  nil,
+		},
+		{
+			name: "Add with large log",
+			bundle: add_events.EventBundle{
+				Log: &add_events.Log{Id: "LId-2", Attrs: map[string]interface{}{
+					"LAttr1": "LVal1",
+					"LAttr2": "LVal2",
+					"LAttr3": strings.Repeat("L", LimitBufferSize),
+				}},
+				Thread: &add_events.Thread{Id: "TId-2", Name: "Name"},
+				Event: &add_events.Event{
+					Thread: "TId",
+					Sev:    3,
+					Ts:     "0",
+					Attrs: map[string]interface{}{
+						"message": "test",
+						"s1web":   "aaa",
+					},
+				},
+			},
+			expStatus: TooMuch,
+			expError:  nil,
+		},
+		{
+			name: "Add with large event",
+			bundle: add_events.EventBundle{
+				Log: &add_events.Log{Id: "LId-2", Attrs: map[string]interface{}{
+					"LAttr1": "LVal1",
+					"LAttr2": "LVal2",
+				}},
+				Thread: &add_events.Thread{Id: "TId-2", Name: "Name"},
+				Event: &add_events.Event{
+					Thread: "TId",
+					Sev:    3,
+					Ts:     "0",
+					Attrs: map[string]interface{}{
+						"message": "test",
+						"s1web":   "aaa",
+						"attr":    strings.Repeat("E", LimitBufferSize),
+					},
+				},
+			},
+			expStatus: TooMuch,
+			expError:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			buf := createEmptyBuffer()
+			bundle := createTestBundle()
+			status, err := buf.AddBundle(&bundle)
+			assert.Equal(t, status, Added)
+			assert.Nil(t, err)
+
+			sizeBefore := buf.BufferLengths()
+
+			status, err = buf.AddBundle(&tt.bundle)
+			assert.Equal(t, tt.expStatus, status)
+			assert.Equal(t, tt.expError, err)
+
+			if status == TooMuch {
+				assert.Equal(t, int32(1), buf.CountEvents())
+				assert.Equal(t, sizeBefore, buf.BufferLengths())
+			}
+		})
+	}
+}
+
+func TestAddBundleWithBufferTrimming(t *testing.T) {
+	buf := createEmptyBuffer()
+	bundle := add_events.EventBundle{
+		Log: &add_events.Log{Id: "LId-2", Attrs: map[string]interface{}{
+			"LAttr1": "LVal1",
+			"LAttr2": "LVal2",
+		}},
+		Thread: &add_events.Thread{Id: "TId-2", Name: "Name"},
+		Event: &add_events.Event{
+			Thread: "TId",
+			Sev:    3,
+			Ts:     "0",
+			Attrs: map[string]interface{}{
+				"message": "test",
+				"s1web":   "aaa",
+				"attr":    strings.Repeat("E", LimitBufferSize),
+			},
+		},
+	}
+	status, err := buf.AddBundle(&bundle)
+	assert.Nil(t, err)
+	assert.Equal(t, status, Added)
+	assert.Equal(t, int32(1), buf.CountEvents())
+	assert.Equal(t, int32(6225911), buf.BufferLengths())
 }
 
 func TestPayloadFull(t *testing.T) {
@@ -205,9 +350,32 @@ func TestAddEventWithShouldSendAge(t *testing.T) {
 	added, err := buffer.AddBundle(&bundle)
 	assert.Nil(t, err)
 	assert.Equal(t, added, Added)
+	assert.False(t, buffer.ShouldSendAge(100*time.Millisecond))
+
 	time.Sleep(10 * time.Millisecond)
 
 	assert.True(t, buffer.ShouldSendAge(time.Millisecond))
+}
+
+func TestAddEventWithShouldPurgeAge(t *testing.T) {
+	buffer := createEmptyBuffer()
+	assert.NotNil(t, buffer)
+
+	bundle := createTestBundle()
+	assert.False(t, buffer.ShouldPurgeAge(100*time.Millisecond))
+
+	time.Sleep(10 * time.Millisecond)
+
+	assert.True(t, buffer.ShouldPurgeAge(time.Millisecond))
+
+	added, err := buffer.AddBundle(&bundle)
+	assert.Nil(t, err)
+	assert.Equal(t, added, Added)
+	assert.False(t, buffer.ShouldPurgeAge(100*time.Millisecond))
+
+	time.Sleep(10 * time.Millisecond)
+
+	assert.False(t, buffer.ShouldPurgeAge(time.Millisecond))
 }
 
 func TestAddEventWithShouldSendSize(t *testing.T) {
@@ -229,4 +397,20 @@ func TestAddEventWithShouldSendSize(t *testing.T) {
 	assert.True(t, buffer.HasEvents())
 	assert.Greater(t, buffer.CountEvents(), int32(10))
 	assert.Greater(t, buffer.BufferLengths(), int32(ShouldSentBufferSize-1000))
+}
+
+func TestZapStats(t *testing.T) {
+	buf := createEmptyBuffer()
+	bundle := createTestBundle()
+	status, err := buf.AddBundle(&bundle)
+	assert.Nil(t, err)
+	assert.Equal(t, status, Added)
+	stats := buf.ZapStats()
+	assert.Equal(t, 8, len(stats))
+	assert.Equal(t, zap.String("session", "session"), stats[1])
+	assert.Equal(t, zap.Int32("logs", 1), stats[2])
+	assert.Equal(t, zap.Int32("threads", 1), stats[3])
+	assert.Equal(t, zap.Int32("events", 1), stats[4])
+	assert.Equal(t, zap.Int32("bufferLength", 646), stats[5])
+	assert.Equal(t, zap.Float64("bufferRatio", float64(646)/ShouldSentBufferSize), stats[6])
 }
