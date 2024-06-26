@@ -14,8 +14,9 @@ type (
 )
 
 type command struct {
-	op  string
-	key string
+	op    string
+	key   string
+	value interface{}
 }
 
 type Memo struct {
@@ -78,8 +79,14 @@ func (memo *Memo) sub(key string) chan interface{} {
 
 func (memo *Memo) Pub(key string, value interface{}) {
 	memo.logger.Debug("AAAAA - Memo - Pub - START", zap.String("key", key))
-	memo.ps.Pub(value, key)
+	memo.operations <- command{op: "pub", key: key, value: value}
 	memo.logger.Debug("AAAAA - Memo - Pub - END", zap.String("key", key))
+}
+
+func (memo *Memo) pub(key string, value interface{}) {
+	memo.logger.Debug("AAAAA - Memo - pub - START", zap.String("key", key))
+	memo.ps.Pub(value, key)
+	memo.logger.Debug("AAAAA - Memo - pub - END", zap.String("key", key))
 }
 
 func (memo *Memo) unsub(key string) {
@@ -112,6 +119,8 @@ func (memo *Memo) processCommands() {
 			memo.logger.Debug("AAAAA - Memo - processCommands - sub - after return channel", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 		case "unsub":
 			memo.unsub(cmd.key)
+		case "pub":
+			memo.pub(cmd.key, cmd.value)
 		}
 		memo.logger.Debug("AAAAA - Memo - processCommands - END", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 	}
