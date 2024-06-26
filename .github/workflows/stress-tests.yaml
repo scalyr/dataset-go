@@ -36,7 +36,7 @@ jobs:
         go: ['1.21', '1.22']
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 15
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
 

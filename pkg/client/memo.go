@@ -63,7 +63,7 @@ func (memo *Memo) sub(key string) chan interface{} {
 	memo.logger.Debug("AAAAA - Memo - sub - START", zap.String("key", key))
 	ch, found := memo.channels[key]
 	if !found {
-		memo.logger.Debug("Subscribing to key", zap.String("key", key))
+		memo.logger.Debug("AAAAA - Memo - Subscribing to key", zap.String("key", key))
 
 		memo.logger.Debug("AAAAA - Memo - sub - pubsub.sub - before", zap.String("key", key))
 		// here is the pub sub adding
@@ -86,20 +86,22 @@ func (memo *Memo) unsub(key string) {
 	memo.logger.Debug("AAAAA - Memo - unsub - START", zap.String("key", key))
 	ch, found := memo.channels[key]
 	if found {
-		memo.logger.Debug("Unsubscribing to key", zap.String("key", key))
+		memo.logger.Debug("AAAAA - Memo - Unsubscribing to key", zap.String("key", key))
 		delete(memo.channels, key)
 		memo.logger.Debug("AAAAA - Memo - pubsub.unsub - before", zap.String("key", key))
 		// This is not necessary, and may cause problems
 		go memo.ps.Unsub(ch)
 		memo.logger.Debug("AAAAA - Memo - pubsub.unsub - after", zap.String("key", key))
 	} else {
-		memo.logger.Warn("Unsubscribing to key - already unsubscribed", zap.String("key", key))
+		memo.logger.Warn("AAAAA - Memo - Unsubscribing to key - already unsubscribed", zap.String("key", key))
 	}
 	memo.logger.Debug("AAAAA - Memo - unsub - END", zap.String("key", key))
 }
 
 func (memo *Memo) processCommands() {
+	memo.logger.Debug("AAAAA - Memo - processCommands - START")
 	for {
+		memo.logger.Debug("AAAAA - Memo - processCommands - WAITING")
 		cmd := <-memo.operations
 		memo.logger.Debug("AAAAA - Memo - processCommands - START", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 		switch cmd.op {
@@ -117,13 +119,16 @@ func (memo *Memo) processCommands() {
 
 func (memo *Memo) purge() {
 	for {
+		memo.logger.Debug("AAAAA - Memo - purge - WAITING")
 		key, ok := <-memo.purgeChannel
 		if !ok {
 			memo.logger.Info("Purge channel closed")
 			return
 		}
+		memo.logger.Debug("AAAAA - Memo - purge - START", zap.String("key", key))
 		memo.logger.Info("Purging key", zap.String("key", key))
 		memo.operations <- command{op: "unsub", key: key}
+		memo.logger.Debug("AAAAA - Memo - purge - END", zap.String("key", key))
 	}
 }
 
