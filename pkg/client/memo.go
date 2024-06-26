@@ -13,12 +13,6 @@ type (
 	EventCallback func(key string, bundlesChannel <-chan interface{}, purgeChannel chan<- string)
 )
 
-// !+
-type entry struct {
-	channel  chan interface{}
-	subReady chan struct{} // closed when res is ready
-}
-
 type command struct {
 	op  string
 	key string
@@ -28,7 +22,7 @@ type Memo struct {
 	ps             *pubsub.PubSub
 	eventCallback  EventCallback
 	mu             sync.Mutex // guards cache
-	channels       map[string]*entry
+	channels       map[string]chan interface{}
 	logger         *zap.Logger
 	purgeChannel   chan string
 	operations     chan command
@@ -43,7 +37,7 @@ func New(
 		ps:             pubsub.New(0),
 		eventCallback:  eventsCallback,
 		mu:             sync.Mutex{},
-		channels:       make(map[string]*entry),
+		channels:       make(map[string]chan interface{}),
 		logger:         logger,
 		purgeChannel:   make(chan string),
 		operations:     make(chan command),
@@ -67,28 +61,19 @@ func (memo *Memo) Sub(key string) chan interface{} {
 
 func (memo *Memo) sub(key string) chan interface{} {
 	memo.logger.Debug("AAAAA - Memo - sub - START", zap.String("key", key))
-	e := memo.channels[key]
-	if e == nil {
+	ch, found := memo.channels[key]
+	if !found {
 		memo.logger.Debug("Subscribing to key", zap.String("key", key))
-		// This is the first request for this key.
-		// This goroutine becomes responsible for computing
-		// the value and broadcasting the ready condition.
-		e = &entry{subReady: make(chan struct{})}
-		memo.channels[key] = e
 
 		memo.logger.Debug("AAAAA - Memo - sub - pubsub.sub - before", zap.String("key", key))
 		// here is the pub sub adding
-		e.channel = memo.ps.Sub(key)
+		ch = memo.ps.Sub(key)
+		memo.channels[key] = ch
 		memo.logger.Debug("AAAAA - Memo - sub - pubsub.sub - after", zap.String("key", key))
-		go memo.eventCallback(key, e.channel, memo.purgeChannel)
-
-		close(e.subReady) // broadcast ready condition
-	} else {
-		// This is a repeat request for this key.
-		<-e.subReady // wait for ready condition
+		go memo.eventCallback(key, ch, memo.purgeChannel)
 	}
-	memo.logger.Debug("AAAAA - Memo - Sub - END", zap.String("key", key))
-	return e.channel
+	memo.logger.Debug("AAAAA - Memo - sub - END", zap.String("key", key))
+	return ch
 }
 
 func (memo *Memo) Pub(key string, value interface{}) {
@@ -97,22 +82,24 @@ func (memo *Memo) Pub(key string, value interface{}) {
 
 func (memo *Memo) unsub(key string) {
 	memo.logger.Debug("AAAAA - Memo - unsub - START", zap.String("key", key))
-	e := memo.channels[key]
-	if e == nil {
-		return
-	} else {
+	ch, found := memo.channels[key]
+	if found {
 		memo.logger.Debug("Unsubscribing to key", zap.String("key", key))
 		delete(memo.channels, key)
 		memo.logger.Debug("AAAAA - Memo - pubsub.unsub - before", zap.String("key", key))
 		// This is not necessary, and may cause problems
-		go memo.ps.Unsub(e.channel)
+		go memo.ps.Unsub(ch)
 		memo.logger.Debug("AAAAA - Memo - pubsub.unsub - after", zap.String("key", key))
+	} else {
+		memo.logger.Warn("Unsubscribing to key - already unsubscribed", zap.String("key", key))
 	}
+	memo.logger.Debug("AAAAA - Memo - unsub - END", zap.String("key", key))
 }
 
 func (memo *Memo) processCommands() {
 	for {
 		cmd := <-memo.operations
+		memo.logger.Debug("AAAAA - Memo - processCommands", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 		switch cmd.op {
 		case "sub":
 			ch := memo.sub(cmd.key)

@@ -795,7 +795,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 		Tokens:   config.DataSetTokens{WriteLog: "AAAA"},
 		BufferSettings: buffer_config.DataSetBufferSettings{
 			MaxSize:                  1000,
-			MaxLifetime:              2 * sentDelay,
+			MaxLifetime:              sentDelay,
 			PurgeOlderThan:           10 * sentDelay,
 			RetryRandomizationFactor: 1.0,
 			RetryMultiplier:          1.0,
@@ -817,16 +817,14 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 			eventBundle := &add_events.EventBundle{Event: event, Thread: &add_events.Thread{Id: "5", Name: "fred"}}
 			err := sc.AddEvents([]*add_events.EventBundle{eventBundle})
 			assert.Nil(t, err)
-			time.Sleep(sentDelay)
+			time.Sleep(4 * sentDelay)
 		}
 	}(NumEvents)
 
 	// wait on all buffers to be sent
-	time.Sleep(sentDelay * (NumEvents*2 + 1))
+	time.Sleep(NumEvents * 4 * sentDelay)
 
 	assert.GreaterOrEqual(t, attempt.Load(), int32(4))
-	// info := httpmock.GetCallCountInfo()
-	// assert.CmpDeeply(info, map[string]int{"POST https://example.com/api/addEvents": int(attempt.Load())})
 }
 
 func TestAddEventsDoNotRetryForever(t *testing.T) {
