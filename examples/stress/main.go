@@ -40,8 +40,8 @@ import (
 )
 
 const (
-	MaxLifeTimeMultiplier    = 5
-	PurgeOlderThanMultiplier = 15
+	MaxLifeTimeMultiplier    = 50
+	PurgeOlderThanMultiplier = 150
 )
 
 func main() {
