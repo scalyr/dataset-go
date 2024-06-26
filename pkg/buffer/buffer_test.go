@@ -21,14 +21,11 @@ import (
 	"math"
 	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
+	"github.com/stretchr/testify/assert"
 )
 
 func loadJson(name string) string {
@@ -201,80 +198,35 @@ func TestPayloadInjection(t *testing.T) {
 }
 
 func TestAddEventWithShouldSendAge(t *testing.T) {
-	t.Skipf("Buffers are designed to now longer thread safe.")
 	buffer := createEmptyBuffer()
 	assert.NotNil(t, buffer)
 
-	finished := atomic.Int32{}
-	// add events into buffer
-	go func() {
-		for i := 10; i < 100; i += 10 {
-			bundle := createTestBundle()
-			added, err := buffer.AddBundle(&bundle)
-			assert.Nil(t, err)
-			assert.Equal(t, added, Added)
-			time.Sleep(time.Duration(i) * time.Millisecond)
-		}
-		finished.Add(1)
-	}()
+	bundle := createTestBundle()
+	added, err := buffer.AddBundle(&bundle)
+	assert.Nil(t, err)
+	assert.Equal(t, added, Added)
+	time.Sleep(10 * time.Millisecond)
 
-	go func() {
-		waited := 0
-		for !buffer.ShouldSendAge(60 * time.Millisecond) {
-			waited += 1
-			time.Sleep(10 * time.Millisecond)
-			require.Equal(t, int32(0), finished.Load())
-			if waited > 10 {
-				break
-			}
-		}
-		assert.GreaterOrEqual(t, waited, 4)
-		finished.Add(1)
-	}()
-
-	for finished.Load() < 2 {
-		time.Sleep(100 * time.Millisecond)
-	}
-	assert.Equal(t, finished.Load(), int32(2))
+	assert.True(t, buffer.ShouldSendAge(time.Millisecond))
 }
 
 func TestAddEventWithShouldSendSize(t *testing.T) {
-	t.Skipf("Buffers are designed to now longer thread safe.")
 	buffer := createEmptyBuffer()
 	assert.NotNil(t, buffer)
 
-	finished := atomic.Int32{}
-	// add events into buffer
-	go func() {
-		for {
-			bundle := createTestBundle()
-			added, err := buffer.AddBundle(&bundle)
-			assert.Nil(t, err)
-			if added != Added {
-				break
-			}
-			assert.Equal(t, added, Added)
-			time.Sleep(25 * time.Microsecond)
+	for {
+		bundle := createTestBundle()
+		added, err := buffer.AddBundle(&bundle)
+		assert.Nil(t, err)
+		if added != Added {
+			break
 		}
-		finished.Add(1)
-	}()
-
-	go func() {
-		waited := 0
-		for !buffer.ShouldSendSize() {
-			waited += 1
-			time.Sleep(31 * time.Microsecond)
-			if buffer.BufferLengths() > 10000 {
-				break
-			}
-		}
-		assert.GreaterOrEqual(t, waited, 5)
-		finished.Add(1)
-	}()
-
-	for finished.Load() < 2 {
-		time.Sleep(100 * time.Millisecond)
+		assert.Equal(t, added, Added)
+		time.Sleep(25 * time.Microsecond)
 	}
-	assert.Equal(t, finished.Load(), int32(2))
+
+	assert.True(t, buffer.ShouldSendSize())
+	assert.True(t, buffer.HasEvents())
+	assert.Greater(t, buffer.CountEvents(), int32(10))
 	assert.Greater(t, buffer.BufferLengths(), int32(ShouldSentBufferSize-1000))
 }
