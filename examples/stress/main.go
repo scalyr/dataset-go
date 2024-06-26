@@ -167,8 +167,14 @@ func main() {
 		eventBundle := &add_events.EventBundle{Event: event, Thread: thread, Log: log}
 
 		batch = append(batch, eventBundle)
-		err := dataSetClient.AddEvents(batch)
-		check(err)
+		go func(batch []*add_events.EventBundle) {
+			err := dataSetClient.AddEvents(batch)
+			check(err)
+		}(batch)
+
+		if i%*bucketsCount == 0 {
+			time.Sleep(PurgeOlderThanMultiplier * *sleep)
+		}
 		time.Sleep(*sleep)
 	}
 

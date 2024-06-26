@@ -291,6 +291,8 @@ loopEvents:
 			} else {
 				buf = process(buf, bundle)
 			}
+			tickerLifetime.Reset(lifeTime)
+			tickerPurge.Reset(purgeTime)
 		case <-tickerLifetime.C:
 			client.Logger.Debug("Processing life-time ticker for key", zap.String("key", key))
 			buf = publish(key, buf)
