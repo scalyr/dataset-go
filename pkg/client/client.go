@@ -185,7 +185,7 @@ func NewClient(
 		eventsProcessingDone:  make(chan struct{}),
 		buffersProcessingDone: make(chan struct{}),
 
-		bufferSendingSema: make(chan struct{}, 20),
+		bufferSendingSema: make(chan struct{}, cfg.BufferSettings.MaxParallelOutgoing),
 		bufferChannel:     make(chan *buffer.Buffer),
 	}
 

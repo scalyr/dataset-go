@@ -809,6 +809,7 @@ func TestAddEventsWithBufferSweeper(t *testing.T) {
 			RetryMaxInterval:         RetryBase,
 			RetryMaxElapsedTime:      10 * RetryBase,
 			RetryShutdownTimeout:     ShutdownTimeout,
+			MaxParallelOutgoing:      20,
 		},
 		ServerHostSettings: server_host_config.NewDefaultDataSetServerHostSettings(),
 	}
@@ -1590,7 +1591,7 @@ func newDataSetConfig(url string, bufferSettings buffer_config.DataSetBufferSett
 
 func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) *buffer_config.DataSetBufferSettings {
 	defaultOpts := []buffer_config.DataSetBufferSettingsOption{
-		buffer_config.WithMaxSize(20),
+		buffer_config.WithMaxSize(100),
 		buffer_config.WithMaxLifetime(0),
 		buffer_config.WithRetryInitialInterval(time.Second),
 		buffer_config.WithRetryMaxInterval(time.Second),
@@ -1598,6 +1599,7 @@ func newBufferSettings(customOpts ...buffer_config.DataSetBufferSettingsOption) 
 		buffer_config.WithRetryMultiplier(1.0),
 		buffer_config.WithRetryRandomizationFactor(1.0),
 		buffer_config.WithRetryShutdownTimeout(10 * time.Second),
+		buffer_config.WithMaxParallelOutgoing(20),
 	}
 	bufferSetting, _ := buffer_config.New(append(defaultOpts, customOpts...)...)
 	return bufferSetting
