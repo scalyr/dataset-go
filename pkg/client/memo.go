@@ -101,14 +101,17 @@ func (memo *Memo) unsub(key string) {
 func (memo *Memo) processCommands() {
 	for {
 		cmd := <-memo.operations
-		memo.logger.Debug("AAAAA - Memo - processCommands", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
+		memo.logger.Debug("AAAAA - Memo - processCommands - START", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 		switch cmd.op {
 		case "sub":
 			ch := memo.sub(cmd.key)
+			memo.logger.Debug("AAAAA - Memo - processCommands - sub - before return channel", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 			memo.returnChannels <- ch
+			memo.logger.Debug("AAAAA - Memo - processCommands - sub - after return channel", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 		case "unsub":
 			memo.unsub(cmd.key)
 		}
+		memo.logger.Debug("AAAAA - Memo - processCommands - END", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 	}
 }
 
