@@ -378,7 +378,7 @@ loop:
 	for {
 		select {
 		case <-client.buffersProcessingDone:
-			client.Logger.Debug("Stopping main loop")
+			client.Logger.Info("Stopping main loop")
 			for buf := range client.bufferChannel {
 				client.callServer(buf)
 			}
@@ -387,7 +387,6 @@ loop:
 			if !ok {
 				break loop
 			}
-			client.Logger.Debug("Processing buffer", buf.ZapStats()...)
 			client.callServer(buf)
 
 		case <-statsTicker.C:
