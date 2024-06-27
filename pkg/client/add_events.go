@@ -282,7 +282,7 @@ loopEvents:
 			buf = publish(key, buf)
 			return
 		case msg, ok := <-bundlesChannel:
-			client.Logger.Debug("Processing message for key", zap.String("key", key))
+			// client.Logger.Debug("Processing message for key", zap.String("key", key))
 			if !ok {
 				break loopEvents
 			}
@@ -295,10 +295,10 @@ loopEvents:
 			tickerLifetime.Reset(lifeTime)
 			tickerPurge.Reset(purgeTime)
 		case <-tickerLifetime.C:
-			client.Logger.Debug("Processing life-time ticker for key", zap.String("key", key))
+			// client.Logger.Debug("Processing life-time ticker for key", zap.String("key", key))
 			buf = publish(key, buf)
 		case <-tickerPurge.C:
-			client.Logger.Debug("Processing purge ticker for key", zap.String("key", key))
+			// client.Logger.Debug("Processing purge ticker for key", zap.String("key", key))
 			// if buffer is null => we haven't received event
 			// lets wait until we receive something
 			if buf == nil {
