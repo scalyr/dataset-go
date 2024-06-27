@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -56,6 +57,7 @@ func TestBasicFlow(t *testing.T) {
 	manager.Unsub("bbb")
 
 	// THEN
+	time.Sleep(time.Second)
 	seenMutex.Lock()
 	assert.Equal(t, map[string]int64{"aaa-val-1": 1, "aaa-val-2": 1, "bbb-val-1": 1, "bbb-val-2": 1}, seenKeys)
 	seenMutex.Unlock()
