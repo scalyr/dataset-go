@@ -333,8 +333,9 @@ func (client *DataSetClient) isProcessingAddEvents() bool {
 
 // Shutdown takes care of shutdown of client. It does following steps
 // - stops processing of new events,
-// - tries (with 1st half of shutdownMaxTimeout period) to process (add into buffers) all the events,
-// - tries (with 2nd half of shutdownMaxTimeout period) to send processed events (buffers) into DataSet
+// - tries (till 50% of shutdownMaxTimeout) to finish processing of all the incoming events
+// - tries (till 80% of shutdownMaxTimeout) to process (add into buffers) all the events,
+// - tries (till 100% of shutdownMaxTimeout) to send processed events (buffers) into DataSet
 func (client *DataSetClient) Shutdown() error {
 	client.Logger.Info("Shutting down - BEGIN")
 	// start measuring processing time
@@ -346,29 +347,40 @@ func (client *DataSetClient) Shutdown() error {
 	// log statistics when finish was called
 	client.logStatistics()
 
+	createBackOff := func(maxElapsedTime time.Duration) backoff.BackOff {
+		return &backoff.ExponentialBackOff{
+			InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
+			RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
+			Multiplier:          client.Config.BufferSettings.RetryMultiplier,
+			MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
+			MaxElapsedTime:      maxElapsedTime,
+			Stop:                backoff.Stop,
+			Clock:               backoff.SystemClock,
+		}
+	}
+
+	useUpTo := func(ratio float64, start time.Time, end time.Time) time.Duration {
+		elapsedFromStart := time.Since(start)
+		expectedFromStart := time.Duration(float64(end.Sub(start)) * ratio)
+		return expectedFromStart - elapsedFromStart
+	}
+
 	retryShutdownTimeout := client.Config.BufferSettings.RetryShutdownTimeout
-	maxElapsedTime := retryShutdownTimeout/2 - 100*time.Millisecond
+	expFinishTime := processingStart.Add(retryShutdownTimeout)
+
+	maxTimeForAddEvents := useUpTo(0.5, processingStart, expFinishTime)
 	client.Logger.Info(
 		"Shutting down - waiting for incoming add_events",
-		zap.Duration("maxElapsedTime", maxElapsedTime),
+		zap.Time("expFinishTime", expFinishTime),
+		zap.Duration("maxElapsedTime", maxTimeForAddEvents),
 		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
 		zap.Duration("elapsedTime", time.Since(processingStart)),
 	)
 
 	var lastError error = nil
-	expBackoff := backoff.ExponentialBackOff{
-		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
-		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
-		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
-		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
-		MaxElapsedTime:      maxElapsedTime,
-		Stop:                backoff.Stop,
-		Clock:               backoff.SystemClock,
-	}
-
-	// try (with timeout) to process (add into buffers) events,
-	retryNum := 0
+	expBackoff := createBackOff(maxTimeForAddEvents)
 	expBackoff.Reset()
+	retryNum := 0
 	for client.isProcessingAddEvents() {
 		// log statistics
 		client.logStatistics()
@@ -380,25 +392,29 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Duration("backoffDelay", backoffDelay),
 			zap.Uint64("addEventsEntered", client.statistics.AddEventsEntered()),
 			zap.Uint64("addEventsExited", client.statistics.AddEventsExited()),
+			zap.Time("expFinishTime", expFinishTime),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
-			zap.Duration("maxElapsedTime", maxElapsedTime),
+			zap.Duration("maxElapsedTime", maxTimeForAddEvents),
 		)
-		if backoffDelay == expBackoff.Stop {
+		if backoffDelay == backoff.Stop {
 			break
 		}
 		time.Sleep(backoffDelay)
 		retryNum++
 	}
 
+	maxTimeForProcessingEvents := useUpTo(0.8, processingStart, expFinishTime)
 	client.Logger.Info(
 		"Shutting down - waiting processing events",
-		zap.Duration("maxElapsedTime", maxElapsedTime),
+		zap.Time("expFinishTime", expFinishTime),
+		zap.Duration("maxElapsedTime", maxTimeForProcessingEvents),
 		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
 		zap.Duration("elapsedTime", time.Since(processingStart)),
 	)
 
-	// try (with timeout) to process (add into buffers) events,
+	expBackoff = createBackOff(maxTimeForProcessingEvents)
 	expBackoff.Reset()
+	retryNum = 0
 	close(client.eventsProcessingDone)
 	initialEventsDropped := client.statistics.EventsDropped()
 	for client.isProcessingEvents() {
@@ -413,45 +429,28 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("eventsEnqueued", client.statistics.EventsEnqueued()),
 			zap.Uint64("eventsProcessed", client.statistics.EventsProcessed()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
-			zap.Duration("maxElapsedTime", maxElapsedTime),
+			zap.Duration("maxElapsedTime", maxTimeForProcessingEvents),
+			zap.Time("expFinishTime", expFinishTime),
 		)
-		if backoffDelay == expBackoff.Stop {
+		if backoffDelay == backoff.Stop {
 			break
 		}
 		time.Sleep(backoffDelay)
 		retryNum++
 	}
 
-	// send all buffers
-	client.Logger.Info(
-		"Shutting down - publishing all buffers",
-		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
-		zap.Duration("elapsedTime", time.Since(processingStart)),
-	)
-	close(client.buffersProcessingDone)
-
-	// reinitialize expBackoff with MaxElapsedTime based on actually elapsed time of processing (previous phase)
-	processingElapsed := time.Since(processingStart)
-	maxElapsedTime = maxDuration(retryShutdownTimeout-processingElapsed, retryShutdownTimeout/2)
+	maxTimeForProcessingBuffers := useUpTo(1.0, processingStart, expFinishTime)
 	client.Logger.Info(
 		"Shutting down - waiting for buffers",
-		zap.Duration("maxElapsedTime", maxElapsedTime),
+		zap.Time("expFinishTime", expFinishTime),
+		zap.Duration("maxElapsedTime", maxTimeForProcessingBuffers),
 		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
 		zap.Duration("elapsedTime", time.Since(processingStart)),
 	)
-
-	expBackoff = backoff.ExponentialBackOff{
-		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
-		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
-		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
-		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
-		MaxElapsedTime:      maxElapsedTime,
-		Stop:                backoff.Stop,
-		Clock:               backoff.SystemClock,
-	}
-	// do wait (with timeout) for all buffers to be sent to the server
-	retryNum = 0
+	expBackoff = createBackOff(maxTimeForProcessingBuffers)
 	expBackoff.Reset()
+	retryNum = 0
+	close(client.buffersProcessingDone)
 	initialBuffersDropped := client.statistics.BuffersDropped()
 	for client.isProcessingBuffers() {
 		// log statistics
@@ -466,9 +465,10 @@ func (client *DataSetClient) Shutdown() error {
 			zap.Uint64("buffersProcessed", client.statistics.BuffersProcessed()),
 			zap.Uint64("buffersDropped", client.statistics.BuffersDropped()),
 			zap.Duration("elapsedTime", time.Since(processingStart)),
-			zap.Duration("maxElapsedTime", maxElapsedTime),
+			zap.Time("expFinishTime", expFinishTime),
+			zap.Duration("maxElapsedTime", maxTimeForProcessingBuffers),
 		)
-		if backoffDelay == expBackoff.Stop {
+		if backoffDelay == backoff.Stop {
 			break
 		}
 		time.Sleep(backoffDelay)
@@ -657,11 +657,4 @@ func truncateText(text string, length int) string {
 	}
 
 	return text
-}
-
-func maxDuration(a, b time.Duration) time.Duration {
-	if a >= b {
-		return a
-	}
-	return b
 }
