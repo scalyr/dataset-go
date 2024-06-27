@@ -1,5 +1,10 @@
 # Release Notes
 
+## 0.20.0
+
+* fix: fix SIGSEV that was caused by releasing resources associated with inactive sessions
+* feat: make number of parallel outgoing requests configurable
+
 ## 0.19.0
 
 * fix: retry also when server is not returning JSON

@@ -112,7 +112,7 @@ func (manager *SessionManager) unsub(key string) {
 func (manager *SessionManager) processCommands() {
 	for {
 		cmd := <-manager.operations
-		manager.logger.Debug("SessionManager - processCommands - START", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
+		// manager.logger.Debug("SessionManager - processCommands - START", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 		switch cmd.op {
 		case "sub":
 			manager.sub(cmd.key)
@@ -121,6 +121,6 @@ func (manager *SessionManager) processCommands() {
 		case "pub":
 			manager.pub(cmd.key, cmd.value)
 		}
-		manager.logger.Debug("SessionManager - processCommands - END", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
+		// manager.logger.Debug("SessionManager - processCommands - END", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 	}
 }
