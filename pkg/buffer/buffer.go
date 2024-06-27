@@ -19,7 +19,6 @@ package buffer
 import (
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
@@ -57,9 +56,8 @@ type Buffer struct {
 	Session string
 	Token   string
 
-	createdAt   time.Time
-	updatedAt   time.Time
-	PublishAsap atomic.Bool
+	createdAt time.Time
+	updatedAt time.Time
 
 	sessionInfo *add_events.SessionInfo
 	threads     map[string]*add_events.Thread
@@ -80,12 +78,11 @@ func NewEmptyBuffer(session string, token string) *Buffer {
 	id, _ := uuid.NewRandom()
 
 	return &Buffer{
-		Id:          id,
-		Session:     session,
-		Token:       token,
-		PublishAsap: atomic.Bool{},
-		createdAt:   time.Now(),
-		updatedAt:   time.Now(),
+		Id:        id,
+		Session:   session,
+		Token:     token,
+		createdAt: time.Now(),
+		updatedAt: time.Now(),
 	}
 }
 
