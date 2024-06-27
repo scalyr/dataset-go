@@ -264,8 +264,7 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, bundlesChann
 	tickerPurge := time.NewTicker(purgeTime)
 
 	var buf *buffer.Buffer = nil
-loopEvents:
-	for processedMsgCnt := 0; ; processedMsgCnt++ {
+	for {
 		select {
 		case <-client.eventsProcessingDone:
 			client.Logger.Debug("Shutting down listener for key", zap.String("key", key))
@@ -284,7 +283,7 @@ loopEvents:
 		case msg, ok := <-bundlesChannel:
 			// client.Logger.Debug("Processing message for key", zap.String("key", key))
 			if !ok {
-				break loopEvents
+				return
 			}
 			bundle, ok := msg.(EventWithMeta)
 			if !ok {
@@ -307,7 +306,7 @@ loopEvents:
 			if buf.ShouldPurgeAge(purgeTime) {
 				client.Logger.Info("Purging key", zap.String("key", key))
 				client.sessionManager.Unsub(key)
-				break loopEvents
+				return
 			}
 		}
 	}
@@ -347,18 +346,6 @@ func (client *DataSetClient) Shutdown() error {
 	// log statistics when finish was called
 	client.logStatistics()
 
-	createBackOff := func(maxElapsedTime time.Duration) backoff.BackOff {
-		return &backoff.ExponentialBackOff{
-			InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
-			RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
-			Multiplier:          client.Config.BufferSettings.RetryMultiplier,
-			MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
-			MaxElapsedTime:      maxElapsedTime,
-			Stop:                backoff.Stop,
-			Clock:               backoff.SystemClock,
-		}
-	}
-
 	useUpTo := func(ratio float64, start time.Time, end time.Time) time.Duration {
 		elapsedFromStart := time.Since(start)
 		expectedFromStart := time.Duration(float64(end.Sub(start)) * ratio)
@@ -378,7 +365,7 @@ func (client *DataSetClient) Shutdown() error {
 	)
 
 	var lastError error = nil
-	expBackoff := createBackOff(maxTimeForAddEvents)
+	expBackoff := client.createBackOff(maxTimeForAddEvents)
 	expBackoff.Reset()
 	retryNum := 0
 	for client.isProcessingAddEvents() {
@@ -412,7 +399,7 @@ func (client *DataSetClient) Shutdown() error {
 		zap.Duration("elapsedTime", time.Since(processingStart)),
 	)
 
-	expBackoff = createBackOff(maxTimeForProcessingEvents)
+	expBackoff = client.createBackOff(maxTimeForProcessingEvents)
 	expBackoff.Reset()
 	retryNum = 0
 	close(client.eventsProcessingDone)
@@ -447,7 +434,7 @@ func (client *DataSetClient) Shutdown() error {
 		zap.Duration("retryShutdownTimeout", retryShutdownTimeout),
 		zap.Duration("elapsedTime", time.Since(processingStart)),
 	)
-	expBackoff = createBackOff(maxTimeForProcessingBuffers)
+	expBackoff = client.createBackOff(maxTimeForProcessingBuffers)
 	expBackoff.Reset()
 	retryNum = 0
 	close(client.buffersProcessingDone)

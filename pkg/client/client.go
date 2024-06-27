@@ -277,17 +277,7 @@ func (client *DataSetClient) callServer(buf *buffer.Buffer) {
 
 // Sends buffer to DataSet. If not succeeds and try is possible (it retryable), try retry until possible (timeout)
 func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool {
-	// Do not use NewExponentialBackOff since it calls Reset and the code here must
-	// call Reset after changing the InitialInterval (this saves an unnecessary call to Now).
-	expBackoff := backoff.ExponentialBackOff{
-		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
-		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
-		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
-		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
-		MaxElapsedTime:      client.Config.BufferSettings.RetryMaxElapsedTime,
-		Stop:                backoff.Stop,
-		Clock:               backoff.SystemClock,
-	}
+	expBackoff := client.createBackOff(client.Config.BufferSettings.RetryMaxElapsedTime)
 	expBackoff.Reset()
 	retryNum := int64(0)
 	for {
@@ -374,7 +364,6 @@ func (client *DataSetClient) statisticsSweeper() {
 
 func (client *DataSetClient) mainLoop() {
 	statsTicker := time.NewTicker(30 * time.Second)
-loop:
 	for {
 		select {
 		case <-client.buffersProcessingDone:
@@ -385,13 +374,25 @@ loop:
 			return
 		case buf, ok := <-client.bufferChannel:
 			if !ok {
-				break loop
+				return
 			}
 			client.callServer(buf)
 
 		case <-statsTicker.C:
 			client.logStatistics()
 		}
+	}
+}
+
+func (client *DataSetClient) createBackOff(maxElapsedTime time.Duration) backoff.BackOff {
+	return &backoff.ExponentialBackOff{
+		InitialInterval:     client.Config.BufferSettings.RetryInitialInterval,
+		RandomizationFactor: client.Config.BufferSettings.RetryRandomizationFactor,
+		Multiplier:          client.Config.BufferSettings.RetryMultiplier,
+		MaxInterval:         client.Config.BufferSettings.RetryMaxInterval,
+		MaxElapsedTime:      maxElapsedTime,
+		Stop:                backoff.Stop,
+		Clock:               backoff.SystemClock,
 	}
 }
 
@@ -478,81 +479,6 @@ func (client *DataSetClient) logStatistics() {
 		zap.Uint64("sessionsActive", s.SessionsActive()),
 	)
 }
-
-// TODO: This should be somewhere else completely
-/*
-func (client *DataSetClient) bufferSweeper(
-	lifetime time.Duration,
-	purgeOlderThan time.Duration,
-) {
-	client.Logger.Info(
-		"Starting buffer sweeper",
-		zap.Duration("bufferLifetime", lifetime),
-		zap.Duration("purgeOlderThan", purgeOlderThan),
-	)
-	totalKept := atomic.Uint64{}
-	totalSwept := atomic.Uint64{}
-
-	sleepTime := lifetime
-	if sleepTime == 0 {
-		sleepTime = purgeOlderThan
-	}
-
-	for i := uint64(0); ; i++ {
-		// if everything was finished, there is no need to run buffer sweeper
-		//if client.finished.Load() {
-		//	client.Logger.Info("Stopping buffer sweeper", zap.Uint64("sweepId", i))
-		//	break
-		//}
-		kept := atomic.Uint64{}
-		swept := atomic.Uint64{}
-		client.Logger.Debug(
-			"Buffer sweeping started", zap.Uint64("sweepId", i))
-		buffers := client.getBuffers()
-		for _, buf := range buffers {
-			// publish buffers that are ready only
-			// if we are actively adding events into this buffer skip it for now
-			if lifetime > 0 && buf.ShouldSendAge(lifetime) {
-				if buf.HasStatus(buffer.Ready) {
-					client.publishBuffer(buf)
-					swept.Add(1)
-					totalSwept.Add(1)
-				} else {
-					buf.PublishAsap.Store(true)
-					kept.Add(1)
-					totalKept.Add(1)
-				}
-			} else {
-				kept.Add(1)
-				totalKept.Add(1)
-
-				if buf.ShouldPurgeAge(purgeOlderThan) {
-					// client.purgeBuffer(buf)
-				}
-			}
-		}
-
-		// log just every n-th sweep
-		lvl := zap.DebugLevel
-		if i%100 == 0 {
-			lvl = zap.InfoLevel
-		}
-		client.Logger.Log(
-			lvl,
-			"Buffer sweeping finished",
-			zap.Uint64("sweepId", i),
-			zap.Uint64("nowKept", kept.Load()),
-			zap.Uint64("nowSwept", swept.Load()),
-			zap.Uint64("nowCombined", kept.Load()+swept.Load()),
-			zap.Uint64("totalKept", totalKept.Load()),
-			zap.Uint64("totalSwept", totalSwept.Load()),
-			zap.Uint64("totalCombined", totalKept.Load()+totalSwept.Load()),
-		)
-
-		time.Sleep(sleepTime)
-	}
-}
-*/
 
 func (client *DataSetClient) publishBuffer(buf *buffer.Buffer) {
 	client.Logger.Debug("publishing buffer", buf.ZapStats()...)

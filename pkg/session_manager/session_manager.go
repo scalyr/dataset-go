@@ -17,8 +17,6 @@
 package session_manager
 
 import (
-	"sync"
-
 	"go.uber.org/zap"
 )
 
@@ -38,7 +36,6 @@ type command struct {
 // It allows to subscribe, publish and unsubscribe to/from channels
 type SessionManager struct {
 	eventCallback EventCallback
-	mu            sync.Mutex
 	channels      map[string]chan interface{}
 	logger        *zap.Logger
 	operations    chan command
@@ -51,7 +48,6 @@ func New(
 ) *SessionManager {
 	manager := &SessionManager{
 		eventCallback: eventsCallback,
-		mu:            sync.Mutex{},
 		channels:      make(map[string]chan interface{}),
 		logger:        logger,
 		operations:    make(chan command),
