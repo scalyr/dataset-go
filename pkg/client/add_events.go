@@ -167,8 +167,10 @@ func (client *DataSetClient) AddEvents(bundles []*add_events.EventBundle) error 
 	}
 
 	for key, list := range bundlesWithMeta {
+		// start listening for events
+		// if the purge time for buffer is just few ms, this is the cause of problems
+		// in real life the purge time should be in minutes.
 		client.sessionManager.Sub(key)
-
 		for _, bundle := range list {
 			client.sessionManager.Pub(key, bundle)
 			client.statistics.EventsEnqueuedAdd(1)

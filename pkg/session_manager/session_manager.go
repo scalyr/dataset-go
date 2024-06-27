@@ -1,3 +1,19 @@
+/*
+ * Copyright 2023 SentinelOne, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package session_manager
 
 import (
@@ -11,20 +27,24 @@ type (
 	EventCallback func(key string, bundlesChannel <-chan interface{})
 )
 
+// command represents command used to communicate within the session manager
 type command struct {
 	op    string
 	key   string
 	value interface{}
 }
 
+// SessionManager is a manager for session channels
+// It allows to subscribe, publish and unsubscribe to/from channels
 type SessionManager struct {
 	eventCallback EventCallback
-	mu            sync.Mutex // guards cache
+	mu            sync.Mutex
 	channels      map[string]chan interface{}
 	logger        *zap.Logger
 	operations    chan command
 }
 
+// New creates a new SessionManager
 func New(
 	logger *zap.Logger,
 	eventsCallback EventCallback,
@@ -42,6 +62,9 @@ func New(
 	return manager
 }
 
+// Sub subscribes to a channel key
+// It's fine to call this function multiple times with the same key - only one
+// channel will be created
 func (manager *SessionManager) Sub(key string) {
 	manager.operations <- command{op: "sub", key: key}
 }
@@ -49,12 +72,14 @@ func (manager *SessionManager) Sub(key string) {
 func (manager *SessionManager) sub(key string) {
 	_, found := manager.channels[key]
 	if !found {
+		manager.logger.Debug("Subscribing to key", zap.String("key", key))
 		ch := make(chan interface{})
 		manager.channels[key] = ch
 		go manager.eventCallback(key, ch)
 	}
 }
 
+// Pub publishes a value to a channel key
 func (manager *SessionManager) Pub(key string, value interface{}) {
 	manager.operations <- command{op: "pub", key: key, value: value}
 }
@@ -68,6 +93,9 @@ func (manager *SessionManager) pub(key string, value interface{}) {
 	}
 }
 
+// Unsub unsubscribes from a channel key
+// It's fine to call this function multiple times with the same key - only if the key
+// still exists, it will be closed.
 func (manager *SessionManager) Unsub(key string) {
 	manager.operations <- command{op: "unsub", key: key}
 }
@@ -78,8 +106,6 @@ func (manager *SessionManager) unsub(key string) {
 		manager.logger.Debug("Unsubscribing to key", zap.String("key", key))
 		delete(manager.channels, key)
 		close(ch)
-	} else {
-		manager.logger.Warn("Unsubscribing to key - already unsubscribed", zap.String("key", key))
 	}
 }
 
