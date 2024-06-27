@@ -8,7 +8,7 @@ import (
 
 type (
 	Func          func(string) (interface{}, error)
-	EventCallback func(key string, bundlesChannel <-chan interface{}, purgeChannel chan<- string)
+	EventCallback func(key string, bundlesChannel <-chan interface{})
 )
 
 type command struct {
@@ -22,7 +22,6 @@ type SessionManager struct {
 	mu            sync.Mutex // guards cache
 	channels      map[string]chan interface{}
 	logger        *zap.Logger
-	purgeChannel  chan string
 	operations    chan command
 }
 
@@ -35,12 +34,10 @@ func New(
 		mu:            sync.Mutex{},
 		channels:      make(map[string]chan interface{}),
 		logger:        logger,
-		purgeChannel:  make(chan string),
 		operations:    make(chan command),
 	}
 
 	go manager.processCommands()
-	go manager.purge()
 
 	return manager
 }
@@ -54,7 +51,7 @@ func (manager *SessionManager) sub(key string) {
 	if !found {
 		ch := make(chan interface{})
 		manager.channels[key] = ch
-		go manager.eventCallback(key, ch, manager.purgeChannel)
+		go manager.eventCallback(key, ch)
 	}
 }
 
@@ -69,6 +66,10 @@ func (manager *SessionManager) pub(key string, value interface{}) {
 	} else {
 		manager.logger.Warn("Channel for publishing does not exist", zap.String("key", key))
 	}
+}
+
+func (manager *SessionManager) Unsub(key string) {
+	manager.operations <- command{op: "unsub", key: key}
 }
 
 func (manager *SessionManager) unsub(key string) {
@@ -95,17 +96,5 @@ func (manager *SessionManager) processCommands() {
 			manager.pub(cmd.key, cmd.value)
 		}
 		manager.logger.Debug("SessionManager - processCommands - END", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
-	}
-}
-
-func (manager *SessionManager) purge() {
-	for {
-		key, ok := <-manager.purgeChannel
-		if !ok {
-			manager.logger.Info("Purge channel closed")
-			return
-		}
-		manager.logger.Info("Purging key", zap.String("key", key))
-		manager.operations <- command{op: "unsub", key: key}
 	}
 }
