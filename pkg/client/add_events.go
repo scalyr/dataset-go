@@ -188,16 +188,14 @@ func (client *DataSetClient) newBufferForEvents(session string, info *add_events
 	return buf
 }
 
-func (client *DataSetClient) listenAndSendBundlesForKey(key string, bundlesChannel <-chan interface{}) {
-	func() {
-		client.Logger.Debug("Listening to events with key - BEGIN",
-			zap.String("key", key),
-		)
-		client.statistics.SessionsOpenedAdd(1)
-	}()
+func (client *DataSetClient) processEvents(key string, eventsChannel <-chan interface{}) {
+	client.Logger.Info("Listening to events with key - BEGIN",
+		zap.String("key", key),
+	)
+	client.statistics.SessionsOpenedAdd(1)
 
 	defer func() {
-		client.Logger.Debug("Listening to events with key - END",
+		client.Logger.Info("Listening to events with key - END",
 			zap.String("key", key),
 		)
 		client.statistics.SessionsClosedAdd(1)
@@ -246,8 +244,6 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, bundlesChann
 				return buf
 			}
 		}
-		// TODO: Remove from adding to buffer and move to publish
-		// client.statistics.EventsProcessedAdd(1)
 		return buf
 	}
 
@@ -269,27 +265,27 @@ func (client *DataSetClient) listenAndSendBundlesForKey(key string, bundlesChann
 		case <-client.eventsProcessingDone:
 			client.Logger.Debug("Shutting down listener for key", zap.String("key", key))
 			buf = publish(key, buf)
-			for msg := range bundlesChannel {
-				bundle, ok := msg.(EventWithMeta)
+			for msg := range eventsChannel {
+				event, ok := msg.(EventWithMeta)
 				if !ok {
 					client.statistics.EventsBrokenAdd(1)
 				} else {
-					buf = process(buf, bundle)
+					buf = process(buf, event)
 					buf = publish(key, buf)
 				}
 			}
 			buf = publish(key, buf)
 			return
-		case msg, ok := <-bundlesChannel:
+		case msg, ok := <-eventsChannel:
 			// client.Logger.Debug("Processing message for key", zap.String("key", key))
 			if !ok {
 				return
 			}
-			bundle, ok := msg.(EventWithMeta)
+			event, ok := msg.(EventWithMeta)
 			if !ok {
 				client.statistics.EventsBrokenAdd(1)
 			} else {
-				buf = process(buf, bundle)
+				buf = process(buf, event)
 			}
 			tickerLifetime.Reset(lifeTime)
 			tickerPurge.Reset(purgeTime)

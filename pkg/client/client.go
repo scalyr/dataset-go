@@ -191,7 +191,7 @@ func NewClient(
 
 	dataClient.sessionManager = session_manager.New(
 		logger,
-		dataClient.listenAndSendBundlesForKey,
+		dataClient.processEvents,
 	)
 
 	// run statistics sweeper

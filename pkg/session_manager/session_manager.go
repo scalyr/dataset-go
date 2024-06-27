@@ -22,7 +22,7 @@ import (
 
 type (
 	Func          func(string) (interface{}, error)
-	EventCallback func(key string, bundlesChannel <-chan interface{})
+	EventCallback func(key string, eventsChannel <-chan interface{})
 )
 
 // command represents command used to communicate within the session manager
