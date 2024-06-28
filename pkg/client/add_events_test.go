@@ -417,9 +417,6 @@ func TestAddEventsRetryAfterSec(t *testing.T) {
 	time.Sleep(RetryBase)
 	// we are not calling shutdown, because we want to process more events in the future
 
-	// TODO: Fix me!!!
-	// sc.publishAllBuffers()
-
 	// wait for processing
 	for i := 0; i < 10; i++ {
 		if wasSuccessful.Load() {

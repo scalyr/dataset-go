@@ -121,7 +121,6 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 				attrs := make(map[string]interface{})
 				attrs["batch"] = batchKey
 				attrs["body.str"] = key
-				// attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(buffer_config.LimitBufferSize/(0.1*LogsPerBatch)))
 				attrs["attributes.p1"] = strings.Repeat("A", rand.Intn(200))
 
 				event := &add_events.Event{

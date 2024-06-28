@@ -25,9 +25,17 @@ type (
 	EventCallback func(key string, eventsChannel <-chan interface{})
 )
 
+type Operation string
+
+const (
+	Sub   Operation = "sub"
+	Pub   Operation = "pub"
+	Unsub Operation = "unsub"
+)
+
 // command represents command used to communicate within the session manager
 type command struct {
-	op    string
+	op    Operation
 	key   string
 	value interface{}
 }
@@ -62,7 +70,7 @@ func New(
 // It's fine to call this function multiple times with the same key - only one
 // channel will be created
 func (manager *SessionManager) Sub(key string) {
-	manager.operations <- command{op: "sub", key: key}
+	manager.operations <- command{op: Sub, key: key}
 }
 
 func (manager *SessionManager) sub(key string) {
@@ -77,7 +85,7 @@ func (manager *SessionManager) sub(key string) {
 
 // Pub publishes a value to a channel key
 func (manager *SessionManager) Pub(key string, value interface{}) {
-	manager.operations <- command{op: "pub", key: key, value: value}
+	manager.operations <- command{op: Pub, key: key, value: value}
 }
 
 func (manager *SessionManager) pub(key string, value interface{}) {
@@ -93,7 +101,7 @@ func (manager *SessionManager) pub(key string, value interface{}) {
 // It's fine to call this function multiple times with the same key - only if the key
 // still exists, it will be closed.
 func (manager *SessionManager) Unsub(key string) {
-	manager.operations <- command{op: "unsub", key: key}
+	manager.operations <- command{op: Unsub, key: key}
 }
 
 func (manager *SessionManager) unsub(key string) {
@@ -110,11 +118,11 @@ func (manager *SessionManager) processCommands() {
 		cmd := <-manager.operations
 		// manager.logger.Debug("SessionManager - processCommands - START", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 		switch cmd.op {
-		case "sub":
+		case Sub:
 			manager.sub(cmd.key)
-		case "unsub":
+		case Unsub:
 			manager.unsub(cmd.key)
-		case "pub":
+		case Pub:
 			manager.pub(cmd.key, cmd.value)
 		}
 		// manager.logger.Debug("SessionManager - processCommands - END", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
