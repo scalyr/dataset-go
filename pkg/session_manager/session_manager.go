@@ -73,28 +73,9 @@ func (manager *SessionManager) Sub(key string) {
 	manager.operations <- command{op: Sub, key: key}
 }
 
-func (manager *SessionManager) sub(key string) {
-	_, found := manager.channels[key]
-	if !found {
-		manager.logger.Debug("Subscribing to key", zap.String("key", key))
-		ch := make(chan interface{})
-		manager.channels[key] = ch
-		go manager.eventCallback(key, ch)
-	}
-}
-
 // Pub publishes a value to a channel key
 func (manager *SessionManager) Pub(key string, value interface{}) {
 	manager.operations <- command{op: Pub, key: key, value: value}
-}
-
-func (manager *SessionManager) pub(key string, value interface{}) {
-	ch, found := manager.channels[key]
-	if found {
-		ch <- value
-	} else {
-		manager.logger.Warn("Channel for publishing does not exist", zap.String("key", key))
-	}
 }
 
 // Unsub unsubscribes from a channel key
@@ -104,7 +85,26 @@ func (manager *SessionManager) Unsub(key string) {
 	manager.operations <- command{op: Unsub, key: key}
 }
 
-func (manager *SessionManager) unsub(key string) {
+func (manager *SessionManager) processSubCommand(key string) {
+	_, found := manager.channels[key]
+	if !found {
+		manager.logger.Debug("Subscribing to key", zap.String("key", key))
+		ch := make(chan interface{})
+		manager.channels[key] = ch
+		go manager.eventCallback(key, ch)
+	}
+}
+
+func (manager *SessionManager) processPubCommand(key string, value interface{}) {
+	ch, found := manager.channels[key]
+	if found {
+		ch <- value
+	} else {
+		manager.logger.Warn("Channel for publishing does not exist", zap.String("key", key))
+	}
+}
+
+func (manager *SessionManager) processUnsubCommand(key string) {
 	ch, found := manager.channels[key]
 	if found {
 		manager.logger.Debug("Unsubscribing to key", zap.String("key", key))
@@ -119,11 +119,11 @@ func (manager *SessionManager) processCommands() {
 		// manager.logger.Debug("SessionManager - processCommands - START", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 		switch cmd.op {
 		case Sub:
-			manager.sub(cmd.key)
+			manager.processSubCommand(cmd.key)
 		case Unsub:
-			manager.unsub(cmd.key)
+			manager.processUnsubCommand(cmd.key)
 		case Pub:
-			manager.pub(cmd.key, cmd.value)
+			manager.processPubCommand(cmd.key, cmd.value)
 		}
 		// manager.logger.Debug("SessionManager - processCommands - END", zap.String("cmd", cmd.op), zap.String("key", cmd.key))
 	}
