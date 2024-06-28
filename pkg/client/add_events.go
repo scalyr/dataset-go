@@ -247,17 +247,24 @@ func (client *DataSetClient) processEvents(key string, eventsChannel <-chan inte
 		return buf
 	}
 
+	// create ticker to submit
 	lifeTime := time.Hour
 	if client.Config.BufferSettings.MaxLifetime > 0 {
 		lifeTime = client.Config.BufferSettings.MaxLifetime
 	}
 	tickerLifetime := time.NewTicker(lifeTime)
+	defer func() {
+		tickerLifetime.Stop()
+	}()
 
 	purgeTime := time.Hour
 	if client.Config.BufferSettings.PurgeOlderThan > 0 {
 		purgeTime = client.Config.BufferSettings.PurgeOlderThan
 	}
 	tickerPurge := time.NewTicker(purgeTime)
+	defer func() {
+		tickerPurge.Stop()
+	}()
 
 	var buf *buffer.Buffer = nil
 	for {
