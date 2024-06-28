@@ -40,13 +40,14 @@ import (
 )
 
 const (
-	MaxLifeTimeMultiplier    = 5
-	PurgeOlderThanMultiplier = 15
+	MaxLifeTimeMultiplier    = 50
+	PurgeOlderThanMultiplier = 150
 )
 
 func main() {
 	eventsCount := flag.Int("events", 1e5, "number of events")
 	bucketsCount := flag.Int("buckets", 1e5, "number of buckets")
+	parallel := flag.Int("parallel", 20, "number of parallel outgoing connections")
 	sleep := flag.Duration("sleep", 10*time.Millisecond, "sleep between sending two events")
 	logFile := flag.String("log", fmt.Sprintf("log-%s-%d.log", version.Version, time.Now().UnixMilli()), "log file for stats")
 	logEvery := flag.Duration("log-every", time.Second, "how often log statistics")
@@ -60,6 +61,7 @@ func main() {
 	logger.Info("Running stress test - input:",
 		zap.Int("events", *eventsCount),
 		zap.Int("buckets", *bucketsCount),
+		zap.Int("parallel", *parallel),
 		zap.Duration("sleep", *sleep),
 		zap.String("log", *logFile),
 		zap.Duration("log-every", *logEvery),
@@ -74,6 +76,7 @@ func main() {
 	logger.Info("Running stress test - adjusted:",
 		zap.Int("events", *eventsCount),
 		zap.Int("buckets", *bucketsCount),
+		zap.Int("parallel", *parallel),
 		zap.Duration("sleep", *sleep),
 		zap.String("log", *logFile),
 		zap.Duration("log-every", *logEvery),
@@ -109,6 +112,7 @@ func main() {
 		buffer_config.WithGroupBy([]string{"body.str"}),
 		buffer_config.WithMaxLifetime(MaxLifeTimeMultiplier**sleep),
 		buffer_config.WithPurgeOlderThan(PurgeOlderThanMultiplier**sleep),
+		buffer_config.WithMaxParallelOutgoing(*parallel),
 	)
 	check(err)
 	cfgUpdated, err := cfg.WithOptions(
@@ -167,8 +171,14 @@ func main() {
 		eventBundle := &add_events.EventBundle{Event: event, Thread: thread, Log: log}
 
 		batch = append(batch, eventBundle)
-		err := dataSetClient.AddEvents(batch)
-		check(err)
+		go func(batch []*add_events.EventBundle) {
+			err := dataSetClient.AddEvents(batch)
+			check(err)
+		}(batch)
+
+		if i%*bucketsCount == 0 {
+			time.Sleep(PurgeOlderThanMultiplier * *sleep)
+		}
 		time.Sleep(*sleep)
 	}
 

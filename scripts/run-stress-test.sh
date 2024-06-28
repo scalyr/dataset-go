@@ -6,7 +6,7 @@ cd "${d}/../examples/stress" || exit 1
 
 # build stress test
 rm -rfv stress
-go build -o stress
+go build -race -o stress
 ls -l stress
 
 EVENTS="${1:=10000}"

@@ -24,7 +24,7 @@ endif
 
 GO_BUILD_TAGS=""
 GOTEST_OPT?= -v -race -timeout 300s -parallel 4 -count=1 --tags=$(GO_BUILD_TAGS)
-GOTEST_LONG_RUNNING_OPT?= -v -race -timeout 1200s -parallel 4 -count=1 -tags=long_running,$(GO_BUILD_TAGS)
+GOTEST_LONG_RUNNING_OPT?= -v -race -timeout 600s -parallel 4 -count=1 -tags=long_running,$(GO_BUILD_TAGS)
 GOTEST_OPT_WITH_COVERAGE = $(GOTEST_OPT) -coverprofile=coverage.txt -covermode=atomic
 GOTEST_OPT_WITH_COVERAGE_LONG_RUNNING=$(GOTEST_LONG_RUNNING_OPT) -coverprofile=coverage.txt -covermode=atomic
 GOCMD?= go
@@ -93,7 +93,7 @@ coverage-all:
 build-examples:
 	for d in examples/*; do \
   		echo "Build example: $${d}"; \
-		(cd $${d}; go mod tidy && go build) || exit 1; \
+		(cd $${d}; go mod tidy && go build -race) || exit 1; \
 	done;
 
 .PHONY: test-ssl-certificates
