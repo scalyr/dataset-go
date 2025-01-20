@@ -33,7 +33,7 @@ jobs:
     strategy:
       # keep in sync with https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/.github/workflows/build-and-test.yml#L237
       matrix:
-        go: ['1.21', '1.22']
+        go: ['1.22', '1.23']
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
