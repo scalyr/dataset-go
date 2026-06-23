@@ -221,7 +221,7 @@ func (buffer *Buffer) removeThread(thread *add_events.Thread) {
 		return
 	}
 	delete(buffer.threads, thread.Id)
-	buffer.lenThreads += (int32(-(len(threadSer) + 1)))
+	buffer.lenThreads += int32(-(len(threadSer) + 1))
 	buffer.countThreads += (-1)
 }
 
@@ -237,8 +237,8 @@ func (buffer *Buffer) addLog(log *add_events.Log) (AddStatus, error) {
 
 		if buffer.canAppend(logSer) {
 			buffer.logs[log.Id] = log
-			buffer.lenLogs += (int32(len(logSer) + 1))
-			buffer.countLogs += (1)
+			buffer.lenLogs += int32(len(logSer) + 1)
+			buffer.countLogs += 1
 			return Added, nil
 		} else {
 			return TooMuch, nil
@@ -256,7 +256,7 @@ func (buffer *Buffer) removeLog(log *add_events.Log) {
 		return
 	}
 	delete(buffer.logs, log.Id)
-	buffer.lenLogs += (int32(-(len(logSer) + 1)))
+	buffer.lenLogs += int32(-(len(logSer) + 1))
 	buffer.countLogs += (-1)
 }
 
@@ -272,8 +272,8 @@ func (buffer *Buffer) addEvent(event *add_events.Event) (AddStatus, error) {
 
 	if buffer.canAppend(eventSer) {
 		buffer.events = append(buffer.events, event)
-		buffer.lenEvents += (int32(len(eventSer) + 1))
-		buffer.countEvents += (1)
+		buffer.lenEvents += int32(len(eventSer) + 1)
+		buffer.countEvents += 1
 		return Added, nil
 	} else {
 		if buffer.countEvents == 0 {
