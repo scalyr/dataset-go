@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/scalyr/dataset-go v0.0.0
-	go.opentelemetry.io/otel v1.40.0
+	go.opentelemetry.io/otel v1.41.0
 	go.uber.org/zap v1.28.0
 )
 
@@ -15,8 +15,8 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/otel/metric v1.40.0 // indirect
-	go.opentelemetry.io/otel/trace v1.40.0 // indirect
+	go.opentelemetry.io/otel/metric v1.41.0 // indirect
+	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
 )
