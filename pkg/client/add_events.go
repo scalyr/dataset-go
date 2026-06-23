@@ -189,13 +189,15 @@ func (client *DataSetClient) newBufferForEvents(session string, info *add_events
 }
 
 func (client *DataSetClient) processEvents(key string, eventsChannel <-chan interface{}) {
-	client.Logger.Info("Listening to events with key - BEGIN",
+	client.Logger.Info(
+		"Listening to events with key - BEGIN",
 		zap.String("key", key),
 	)
 	client.statistics.SessionsOpenedAdd(1)
 
 	defer func() {
-		client.Logger.Info("Listening to events with key - END",
+		client.Logger.Info(
+			"Listening to events with key - END",
 			zap.String("key", key),
 		)
 		client.statistics.SessionsClosedAdd(1)
@@ -281,7 +283,7 @@ func (client *DataSetClient) processEvents(key string, eventsChannel <-chan inte
 					buf = publish(key, buf)
 				}
 			}
-			buf = publish(key, buf)
+			publish(key, buf)
 			return
 		case msg, ok := <-eventsChannel:
 			// client.Logger.Debug("Processing message for key", zap.String("key", key))
@@ -547,7 +549,8 @@ func (client *DataSetClient) sendAddEventsBuffer(buf *buffer.Buffer) (*add_event
 		client.Logger.Warn("Cannot create payload", buf.ZapStats(zap.Error(err))...)
 		return nil, 0, fmt.Errorf("cannot create payload: %w", err)
 	}
-	client.Logger.Debug("Created payload",
+	client.Logger.Debug(
+		"Created payload",
 		buf.ZapStats(
 			zap.Int("payload", len(payload)),
 			zap.Float64("payloadRatio", float64(len(payload))/buffer.ShouldSentBufferSize),
@@ -611,7 +614,8 @@ func (client *DataSetClient) apiCall(req *http.Request, response response.Respon
 		}
 	}()
 
-	client.Logger.Debug("Received response",
+	client.Logger.Debug(
+		"Received response",
 		zap.Int("statusCode", resp.StatusCode),
 		zap.String("status", resp.Status),
 		zap.Int64("contentLength", resp.ContentLength),

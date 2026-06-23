@@ -589,7 +589,7 @@ func TestAddEventsLargeEvent(t *testing.T) {
 		assert.Nil(t, err, "Error reading request: %v", err)
 
 		assert.Equal(t, len(cer.Events), 1)
-		wasAttrs := (cer.Events)[0].Attrs
+		wasAttrs := cer.Events[0].Attrs
 		// if attributes were not modified, then we
 		// should update test, so they are modified
 		assert.NotEqual(t, wasAttrs, originalAttrs)
@@ -686,7 +686,7 @@ func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {
 		assert.Nil(t, err, "Error reading request: %v", err)
 
 		assert.Equal(t, len(cer.Events), 1)
-		wasAttrs := (cer.Events)[0].Attrs
+		wasAttrs := cer.Events[0].Attrs
 		wasSessionInfo := cer.SessionInfo
 
 		// if attributes were not modified, then we
@@ -1422,7 +1422,8 @@ func TestAddEventsServerHostLogic(t *testing.T) {
 				server_host_config.DataSetServerHostSettings{
 					UseHostName: false,
 					ServerHost:  configServerHost,
-				})
+				},
+			)
 			sc, err := NewClient(config, &http.Client{}, zap.Must(zap.NewDevelopment()), nil, nil)
 			require.Nil(t, err)
 

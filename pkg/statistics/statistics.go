@@ -215,8 +215,10 @@ func (stats *Statistics) initMetrics() error {
 		"Histogram buckets for payload size: ",
 		zap.Float64s("buckets", payloadBuckets),
 	)
-	stats.hPayloadSize, err = (*meter).Int64Histogram(key(
-		"payload_size"),
+	stats.hPayloadSize, err = (*meter).Int64Histogram(
+		key(
+			"payload_size",
+		),
 		metric.WithExplicitBucketBoundaries(payloadBuckets...),
 		metric.WithUnit("b"),
 	)
@@ -232,8 +234,10 @@ func (stats *Statistics) initMetrics() error {
 		"Histogram buckets for response times: ",
 		zap.Float64s("buckets", responseBuckets),
 	)
-	stats.hResponseTime, err = (*meter).Int64Histogram(key(
-		"response_time"),
+	stats.hResponseTime, err = (*meter).Int64Histogram(
+		key(
+			"response_time",
+		),
 		metric.WithExplicitBucketBoundaries(responseBuckets...),
 		metric.WithUnit("ms"),
 	)

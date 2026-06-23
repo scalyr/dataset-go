@@ -147,10 +147,10 @@ func TestAddEventsManyLogsShouldSucceed(t *testing.T) {
 			}
 
 			t.Logf("Adding batch: %s (%d)", batchKey, cI)
-			go (func(batch []*add_events.EventBundle) {
+			go func(batch []*add_events.EventBundle) {
 				err := sc.AddEvents(batch)
 				assert.Nil(t, err)
-			})(batch)
+			}(batch)
 			time.Sleep(MaxDelay)
 		}
 		time.Sleep(2 * PurgeOlderThan)

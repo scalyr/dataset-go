@@ -121,7 +121,7 @@ func (r *ApiRequest) HttpRequest() (*http.Request, error) {
 		return nil, r.err
 	}
 
-	if r.payload == nil || len(r.payload) == 0 {
+	if len(r.payload) == 0 {
 		r.emptyRequest()
 	}
 

@@ -100,7 +100,8 @@ func createEmptyBuffer() *Buffer {
 	buffer, err := NewBuffer(
 		session,
 		token,
-		sessionInfo)
+		sessionInfo,
+	)
 	if err != nil {
 		return nil
 	}
@@ -279,7 +280,7 @@ func TestPayloadFull(t *testing.T) {
 
 	upperBound := int(math.Min(float64(len(expected)), float64(len(payload))))
 	for i := 0; i < upperBound; i++ {
-		if expected[i] != (payload)[i] {
+		if expected[i] != payload[i] {
 			assert.Equal(t, string(payload[0:i]), expected[0:i], "Pos: %d", i)
 		}
 	}
@@ -297,7 +298,8 @@ func TestPayloadInjection(t *testing.T) {
 	buffer, err := NewBuffer(
 		session,
 		token,
-		sessionInfo)
+		sessionInfo,
+	)
 
 	assert.Nil(t, err)
 	bundle := &add_events.EventBundle{
@@ -345,7 +347,7 @@ func TestPayloadInjection(t *testing.T) {
 
 	upperBound := int(math.Min(float64(len(expected)), float64(len(payload))))
 	for i := 0; i < upperBound; i++ {
-		if expected[i] != (payload)[i] {
+		if expected[i] != payload[i] {
 			assert.Equal(t, payload[0:i], expected[0:i], "Pos: %d", i)
 		}
 	}

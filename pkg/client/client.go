@@ -199,7 +199,8 @@ func NewClient(
 
 	go dataClient.mainLoop()
 
-	dataClient.Logger.Info("DataSetClient was created",
+	dataClient.Logger.Info(
+		"DataSetClient was created",
 		zap.String("id", dataClient.Id.String()),
 	)
 
@@ -238,7 +239,8 @@ func adjustGroupByWithSpecialAttributes(cfg *config.DataSetConfig) {
 }
 
 func (client *DataSetClient) initBuffer(buff *buffer.Buffer, info *add_events.SessionInfo) {
-	client.Logger.Debug("Creating new buf",
+	client.Logger.Debug(
+		"Creating new buf",
 		zap.String("uuid", buff.Id.String()),
 		zap.String("session", buff.Session),
 	)
@@ -310,7 +312,8 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 			zap.String("status", response.Status),
 			zap.String("message", response.Message),
 		)
-		client.Logger.Debug("Events were sent to DataSet",
+		client.Logger.Debug(
+			"Events were sent to DataSet",
 			zaps...,
 		)
 
@@ -533,7 +536,8 @@ func (client *DataSetClient) getRetryAfter(response *http.Response, def time.Dur
 		return afterT, true
 	}
 
-	client.Logger.Warn("Illegal value of Retry-After, using default",
+	client.Logger.Warn(
+		"Illegal value of Retry-After, using default",
 		zap.String("retryAfter", after),
 		zap.Duration("default", def),
 		zap.Error(errS),
@@ -582,7 +586,8 @@ func (client *DataSetClient) setRetryAfter(t time.Time) {
 
 func (client *DataSetClient) onBufferDrop(buf *buffer.Buffer, status uint32, err error) {
 	client.statistics.BuffersDroppedAdd(1)
-	client.Logger.Error("Dropping buffer",
+	client.Logger.Error(
+		"Dropping buffer",
 		buf.ZapStats(
 			zap.Uint32("httpStatus", status),
 			zap.Error(err),

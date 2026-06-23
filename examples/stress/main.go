@@ -58,7 +58,8 @@ func main() {
 	logger := zap.Must(zap.NewDevelopment())
 
 	// log input parameters
-	logger.Info("Running stress test - input:",
+	logger.Info(
+		"Running stress test - input:",
 		zap.Int("events", *eventsCount),
 		zap.Int("buckets", *bucketsCount),
 		zap.Int("parallel", *parallel),
@@ -73,7 +74,8 @@ func main() {
 		*bucketsCount = PurgeOlderThanMultiplier
 	}
 
-	logger.Info("Running stress test - adjusted:",
+	logger.Info(
+		"Running stress test - adjusted:",
 		zap.Int("events", *eventsCount),
 		zap.Int("buckets", *bucketsCount),
 		zap.Int("parallel", *parallel),
@@ -192,7 +194,8 @@ func main() {
 		if stats != nil {
 			processed = stats.Events.Processed()
 		}
-		logger.Info("Processed events",
+		logger.Info(
+			"Processed events",
 			zap.Uint64("processed", processed),
 			zap.Int("expecting", *eventsCount),
 		)
@@ -209,7 +212,8 @@ func main() {
 	extraSleepFor := 60
 	for i := 0; i <= extraSleepFor; i++ {
 		time.Sleep(time.Second)
-		logger.Info("Extra sleep",
+		logger.Info(
+			"Extra sleep",
 			zap.Int("now", i),
 			zap.Int("limit", extraSleepFor),
 		)
