@@ -29,13 +29,32 @@ jobs:
           cancel_others: 'true'
           github_token: ${{ github.token }}
 
+  # Resolves the Go versions from the single source of truth
+  # (.github/go-versions.json, generated from go.mod by scripts/update-go-version.sh).
+  versions:
+    name: Resolve Go versions
+    runs-on: ubuntu-latest
+    outputs:
+      primary: ${{ steps.read.outputs.primary }}
+      matrix: ${{ steps.read.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: read
+        run: |
+          {
+            echo "primary=$(jq -r '.primary' .github/go-versions.json)"
+            echo "matrix=$(jq -c '.matrix' .github/go-versions.json)"
+          } >> "$GITHUB_OUTPUT"
+
   build:
     runs-on: ubuntu-latest
-    needs: pre_job
+    needs: [pre_job, versions]
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
 
     steps:
       - uses: actions/checkout@v6
+      - name: Check .github/go-versions.json is in sync with go.mod
+        run: ./scripts/update-go-version.sh --check
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -43,7 +62,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: ${{ needs.versions.outputs.primary }}
           cache: true
           cache-dependency-path: |
             go.sum
