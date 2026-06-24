@@ -81,6 +81,31 @@ To use pre-commit:
 To update the Pre-commit hooks , run `pre-commit autoupdate`. This will update
 `.pre-commit-config.yaml` and will need to be committed to the repository.
 
+### Updating the Go version
+
+The Go version used by CI is derived from a single source of truth: the `go`
+directive in the root [`go.mod`](go.mod). The GitHub workflows do not hard-code
+any version &mdash; they read [`.github/go-versions.json`](.github/go-versions.json),
+which is generated from `go.mod` by
+[`update-go-version.sh`](scripts/update-go-version.sh):
+
+- `primary` &mdash; the `<major>.<minor>` from `go.mod`, used by single-version jobs
+  (e.g. code quality).
+- `matrix` &mdash; the last 3 minor versions, used by the test matrices
+  (unit and stress tests).
+
+To bump the Go version:
+
+1. Edit the `go` directive in [`go.mod`](go.mod) (and the `examples/*/go.mod`
+   modules if you keep them in lockstep).
+2. Run `make update-go-version` (or `./scripts/update-go-version.sh`) to
+   regenerate `.github/go-versions.json`.
+3. Commit both `go.mod` and `.github/go-versions.json`.
+
+CI guards against drift: the code-quality workflow runs
+`./scripts/update-go-version.sh --check` and fails if
+`.github/go-versions.json` is out of sync with `go.mod`.
+
 ## Contributing
 
 In the future, we will be pushing guidelines on how to contribute to this repository.  For now, please just
