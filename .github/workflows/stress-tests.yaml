@@ -69,7 +69,7 @@ jobs:
       - name: Run Stress Test - Max congestion
         run: |
           ./scripts/run-stress-test.sh 10000 -1
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: logs-${{ matrix.os }}-${{ matrix.go }}
           path: examples/stress/*.log
