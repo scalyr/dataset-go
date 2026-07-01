@@ -38,7 +38,7 @@ jobs:
       primary: ${{ steps.read.outputs.primary }}
       matrix: ${{ steps.read.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: read
         run: |
           {
@@ -52,7 +52,7 @@ jobs:
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Check .github/go-versions.json is in sync with go.mod
         run: ./scripts/update-go-version.sh --check
       - name: Set up Python
