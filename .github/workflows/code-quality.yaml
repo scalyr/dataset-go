@@ -56,7 +56,7 @@ jobs:
       - name: Check .github/go-versions.json is in sync with go.mod
         run: ./scripts/update-go-version.sh --check
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: 3.11
       - name: Set up Go
