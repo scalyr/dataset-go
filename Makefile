@@ -48,6 +48,8 @@ go-versions:
 .PHONY: test-scripts
 test-scripts:
 	./scripts/go-versions_test.sh
+	./scripts/next-release_test.sh
+	./scripts/bump-version_test.sh
 
 build:
 	echo "Done"

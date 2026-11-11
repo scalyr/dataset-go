@@ -122,6 +122,45 @@ Required repository settings:
    `... result` jobs instead. **Without required checks, auto-merge merges a
    Dependabot PR as soon as it is approved.**
 
+### Releases
+
+The [`release-tag`](.github/workflows/release-tag.yaml) workflow creates the
+next **patch** release (`vX.Y.Z` &rarr; `vX.Y.Z+1`) for a commit on `main` that
+passed Unit Tests. It does so only if something consumers get changed since
+the latest tag:
+
+- a non-test `.go` file of the module (outside the nested `examples/*`
+  modules, `test/`, `testdata/` and `vendor/`), or
+- the `go`, `toolchain` or `retract` directives in `go.mod`, or
+- a `go.mod` requirement on a module that the library's non-test packages link
+  on linux, darwin or windows.
+
+Tests, examples, scripts, workflows, docs and test-only dependencies such as
+testify never release. [`scripts/next-release.sh`](scripts/next-release.sh)
+holds the rules, and `scripts/next-release.sh HEAD` shows what would happen.
+
+A release commits the new version to `pkg/version/version.go` (used in the
+client User-Agent) as `chore(release): vX.Y.Z` and tags that commit. Dependabot
+merges fire no `push` workflows (see above), so they are released after the
+nightly Unit Tests run.
+
+For a minor or major release, set `Version` in `pkg/version/version.go` to the
+new version (e.g. `"0.22.0"`) in a PR. Once merged and tested, the workflow
+releases `v0.22.0` instead of the next patch. Do not push release tags by hand.
+A tag that is not on `main` stops the workflow with an error until it is
+removed.
+
+Required repository settings:
+
+1. Secret `RELEASE_TOKEN`: a fine-grained personal access token with
+   *Contents: read and write* on this repository. `GITHUB_TOKEN` cannot be used:
+   it cannot push past the required review on `main`.
+2. The token's owner must be allowed to bypass the branch protection or
+   ruleset on `main`, and any tag ruleset covering `v*`. Otherwise the push is
+   rejected and the workflow fails.
+
+When the token expires or is rotated, update the secret.
+
 ## Contributing
 
 In the future, we will be pushing guidelines on how to contribute to this repository.  For now, please just
