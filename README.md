@@ -117,7 +117,7 @@ Required repository settings:
    and approve pull requests" must stay enabled, because `main` requires one
    approving review.
 2. In the branch protection for `main`, require these status checks:
-   `Unit Tests result`, `Stress Tests result` and `build` (code quality). The
+   `Unit Tests result`, `Stress Tests result` and `Code Quality result`. The
    matrix job names contain Go versions and change over time, so require the
    `... result` jobs instead. **Without required checks, auto-merge merges a
    Dependabot PR as soon as it is approved.**
