@@ -64,6 +64,11 @@ jobs:
           cache-dependency-path: |
             go.sum
             examples/**/go.sum
+      # Need Go and run before `go mod vendor`; the seam cases copy the module.
+      - name: Test release scripts
+        run: |
+          ./scripts/next-release_test.sh
+          ./scripts/bump-version_test.sh
       - name: Install pre-commit
         run: |
           python -m pip install -U pip
