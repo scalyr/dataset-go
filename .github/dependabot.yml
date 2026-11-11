@@ -3,26 +3,44 @@
 # Please see the documentation for all configuration options:
 # https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
 
+# Each directory's updates are grouped into one weekly PR, so the auto-merge
+# workflow lands one PR per module instead of a stream of them.
+
 version: 2
 updates:
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      all:
+        patterns: ["*"]
   - package-ecosystem: "gomod"
     directory: "/examples/client/"
     schedule:
       interval: "weekly"
+    groups:
+      all:
+        patterns: ["*"]
   - package-ecosystem: "gomod"
     directory: "/examples/readme/"
     schedule:
       interval: "weekly"
+    groups:
+      all:
+        patterns: ["*"]
   - package-ecosystem: "gomod"
     directory: "/examples/stress/"
     schedule:
       interval: "weekly"
+    groups:
+      all:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      all:
+        patterns: ["*"]
