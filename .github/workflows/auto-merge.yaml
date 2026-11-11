@@ -1,0 +1,42 @@
+name: Auto-merge Dependabot PRs
+
+# Approves and enables auto-merge on Dependabot PRs. GitHub then merges them
+# only once the required status checks on main pass, so branch protection MUST
+# list required checks (see README "Automated updates"); otherwise a PR merges
+# as soon as it is approved.
+#
+# Uses GITHUB_TOKEN only. Consequence: the merge commit does not trigger the
+# `push` workflows on main (GitHub suppresses events caused by GITHUB_TOKEN);
+# main is still covered by the nightly scheduled runs.
+#
+# Runs on `pull_request`, not `pull_request_target`: GitHub's documented
+# Dependabot auto-merge pattern, and no PR code is checked out.
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+    steps:
+      # main requires one approving review. Needs the repo/org setting "Allow
+      # GitHub Actions to create and approve pull requests".
+      - name: Approve
+        run: |
+          if [[ "$(gh pr view "${PR_URL}" --json reviewDecision --jq .reviewDecision)" != "APPROVED" ]]; then
+            gh pr review "${PR_URL}" --approve --body "Automated approval: Dependabot update; merges only after required checks pass."
+          fi
+
+      - name: Enable auto-merge
+        run: gh pr merge "${PR_URL}" --auto --squash

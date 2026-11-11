@@ -29,8 +29,8 @@ jobs:
           cancel_others: 'true'
           github_token: ${{ github.token }}
 
-  # Resolves the Go versions from the single source of truth
-  # (.github/go-versions.json, generated from go.mod by scripts/update-go-version.sh).
+  # Computes the Go versions at run time (go.mod floor up to the latest supported
+  # release, see scripts/go-versions.sh), so nothing can drift from go.mod.
   versions:
     name: Resolve Go versions
     runs-on: ubuntu-latest
@@ -40,11 +40,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: read
-        run: |
-          {
-            echo "primary=$(jq -r '.primary' .github/go-versions.json)"
-            echo "matrix=$(jq -c '.matrix' .github/go-versions.json)"
-          } >> "$GITHUB_OUTPUT"
+        shell: bash  # adds -o pipefail, so a script failure is not masked by tee
+        run: ./scripts/go-versions.sh | tee -a "$GITHUB_OUTPUT"
 
   build:
     runs-on: ubuntu-latest
@@ -53,8 +50,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      - name: Check .github/go-versions.json is in sync with go.mod
-        run: ./scripts/update-go-version.sh --check
+      - name: Test scripts/go-versions.sh
+        run: ./scripts/go-versions_test.sh
       - name: Set up Python
         uses: actions/setup-python@v7
         with:

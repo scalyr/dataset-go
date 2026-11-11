@@ -29,8 +29,8 @@ jobs:
           cancel_others: 'true'
           github_token: ${{ github.token }}
 
-  # Resolves the Go versions from the single source of truth
-  # (.github/go-versions.json, generated from go.mod by scripts/update-go-version.sh).
+  # Computes the Go versions at run time (go.mod floor up to the latest supported
+  # release, see scripts/go-versions.sh), so nothing can drift from go.mod.
   versions:
     name: Resolve Go versions
     runs-on: ubuntu-latest
@@ -40,11 +40,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: read
-        run: |
-          {
-            echo "primary=$(jq -r '.primary' .github/go-versions.json)"
-            echo "matrix=$(jq -c '.matrix' .github/go-versions.json)"
-          } >> "$GITHUB_OUTPUT"
+        shell: bash  # adds -o pipefail, so a script failure is not masked by tee
+        run: ./scripts/go-versions.sh | tee -a "$GITHUB_OUTPUT"
 
   stress-tests:
     strategy:
@@ -73,3 +70,20 @@ jobs:
         with:
           name: logs-${{ matrix.os }}-${{ matrix.go }}
           path: examples/stress/*.log
+
+  # Stable check name for branch protection: the matrix job names embed Go
+  # versions, which change whenever a Go release ships or go.mod is raised.
+  result:
+    name: Stress Tests result
+    if: always()
+    needs: [pre_job, versions, stress-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          VERSIONS: ${{ needs.versions.result }}
+          JOB: ${{ needs.stress-tests.result }}
+          SKIPPED_AS_DUPLICATE: ${{ needs.pre_job.outputs.should_skip }}
+        run: |
+          echo "versions=${VERSIONS} stress-tests=${JOB} skipped_as_duplicate=${SKIPPED_AS_DUPLICATE}"
+          [[ "${VERSIONS}" == success ]] || exit 1
+          [[ "${JOB}" == success || ( "${JOB}" == skipped && "${SKIPPED_AS_DUPLICATE}" == true ) ]]

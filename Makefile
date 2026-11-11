@@ -41,9 +41,13 @@ pre-commit-install:
 pre-commit-run:
 	pre-commit run -a
 
-.PHONY: update-go-version
-update-go-version:
-	./scripts/update-go-version.sh
+.PHONY: go-versions
+go-versions:
+	./scripts/go-versions.sh --json
+
+.PHONY: test-scripts
+test-scripts:
+	./scripts/go-versions_test.sh
 
 build:
 	echo "Done"

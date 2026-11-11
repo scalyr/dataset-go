@@ -81,30 +81,46 @@ To use pre-commit:
 To update the Pre-commit hooks , run `pre-commit autoupdate`. This will update
 `.pre-commit-config.yaml` and will need to be committed to the repository.
 
-### Updating the Go version
+### Go versions in CI
 
-The Go version used by CI is derived from a single source of truth: the `go`
-directive in the root [`go.mod`](go.mod). The GitHub workflows do not hard-code
-any version &mdash; they read [`.github/go-versions.json`](.github/go-versions.json),
-which is generated from `go.mod` by
-[`update-go-version.sh`](scripts/update-go-version.sh):
+The GitHub workflows do not hard-code any Go version. Each workflow's
+`versions` job runs [`go-versions.sh`](scripts/go-versions.sh), which computes
+them at run time:
 
-- `primary` &mdash; the `<major>.<minor>` from `go.mod`, used by single-version jobs
+- `matrix` &mdash; the `go` directive of the root [`go.mod`](go.mod) (the floor),
+  plus every currently supported Go release (from <https://go.dev/dl/?mode=json>)
+  at or above it. Releases below the floor are never included: with
+  `GOTOOLCHAIN=local` they cannot build the module.
+- `primary` &mdash; the highest `matrix` entry, used by single-version jobs
   (e.g. code quality).
-- `matrix` &mdash; the last 3 minor versions, used by the test matrices
-  (unit and stress tests).
 
-To bump the Go version:
+There is nothing to regenerate. When Dependabot raises the `go` directive, or a
+new Go release ships, the next CI run uses the new versions. The nightly runs
+make sure that happens within a day. A new Go release can therefore turn a
+nightly run red without any code change. `make go-versions` prints the current
+values, and `make test-scripts` runs the script's tests.
 
-1. Edit the `go` directive in [`go.mod`](go.mod) (and the `examples/*/go.mod`
-   modules if you keep them in lockstep).
-2. Run `make update-go-version` (or `./scripts/update-go-version.sh`) to
-   regenerate `.github/go-versions.json`.
-3. Commit both `go.mod` and `.github/go-versions.json`.
+### Automated updates
 
-CI guards against drift: the code-quality workflow runs
-`./scripts/update-go-version.sh --check` and fails if
-`.github/go-versions.json` is out of sync with `go.mod`.
+The repository is meant to keep itself current without a maintainer.
+[Dependabot](.github/dependabot.yml) opens one grouped PR per module, and one
+for GitHub Actions, every week. The
+[`auto-merge`](.github/workflows/auto-merge.yaml) workflow approves each one and
+enables squash auto-merge, so GitHub merges it once the required checks pass.
+
+It only uses `GITHUB_TOKEN`, so the merge commit does not trigger the `push`
+workflows on `main`. The nightly scheduled runs cover `main` instead.
+
+Required repository settings:
+
+1. *Settings &rarr; Actions &rarr; General*: "Allow GitHub Actions to create
+   and approve pull requests" must stay enabled, because `main` requires one
+   approving review.
+2. In the branch protection for `main`, require these status checks:
+   `Unit Tests result`, `Stress Tests result` and `build` (code quality). The
+   matrix job names contain Go versions and change over time, so require the
+   `... result` jobs instead. **Without required checks, auto-merge merges a
+   Dependabot PR as soon as it is approved.**
 
 ## Contributing
 
