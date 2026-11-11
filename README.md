@@ -129,12 +129,14 @@ next **patch** release (`vX.Y.Z` &rarr; `vX.Y.Z+1`) for a commit on `main` that
 passed Unit Tests. It does so only if something consumers get changed since
 the latest tag:
 
-- a non-test `.go` file under `pkg/` or `internal/`, or
-- the `go`/`toolchain` directive in `go.mod`, or
-- a `go.mod` requirement on a module that the library's non-test packages link.
+- a non-test `.go` file of the module (outside the nested `examples/*`
+  modules, `test/`, `testdata/` and `vendor/`), or
+- the `go`, `toolchain` or `retract` directives in `go.mod`, or
+- a `go.mod` requirement on a module that the library's non-test packages link
+  on linux, darwin or windows.
 
-Tests, `testdata`, examples, scripts, workflows, docs and test-only dependencies
-such as testify never release. [`scripts/next-release.sh`](scripts/next-release.sh)
+Tests, examples, scripts, workflows, docs and test-only dependencies such as
+testify never release. [`scripts/next-release.sh`](scripts/next-release.sh)
 holds the rules, and `scripts/next-release.sh HEAD` shows what would happen.
 
 A release commits the new version to `pkg/version/version.go` (used in the
@@ -142,9 +144,11 @@ client User-Agent) as `chore(release): vX.Y.Z` and tags that commit. Dependabot
 merges fire no `push` workflows (see above), so they are released after the
 nightly Unit Tests run.
 
-Minor and major releases are manual: push the tag, e.g. `v0.22.0`, by hand.
-Update `pkg/version/version.go` first so the tagged commit carries the right
-version. Automation continues with patch releases from the latest tag.
+For a minor or major release, set `Version` in `pkg/version/version.go` to the
+new version (e.g. `"0.22.0"`) in a PR. Once merged and tested, the workflow
+releases `v0.22.0` instead of the next patch. Do not push release tags by hand.
+A tag that is not on `main` stops the workflow with an error until it is
+removed.
 
 Required repository settings:
 

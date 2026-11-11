@@ -1,9 +1,10 @@
 name: Release tag
 
-# Creates the next patch release (vX.Y.Z -> vX.Y.Z+1) for a commit on main that
-# passed Unit Tests, when it changes something consumers get: non-test code or
-# a linked dependency (see scripts/next-release.sh for the exact rules). It
-# commits the new version into pkg/version/version.go and tags that commit.
+# Creates the next release for a commit on main that passed Unit Tests, when it
+# changes something consumers get: non-test code or a linked dependency (see
+# scripts/next-release.sh for the exact rules). That is the next patch, unless
+# pkg/version/version.go already asks for a higher version. It commits the new
+# version into pkg/version/version.go and tags that commit.
 #
 # Triggered by Unit Tests rather than `push`, so only tested commits are tagged
 # and so Dependabot merges are covered: auto-merge.yaml merges with
@@ -22,6 +23,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read  # workflow_dispatch: look up the Unit Tests result for the commit
   contents: read
 
 # Never run two releases at once: both would compute the same next tag.
@@ -31,7 +33,7 @@ concurrency:
 
 jobs:
   release:
-    name: Tag patch release
+    name: Tag release
     if: >-
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.workflow_run.conclusion == 'success' &&
@@ -40,20 +42,26 @@ jobs:
     env:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
-      - name: Check RELEASE_TOKEN
+      # A manual run has no Unit Tests run attached: require one for this commit,
+      # so dispatch cannot tag an untested or failing commit.
+      - name: Check Unit Tests passed
+        if: github.event_name == 'workflow_dispatch'
         env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ -z "${RELEASE_TOKEN}" ]]; then
-            echo "::error::RELEASE_TOKEN secret is not set (see README \"Releases\")"
+          passed=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/unit-tests.yaml/runs?head_sha=${SHA}&status=success" --jq .total_count)
+          if [[ "${passed}" == 0 ]]; then
+            echo "::error::Unit Tests has not passed for ${SHA}; wait for it or re-run it first"
             exit 1
           fi
 
+      # Default token, not persisted: RELEASE_TOKEN is only needed (and only
+      # checked) when there is something to release, see the push step.
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.SHA }}
           fetch-depth: 0  # all history and tags: the diff is taken from the latest tag
-          token: ${{ secrets.RELEASE_TOKEN }}
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -73,10 +81,17 @@ jobs:
         env:
           TAG: ${{ steps.next.outputs.tag }}
           REASON: ${{ steps.next.outputs.reason }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
+          if [[ -z "${RELEASE_TOKEN}" ]]; then
+            echo "::error::RELEASE_TOKEN secret is not set (see README \"Releases\")"
+            exit 1
+          fi
+          remote="https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
           # Main moved on since the tested commit: tag nothing rather than tag
           # untested commits. The newer commit's own run releases everything.
-          git fetch --quiet origin main
+          git fetch --quiet "${remote}" main
           if [[ "$(git rev-parse FETCH_HEAD)" != "${SHA}" ]]; then
             echo "::notice::main moved past ${SHA}; leaving ${TAG} to the run for the newer commit"
             exit 0
@@ -85,11 +100,15 @@ jobs:
           ./scripts/bump-version.sh "${TAG#v}" "$(date -u +%F)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit --quiet -m "chore(release): ${TAG}" -m "Reason: ${REASON}" pkg/version/version.go
+          # Nothing to commit when version.go already names this release (a
+          # requested minor/major on the same day): tag the tested commit itself.
+          if ! git diff --quiet -- pkg/version/version.go; then
+            git commit --quiet -m "chore(release): ${TAG}" -m "Reason: ${REASON}" pkg/version/version.go
+          fi
           git tag -a "${TAG}" -m "Release ${TAG}"
           # Atomic: the version commit never lands on main without its tag.
           # Not forced: rejected if main moved in the meantime; re-running is safe.
-          git push --atomic origin "HEAD:refs/heads/main" "refs/tags/${TAG}"
+          git push --atomic "${remote}" "HEAD:refs/heads/main" "refs/tags/${TAG}"
           echo "pushed=true" >>"$GITHUB_OUTPUT"
           echo "::notice::released ${TAG} (${REASON})"
 
@@ -99,4 +118,4 @@ jobs:
         continue-on-error: true
         env:
           TAG: ${{ steps.next.outputs.tag }}
-        run: GOPROXY=https://proxy.golang.org go list -m "github.com/${GITHUB_REPOSITORY}@${TAG}"
+        run: GOPROXY=https://proxy.golang.org go list -m "$(go list -m)@${TAG}"

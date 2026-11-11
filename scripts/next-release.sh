@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 #
-# Decides whether commit <sha> needs a new patch release, i.e. whether anything
-# a consumer of the library gets changed since the latest release tag:
+# Decides whether commit <sha> needs a new release, i.e. whether anything a
+# consumer of the library gets changed since the latest release tag:
 #
-#   code         a non-test .go file under pkg/ or internal/ changed
+#   code         a non-test .go file of the root module changed (anywhere except
+#                nested modules such as examples/*, test/, testdata/, vendor/)
 #   go-directive the `go` or `toolchain` directive in the root go.mod changed
+#   retract      a `retract` directive changed; it reaches consumers only in a
+#                newer published version
 #   deps:<mods>  a root go.mod requirement changed for a module that the
-#                library's non-test packages actually link
+#                library's non-test packages link on linux, darwin or windows
 #                (`go list -deps ./...`), so testify-only bumps do not count
 #
-# Everything else (tests, testdata, examples/, scripts/, .github/, docs, go.sum
-# on its own) never releases. A removed requirement needs no check of its own:
-# dropping a linked module requires a code change, which `code` catches.
-# Replace/exclude directives are ignored: they do not apply to consumers.
+# Everything else (tests, scripts/, .github/, docs, go.sum on its own) never
+# releases. A removed requirement needs no check of its own: dropping a linked
+# module requires a code change, which `code` catches. Replace/exclude
+# directives are ignored: they do not apply to consumers.
+#
+# The release is the next patch, unless pkg/version/version.go at <sha> already
+# names a higher version: that is how a minor or major release is requested
+# (set Version = "0.22.0" in a PR; merging it releases v0.22.0).
 #
 # The diff is always taken from the latest tag, not from the triggering commit,
 # so a skipped or failed run is caught up by the next one, and the release
@@ -73,11 +80,29 @@ git merge-base --is-ancestor "${base_sha}" "${sha}" ||
 IFS=. read -r major minor patch <<<"${base#v}"
 next="v${major}.${minor}.$((patch + 1))"
 
-changed=$(git diff --name-only "${base_sha}" "${sha}")
+# A higher version already written into version.go (a requested minor/major
+# release) wins over the computed patch. Lower, equal or malformed is ignored.
+requested=$(git show "${sha}:pkg/version/version.go" 2>/dev/null |
+  sed -nE 's/^[[:space:]]*Version[[:space:]]*=[[:space:]]*"([^"]*)".*/v\1/p' | head -n1 || true)
+if [[ "${requested}" =~ ${semver_re} && "${requested}" != "${base}" &&
+  "$(printf '%s\n%s\n' "${base}" "${requested}" | sort -V | tail -n1)" == "${requested}" ]]; then
+  next="${requested}"
+fi
+
+# --no-renames: a file moved out of the module must still show its old path.
+changed=$(git diff --no-renames --name-only "${base_sha}" "${sha}")
+
+# Directories of nested modules (examples/*): their code is not this module's.
+nested=$(git ls-tree -r --name-only "${sha}" | grep -E '.+/go\.mod$' | sed -E 's#/go\.mod$#/#' || true)
 
 # No `grep -q` here: it exits early, and the SIGPIPE upstream fails the pipe.
-code=$(grep -E '^(pkg|internal)/.*\.go$' <<<"${changed}" |
-  grep -Ev '_test\.go$' | grep -Ev '(^|/)testdata/' || true)
+code=$(grep -E '\.go$' <<<"${changed}" | grep -Ev '_test\.go$' |
+  grep -Ev '(^|/)(testdata|vendor)/|^test/' || true)
+if [[ -n "${code}" && -n "${nested}" ]]; then
+  code=$(awk 'NR == FNR { if ($0 != "") dirs[++n] = $0; next }
+    { for (i = 1; i <= n; i++) if (index($0, dirs[i]) == 1) next; print }' \
+    <(printf '%s\n' "${nested}") <(printf '%s\n' "${code}"))
+fi
 if [[ -n "${code}" ]]; then
   emit true "${next}" code
   exit 0
@@ -105,6 +130,11 @@ if [[ "$(jq -r "${directive}" <<<"${old}")" != "$(jq -r "${directive}" <<<"${new
   exit 0
 fi
 
+if [[ "$(jq -cS '.Retract // []' <<<"${old}")" != "$(jq -cS '.Retract // []' <<<"${new}")" ]]; then
+  emit true "${next}" retract
+  exit 0
+fi
+
 requires='.Require[]? | "\(.Path) \(.Version)"'
 jq -r "${requires}" <<<"${old}" | sort -u >"${tmp}/old.req"
 jq -r "${requires}" <<<"${new}" | sort -u >"${tmp}/new.req"
@@ -120,8 +150,13 @@ else
     git worktree add --detach --quiet "${worktree}" "${sha}" || die "cannot check out ${sha}"
     dir="${worktree}"
   fi
-  (cd "${dir}" && GOFLAGS=-mod=readonly go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./...) \
-    >"${tmp}/runtime.mods" || die "go list failed at ${sha}"
+  # Per GOOS: a dependency linked only by x_windows.go is still linked.
+  : >"${tmp}/runtime.mods"
+  for goos in linux darwin windows; do
+    (cd "${dir}" && GOOS="${goos}" GOFLAGS=-mod=readonly \
+      go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./...) \
+      >>"${tmp}/runtime.mods" || die "go list failed at ${sha} (GOOS=${goos})"
+  done
 fi
 sort -u -o "${tmp}/runtime.mods" "${tmp}/runtime.mods"
 

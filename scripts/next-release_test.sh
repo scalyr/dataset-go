@@ -82,8 +82,7 @@ run() {
 }
 
 # expect NAME RELEASE BASE TAG REASON : the last run succeeded with exactly this
-# output. A release must also be base patch + 1 (conformance with the
-# documented contract of the script).
+# output, and a release tag obeys the script's documented contract.
 expect() {
   local want="release=$2"$'\n'"base=$3"$'\n'"tag=$4"$'\n'"reason=$5"
   if [[ "${rc}" != 0 || "${out}" != "${want}" ]]; then
@@ -92,9 +91,12 @@ expect() {
   fi
   if [[ "$2" == true ]]; then
     local b="${3#v}" t="${4#v}"
-    if ! [[ "$4" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] ||
-      [[ "${b%.*}" != "${t%.*}" || "${t##*.}" != "$((${b##*.} + 1))" ]]; then
-      fail "$1" "tag $4 is not the next patch of $3"
+    # Valid semver, strictly above the base, and exactly patch + 1 when
+    # major.minor are unchanged (a higher major/minor comes from version.go).
+    if ! [[ "$4" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || [[ "$3" == "$4" ]] ||
+      [[ "$(printf '%s\n%s\n' "$3" "$4" | sort -V | tail -n1)" != "$4" ]] ||
+      [[ "${b%.*}" == "${t%.*}" && "${t##*.}" != "$((${b##*.} + 1))" ]]; then
+      fail "$1" "tag $4 is not a valid next release after $3"
       return
     fi
   fi
@@ -169,6 +171,65 @@ commit "${repo}" "feat: b"
 run "${repo}" main
 expect "revision may be a branch name" true v0.21.0 v0.21.1 code
 
+repo=$(new_repo root-file)
+write "${repo}" dataset.go "package fixture"
+commit "${repo}" "feat: root package"
+run "${repo}" HEAD
+expect "non-test .go file in the module root releases" true v0.21.0 v0.21.1 code
+
+repo=$(new_repo new-dir)
+write "${repo}" extension/ext.go "package extension"
+commit "${repo}" "feat: new top-level package"
+run "${repo}" HEAD
+expect "new top-level package directory releases" true v0.21.0 v0.21.1 code
+
+repo=$(new_repo not-nested)
+write "${repo}" examples/go.mod "module example.com/fixture/examples"
+commit "${repo}" "nested module at examples/"
+git -C "${repo}" tag -f -a v0.21.0 -m v0.21.0 >/dev/null
+write "${repo}" examplesx/x.go "package examplesx"
+commit "${repo}" "feat: examplesx"
+run "${repo}" HEAD
+expect "nested module dir is matched as a path prefix, not a substring" true v0.21.0 v0.21.1 code
+
+repo=$(new_repo renamed-out)
+mkdir -p "${repo}/docs"
+git -C "${repo}" mv pkg/lib/lib.go docs/lib.go.txt
+commit "${repo}" "move library file out of the module"
+run "${repo}" HEAD
+expect "file renamed out of the module still releases" true v0.21.0 v0.21.1 code
+
+repo=$(new_repo retract)
+(cd "${repo}" && go mod edit -retract=v0.21.0)
+commit "${repo}" "retract v0.21.0"
+run "${repo}" HEAD
+expect "added retract directive releases" true v0.21.0 v0.21.1 retract
+
+repo=$(new_repo minor)
+write "${repo}" pkg/version/version.go $'package version\n\nconst (\n\tVersion      = "0.22.0"\n\tReleasedDate = "2026-11-11"\n)'
+commit "${repo}" "chore: request 0.22.0"
+run "${repo}" HEAD
+expect "higher version in version.go requests that release" true v0.21.0 v0.22.0 code
+
+repo=$(new_repo major)
+write "${repo}" pkg/version/version.go $'package version\n\nconst (\n\tVersion      = "1.0.0"\n\tReleasedDate = "2026-11-11"\n)'
+commit "${repo}" "chore: request 1.0.0"
+run "${repo}" HEAD
+expect "major version in version.go requests that release" true v0.21.0 v1.0.0 code
+
+for v in 0.20.0 0.21.0 dev 0.22.0-rc1; do
+  repo=$(new_repo "version-${v}")
+  write "${repo}" pkg/version/version.go "package version
+
+const (
+	Version      = \"${v}\"
+	ReleasedDate = \"2026-11-11\"
+)"
+  commit "${repo}" "version ${v}"
+  run "${repo}" HEAD
+  expect "version.go '${v}' (not higher than the tag) gives the next patch" true v0.21.0 v0.21.1 code
+done
+
 # --- Sad path ----------------------------------------------------------------
 
 repo=$(new_repo args)
@@ -227,9 +288,12 @@ expect_fail "go list failure is reported, not treated as no deps" "go list faile
 # --- Edge cases --------------------------------------------------------------
 
 repo=$(new_repo non-release)
+write "${repo}" examples/client/go.mod "module example.com/fixture/examples/client"
+commit "${repo}" "nested module"
+git -C "${repo}" tag -f -a v0.21.0 -m v0.21.0 >/dev/null
 for path in pkg/lib/lib_test.go pkg/lib/testdata/fixture.go internal/x/testdata/a.go \
-  examples/client/main.go test/x.go scripts/x.sh .github/workflows/x.yaml \
-  README.md docs/x.md Makefile go.sum pkg/lib/notes.txt; do
+  examples/client/main.go examples/client/sub/x.go test/x.go vendor/m/x.go scripts/x.sh \
+  .github/workflows/x.yaml README.md docs/x.md Makefile go.sum pkg/lib/notes.txt; do
   write "${repo}" "${path}" "content of ${path}"
 done
 commit "${repo}" "chore: everything but code"
@@ -334,6 +398,26 @@ if [[ "$(git -C "${repo}" worktree list | wc -l | tr -d ' ')" == 1 ]]; then
 else
   fail "temporary worktree is removed" "$(git -C "${repo}" worktree list)"
 fi
+
+# A dependency linked only on windows must still count on a linux/darwin runner.
+repo="${work}/seam-goos"
+mkdir -p "${repo}/winonly" "${repo}/pkg/lib"
+git -C "${repo}" init -q -b main
+printf 'module example.com/winonly\n\ngo 1.26.0\n' >"${repo}/winonly/go.mod"
+printf 'package winonly\n' >"${repo}/winonly/w.go"
+printf 'module example.com/fixture\n\ngo 1.26.0\n\nrequire example.com/winonly v1.0.0\n\nreplace example.com/winonly => ./winonly\n' >"${repo}/go.mod"
+printf 'package lib\n' >"${repo}/pkg/lib/lib.go"
+printf 'package lib\n\nimport _ "example.com/winonly"\n' >"${repo}/pkg/lib/lib_windows.go"
+commit "${repo}" base
+git -C "${repo}" tag -a v0.21.0 -m v0.21.0
+sed -i.bak 's#winonly v1.0.0#winonly v1.1.0#' "${repo}/go.mod" && rm "${repo}/go.mod.bak"
+commit "${repo}" "bump winonly"
+run "${repo}" HEAD RUNTIME_MODULES=-unset GOFLAGS= GOPROXY=off
+expect "real go list: windows-only dependency counts on any runner" true v0.21.0 v0.21.1 deps:example.com/winonly
+
+# Re-run the plain seam case so the key check below sees a full release output.
+repo=$(seam_repo seam-keys go.uber.org/zap)
+run "${repo}" HEAD RUNTIME_MODULES=-unset
 
 # The workflow appends stdout to $GITHUB_OUTPUT and reads these keys.
 keys=$(sed -E 's/=.*//' <<<"${out}" | paste -sd' ' -)
