@@ -180,10 +180,10 @@ mkdir -p "${mod}"
 cp -R "${real_root}/go.mod" "${real_root}/go.sum" "${real_root}/pkg" "${real_root}/internal" "${mod}/"
 run "${mod}/pkg/version/version.go" 0.21.1 2026-11-11
 if [[ "${rc}" == 0 ]] && (cd "${mod}" && go build ./pkg/version ./pkg/client &&
-  go test -count=1 -run 'UserAgent' ./pkg/client) >"${work}/seam" 2>&1; then
-  pass "module builds and User-Agent tests pass with the rewritten version"
+  go test -count=1 ./pkg/version && go test -count=1 -run 'UserAgent' ./pkg/client) >"${work}/seam" 2>&1; then
+  pass "module builds and version + User-Agent tests pass with the rewritten version"
 else
-  fail "module builds and User-Agent tests pass with the rewritten version" "rc=${rc}; $(cat "${work}/seam")"
+  fail "module builds and version + User-Agent tests pass with the rewritten version" "rc=${rc}; $(cat "${work}/seam")"
 fi
 
 echo
