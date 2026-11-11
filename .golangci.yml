@@ -1,4 +1,6 @@
-# https://golangci-lint.run/usage/configuration
+# https://golangci-lint.run/docs/configuration/
+
+version: "2"
 
 # Options for analysis running.
 run:
@@ -10,3 +12,8 @@ run:
   # If false, golangci-lint acquires file lock on start.
   # Default: false
   allow-parallel-runners: true
+
+output:
+  # The pre-commit hook (Bahjat/pre-commit-golang run-golangci-lint.sh) fails on
+  # any output, and v2 otherwise prints an "N issues." summary even when clean.
+  show-stats: false
