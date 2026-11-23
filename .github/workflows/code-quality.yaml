@@ -71,6 +71,11 @@ jobs:
         run: |
           ./scripts/next-release_test.sh
           ./scripts/bump-version_test.sh
+      # Needs Go: its seam case runs the real `go mod edit`.
+      - name: Test scripts/test-otel-contrib.sh
+        run: ./scripts/test-otel-contrib_test.sh
+      - name: Check for known vulnerabilities
+        run: make govulncheck
       - name: Install pre-commit
         run: |
           python -m pip install -U pip

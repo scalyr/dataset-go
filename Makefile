@@ -42,9 +42,11 @@ help: ## List the documented targets
 check: ## Everything to run before opening a PR
 	@# Sequential even under -j: pre-commit may rewrite files the other steps read.
 	$(MAKE) lint
+	$(MAKE) govulncheck
 	$(MAKE) test-scripts
 	$(MAKE) test
 	$(MAKE) build-examples
+	$(MAKE) test-otel-contrib
 
 .PHONY: pre-commit-install
 pre-commit-install: ## Install pre-commit hooks and the Go dev tools
@@ -68,6 +70,7 @@ test-scripts: ## Test the shell scripts in scripts/
 	./scripts/next-release_test.sh
 	./scripts/bump-version_test.sh
 	./scripts/run-stress-test_test.sh
+	./scripts/test-otel-contrib_test.sh
 
 .PHONY: build
 build:
@@ -128,6 +131,18 @@ STRESS_EVENTS ?= 10000
 stress-test: ## Stress test: every bucket used once, then max congestion
 	./scripts/run-stress-test.sh $(STRESS_EVENTS) $(STRESS_EVENTS)
 	./scripts/run-stress-test.sh $(STRESS_EVENTS) -1
+
+# Clones opentelemetry-collector-contrib once (CONTRIB_DIR) and resets it to the
+# latest main on every run, see the script's header.
+.PHONY: test-otel-contrib
+test-otel-contrib: ## Run contrib's datasetexporter lint and tests against this checkout (network)
+	./scripts/test-otel-contrib.sh
+
+# Pinned, so a govulncheck release cannot change the result of an unchanged commit.
+GOVULNCHECK_VERSION ?= v1.10.0
+.PHONY: govulncheck
+govulncheck: ## Check this module's code and dependencies for known vulnerabilities (network)
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 .PHONY: test-ssl-certificates
 test-ssl-certificates: ## Check the readme example accepts good and rejects bad TLS certs (network)

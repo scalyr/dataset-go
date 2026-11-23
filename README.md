@@ -103,6 +103,40 @@ make sure that happens within a day. A new Go release can therefore turn a
 nightly run red without any code change. `make go-versions` prints the current
 values, and `make test-scripts` runs the script's tests.
 
+### Testing against the OpenTelemetry exporter
+
+`make test-otel-contrib` ([`test-otel-contrib.sh`](scripts/test-otel-contrib.sh))
+runs the checks of the contrib
+[`datasetexporter`](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/datasetexporter)
+with this checkout in place of the release contrib pins. It runs
+`go mod edit -replace`, then contrib's own component targets from
+[`Makefile.Common`](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/Makefile.Common):
+`make tidy`, then those of the checks contrib's CI runs on every module that
+dataset-go can affect (`lint`, `test`, `test-no-race`, `mod-integration-test`),
+as
+[CONTRIBUTING.md](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md)
+asks of a contrib PR, plus `benchmark`, which contrib's CI does not run. The
+script's header says why the other targets are left out. Contrib's
+`govulncheck` is one of them: it reports on contrib's dependencies, which we do
+not control. `make govulncheck` checks this module instead, in Code Quality
+and `make check`. `CONTRIB_TARGETS` picks other checks (e.g. `CONTRIB_TARGETS=test` for a
+quick local run). The
+[`otel-contrib`](.github/workflows/otel-contrib.yaml) workflow runs it for every
+PR, every push to `main` and nightly, and caches Go modules and build output
+keyed on contrib's `go.sum` (see the review note in the workflow). `make
+check` runs it too.
+
+Contrib is cloned once into `CONTRIB_DIR` (default
+`~/.cache/dataset-go/opentelemetry-collector-contrib`) and reused. **Every run
+resets that clone to the latest `main` and deletes all local changes in it**, so
+do not point `CONTRIB_DIR` at a clone you work in. The script refuses a
+directory whose `origin` is not `CONTRIB_REPO`. Contrib's `go.mod` may require a
+newer Go than you have installed; `GOTOOLCHAIN` defaults to `auto`, so Go
+downloads it.
+
+The check is not required for merging: contrib `main` can break for reasons
+unrelated to this library, and that would block Dependabot auto-merge.
+
 ### Automated updates
 
 The repository is meant to keep itself current without a maintainer.
