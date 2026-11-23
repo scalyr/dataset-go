@@ -26,10 +26,12 @@ fail() {
 }
 
 # Fake `go`: `go build -race -o stress` writes a stub that records its args.
+# With STUB_BUILD_FAIL set, the build fails and writes nothing.
 mkdir -p "${work}/bin"
 cat >"${work}/bin/go" <<'EOF'
 #!/usr/bin/env bash
 [[ "$1" == build ]] || { echo "fake go: unexpected: $*" >&2; exit 2; }
+[[ -z "${STUB_BUILD_FAIL:-}" ]] || { echo "fake go: build failed" >&2; exit 1; }
 out=""
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == -o ]]; then out="$2"; shift; fi
@@ -61,10 +63,15 @@ run() {
   rc=$?
 }
 
+# args_are TREE EXPECTED : the stub in TREE was called with exactly EXPECTED.
+args_are() {
+  [[ "$(cat "$1/examples/stress/args.txt" 2>/dev/null)" == "$2" ]]
+}
+
 # --- happy path: explicit arguments reach the binary ---
 t=$(new_tree explicit)
 run "${t}" 123 45
-if [[ ${rc} -eq 0 ]] && grep -q -- "--events=123 --buckets=45 " "${t}/examples/stress/args.txt" 2>/dev/null; then
+if [[ ${rc} -eq 0 ]] && args_are "${t}" "--events=123 --buckets=45 --sleep=10ms"; then
   pass "explicit arguments are passed as --events/--buckets"
 else
   fail "explicit arguments are passed as --events/--buckets" "rc=${rc} out=${out}"
@@ -73,7 +80,7 @@ fi
 # --- edge: no arguments use the defaults ---
 t=$(new_tree defaults)
 run "${t}"
-if [[ ${rc} -eq 0 ]] && grep -q -- "--events=10000 --buckets=10000 " "${t}/examples/stress/args.txt" 2>/dev/null; then
+if [[ ${rc} -eq 0 ]] && args_are "${t}" "--events=10000 --buckets=10000 --sleep=10ms"; then
   pass "no arguments default to 10000 events and 10000 buckets"
 else
   fail "no arguments default to 10000 events and 10000 buckets" "rc=${rc} out=${out}"
@@ -82,7 +89,7 @@ fi
 # --- edge: -1 buckets (max congestion, used by CI) is accepted ---
 t=$(new_tree congestion)
 run "${t}" 10000 -1
-if [[ ${rc} -eq 0 ]] && grep -q -- "--buckets=-1 " "${t}/examples/stress/args.txt" 2>/dev/null; then
+if [[ ${rc} -eq 0 ]] && args_are "${t}" "--events=10000 --buckets=-1 --sleep=10ms"; then
   pass "-1 buckets is accepted"
 else
   fail "-1 buckets is accepted" "rc=${rc} out=${out}"
@@ -95,6 +102,15 @@ if [[ ${rc} -eq 3 && "${out}" == *"stub stress output"* ]]; then
   pass "the stress binary's exit status is propagated"
 else
   fail "the stress binary's exit status is propagated" "rc=${rc} out=${out}"
+fi
+
+# --- sad: a failing build fails the script, and no stress run happens ---
+t=$(new_tree build-fails)
+STUB_BUILD_FAIL=1 run "${t}" 10 10
+if [[ ${rc} -ne 0 && "${out}" == *"build failed"* && ! -e "${t}/examples/stress/args.txt" ]]; then
+  pass "a failing build makes the script fail without running stress"
+else
+  fail "a failing build makes the script fail without running stress" "rc=${rc} out=${out}"
 fi
 
 # --- sad: non-integer arguments are rejected before building ---
@@ -133,6 +149,33 @@ if grep -q "stub stress output" "${t}/examples/stress/out-7-8.log" 2>/dev/null; 
 else
   fail "output is logged to examples/stress/out-7-8.log" "rc=${rc} out=${out}"
 fi
+
+# --- conformance: every invocation in CI and the Makefile passes validation ---
+# Runs each real invocation against the fixture, so a caller and the script's
+# argument rules cannot drift apart unnoticed.
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+invocations=$(
+  {
+    grep -hoE 'run-stress-test\.sh( +[^ ]+){0,2}$' "${repo}/.github/workflows/stress-tests.yaml"
+    make -s -n -C "${repo}" stress-test | grep -oE 'run-stress-test\.sh( +[^ ]+){0,2}$'
+  } | sed 's/^run-stress-test\.sh *//'
+)
+count=$(grep -c . <<<"${invocations}")
+if [[ ${count} -ge 4 ]]; then
+  pass "found ${count} invocations in stress-tests.yaml and the Makefile"
+else
+  fail "found ${count} invocations in stress-tests.yaml and the Makefile, expected at least 4"
+fi
+while read -r args; do
+  t=$(new_tree "caller-${args// /_}")
+  # shellcheck disable=SC2086 # split on purpose
+  run "${t}" ${args}
+  if [[ ${rc} -eq 0 ]]; then
+    pass "caller invocation '${args}' is accepted"
+  else
+    fail "caller invocation '${args}' is accepted" "rc=${rc} out=${out}"
+  fi
+done <<<"${invocations}"
 
 echo
 echo "${passed} passed, ${failed} failed"
