@@ -17,8 +17,9 @@ Renovate updates that exporter to each new release, so:
 - **The library runs inside a collector process.** Never call `Logger.Fatal`, `os.Exit` or `panic` on
   any path that input data can reach. Log the problem, count it in `statistics`, and drop or return an
   error. The existing exceptions are listed under "Known gaps". They are not patterns to copy.
-- `make test-otel-contrib` (and the `OTel Contrib Tests` workflow) runs contrib's `make lint` and
-  `make test` for `exporter/datasetexporter` with this checkout `replace`d in. If it fails, your change breaks the
+- `make test-otel-contrib` (and the `OTel Contrib Tests` workflow) runs contrib's own checks (`make
+  lint`, `test`, `mod-integration-test`, ...) for `exporter/datasetexporter` with this checkout
+  `replace`d in. If it fails, your change breaks the
   consumer. The contrib clone in `CONTRIB_DIR` is reset to the latest `main` on every run.
 - Every release goes into the `User-Agent` (`pkg/version/version.go`), and DataSet usage is tracked by
   it.

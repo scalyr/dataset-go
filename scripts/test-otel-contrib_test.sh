@@ -93,11 +93,15 @@ exp="${dir}/exporter/datasetexporter"
 expected="${exp}|go mod edit -replace=github.com/scalyr/dataset-go=${tree_real}
 ${exp}|make tidy
 ${exp}|make lint
-${exp}|make test"
+${exp}|make govulncheck
+${exp}|make test
+${exp}|make test-no-race
+${exp}|make mod-integration-test
+${exp}|make benchmark"
 if [[ ${rc} -eq 0 && "${calls}" == "${expected}" ]]; then
-  pass "fresh clone runs go mod edit, then make tidy, lint and test in the exporter dir"
+  pass "fresh clone runs go mod edit, then make tidy and the default checks in the exporter dir"
 else
-  fail "fresh clone runs go mod edit, then make tidy, lint and test in the exporter dir" "rc=${rc} out=${out} calls=${calls}"
+  fail "fresh clone runs go mod edit, then make tidy and the default checks in the exporter dir" "rc=${rc} out=${out} calls=${calls}"
 fi
 sha1=$(git -C "${seed}" rev-parse HEAD)
 if [[ "$(head_of "${dir}")" == "${sha1}" && "${out}" == *"at ${sha1}"* ]]; then
@@ -186,17 +190,19 @@ fi
 
 # --- sad: a failing contrib target fails the script and stops later ones ---
 STUB_MAKE_FAIL=lint run "${tree}" "${dir}"
-if [[ ${rc} -ne 0 && "${out}" == *"lint failed"* && "${calls}" == *"|make lint" && "${calls}" != *"make test"* ]]; then
-  pass "a failing make lint fails the script and make test does not run"
+if [[ ${rc} -ne 0 && "${out}" == *"lint failed"* && "${calls}" == *"|make lint" && "${calls}" != *"make govulncheck"* ]]; then
+  pass "a failing make lint fails the script and later targets do not run"
 else
-  fail "a failing make lint fails the script and make test does not run" "rc=${rc} out=${out} calls=${calls}"
+  fail "a failing make lint fails the script and later targets do not run" "rc=${rc} out=${out} calls=${calls}"
 fi
-STUB_MAKE_FAIL="test" run "${tree}" "${dir}"
-if [[ ${rc} -ne 0 && "${calls}" == *"|make test" ]]; then
-  pass "a failing make test fails the script"
-else
-  fail "a failing make test fails the script" "rc=${rc} out=${out}"
-fi
+for target in govulncheck test test-no-race mod-integration-test benchmark; do
+  STUB_MAKE_FAIL="${target}" run "${tree}" "${dir}"
+  if [[ ${rc} -ne 0 && "${calls}" == *"|make ${target}" ]]; then
+    pass "a failing make ${target} fails the script"
+  else
+    fail "a failing make ${target} fails the script" "rc=${rc} out=${out}"
+  fi
+done
 STUB_MAKE_FAIL=tidy run "${tree}" "${dir}"
 if [[ ${rc} -ne 0 && "${calls}" != *"make lint"* ]]; then
   pass "a failing make tidy fails the script before any check"

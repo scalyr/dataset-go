@@ -1,8 +1,9 @@
 name: OTel Contrib Tests
 
-# Runs contrib's `make lint` and `make test` for the datasetexporter against
-# this commit (scripts/test-otel-contrib.sh), so a change that breaks the
-# exporter is caught here and not in the next Renovate bump in contrib.
+# Runs contrib's own checks (make lint, test, mod-integration-test, ...) for the
+# datasetexporter against this commit (scripts/test-otel-contrib.sh), so a
+# change that breaks the exporter is caught here and not in the next Renovate
+# bump in contrib.
 #
 # Not a required check on purpose: contrib main can break for reasons
 # unrelated to dataset-go, and a required check would then block Dependabot

@@ -111,10 +111,12 @@ runs the checks of the contrib
 with this checkout in place of the release contrib pins. It runs
 `go mod edit -replace`, then contrib's own component targets from
 [`Makefile.Common`](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/Makefile.Common):
-`make tidy`, then `make lint` and `make test`, the commands
+`make tidy`, then the checks contrib's CI runs on every module (`lint`,
+`govulncheck`, `test`, `test-no-race`, `mod-integration-test`, `benchmark`), as
 [CONTRIBUTING.md](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md)
-asks of a contrib PR. `CONTRIB_TARGETS` picks other checks (e.g.
-`CONTRIB_TARGETS=test` to skip lint locally). The
+asks of a contrib PR. The script's header says why the other targets are left
+out. `CONTRIB_TARGETS` picks other checks (e.g. `CONTRIB_TARGETS=test` for a
+quick local run). The
 [`otel-contrib`](.github/workflows/otel-contrib.yaml) workflow runs it for every
 PR, every push to `main` and nightly. `make check` runs it too.
 

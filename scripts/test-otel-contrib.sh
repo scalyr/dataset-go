@@ -3,8 +3,9 @@
 # Runs the checks of the OpenTelemetry Collector `datasetexporter` against this
 # checkout of dataset-go instead of the release contrib pins, so a change that
 # would break the exporter fails here rather than in the next Renovate bump.
-# The checks are contrib's own per-component make targets (Makefile.Common),
-# as CONTRIBUTING.md asks of a contrib PR: `make lint` and `make test`.
+# The checks are contrib's own per-component make targets (Makefile.Common):
+# the ones its CI (build-and-test.yml) runs on every module, as CONTRIBUTING.md
+# asks of a contrib PR.
 #
 # Usage: scripts/test-otel-contrib.sh
 #
@@ -16,9 +17,26 @@
 #   CONTRIB_REPO  - contrib clone URL (default the upstream GitHub repo)
 #   CONTRIB_REF   - branch to test against (default main)
 #   CONTRIB_TARGETS - contrib make targets run, in order, in the exporter directory after
-#                   `make tidy` (default "lint test"). Contrib's make variables, e.g.
-#                   GOTEST_OPT, can be overridden through the environment.
+#                   `make tidy` (default: see DEFAULT_TARGETS). Contrib's make variables,
+#                   e.g. GOTEST_OPT, can be overridden through the environment.
 #   GOTOOLCHAIN   - default auto: contrib's go.mod may need a newer Go than is installed
+#
+# Makefile.Common targets left out of the default, and why:
+#   - test-with-cover, test-with-junit*, do-*-with-cover, buildtest, runbuilttest:
+#     the same tests as `test` and `mod-integration-test`, plus reporting.
+#   - test-twice, run-changed-tests, for-affected-components: contrib's flake
+#     hunting for changed .go files; a dataset-go bump changes only go.mod, so
+#     contrib does not run them on it either.
+#   - mod-integration-sudo-test: needs root; the exporter has no Sudo tests.
+#   - check-stability: checks the exporter's coverage profile, which is contrib's.
+#   - generate, mdatagen, schemagen: outputs depend on metadata.yaml and the
+#     exporter's exported Config, which uses no dataset-go types.
+#   - apidiff-*: the exporter's own API (no dataset-go types), against a baseline
+#     built from the base branch.
+#   - fmt, gci, modernize, addlicense, misspell-correction, toolchain: rewrite
+#     contrib's sources; `lint` already runs the read-only checks.
+#   - checklinks (Docker, markdown links), moddownload (part of tidy), help, pwd,
+#     common (= lint test).
 
 set -euo pipefail
 
@@ -31,7 +49,10 @@ usage() {
 CONTRIB_DIR="${CONTRIB_DIR:-${XDG_CACHE_HOME:-${HOME}/.cache}/dataset-go/opentelemetry-collector-contrib}"
 CONTRIB_REPO="${CONTRIB_REPO:-https://github.com/open-telemetry/opentelemetry-collector-contrib.git}"
 CONTRIB_REF="${CONTRIB_REF:-main}"
-CONTRIB_TARGETS="${CONTRIB_TARGETS-lint test}"
+# test-no-race and benchmark find nothing in the exporter today; they are cheap
+# and pick up `//go:build !race` tests or benchmarks contrib adds later.
+DEFAULT_TARGETS="lint govulncheck test test-no-race mod-integration-test benchmark"
+CONTRIB_TARGETS="${CONTRIB_TARGETS-${DEFAULT_TARGETS}}"
 export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
 EXPORTER=exporter/datasetexporter
 
