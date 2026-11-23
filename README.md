@@ -111,14 +111,20 @@ runs the checks of the contrib
 with this checkout in place of the release contrib pins. It runs
 `go mod edit -replace`, then contrib's own component targets from
 [`Makefile.Common`](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/Makefile.Common):
-`make tidy`, then the checks contrib's CI runs on every module (`lint`,
-`govulncheck`, `test`, `test-no-race`, `mod-integration-test`, `benchmark`), as
+`make tidy`, then those of the checks contrib's CI runs on every module that
+dataset-go can affect (`lint`, `test`, `test-no-race`, `mod-integration-test`),
+as
 [CONTRIBUTING.md](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md)
-asks of a contrib PR. The script's header says why the other targets are left
-out. `CONTRIB_TARGETS` picks other checks (e.g. `CONTRIB_TARGETS=test` for a
+asks of a contrib PR, plus `benchmark`, which contrib's CI does not run. The
+script's header says why the other targets are left out. Contrib's
+`govulncheck` is one of them: it reports on contrib's dependencies, which we do
+not control. `make govulncheck` checks this module instead, in Code Quality
+and `make check`. `CONTRIB_TARGETS` picks other checks (e.g. `CONTRIB_TARGETS=test` for a
 quick local run). The
 [`otel-contrib`](.github/workflows/otel-contrib.yaml) workflow runs it for every
-PR, every push to `main` and nightly. `make check` runs it too.
+PR, every push to `main` and nightly, and caches Go modules and build output
+keyed on contrib's `go.sum` (see the review note in the workflow). `make
+check` runs it too.
 
 Contrib is cloned once into `CONTRIB_DIR` (default
 `~/.cache/dataset-go/opentelemetry-collector-contrib`) and reused. **Every run

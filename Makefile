@@ -42,6 +42,7 @@ help: ## List the documented targets
 check: ## Everything to run before opening a PR
 	@# Sequential even under -j: pre-commit may rewrite files the other steps read.
 	$(MAKE) lint
+	$(MAKE) govulncheck
 	$(MAKE) test-scripts
 	$(MAKE) test
 	$(MAKE) build-examples
@@ -136,6 +137,12 @@ stress-test: ## Stress test: every bucket used once, then max congestion
 .PHONY: test-otel-contrib
 test-otel-contrib: ## Run contrib's datasetexporter lint and tests against this checkout (network)
 	./scripts/test-otel-contrib.sh
+
+# Pinned, so a govulncheck release cannot change the result of an unchanged commit.
+GOVULNCHECK_VERSION ?= v1.10.0
+.PHONY: govulncheck
+govulncheck: ## Check this module's code and dependencies for known vulnerabilities (network)
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 .PHONY: test-ssl-certificates
 test-ssl-certificates: ## Check the readme example accepts good and rejects bad TLS certs (network)

@@ -4,10 +4,12 @@
 # checkout of dataset-go instead of the release contrib pins, so a change that
 # would break the exporter fails here rather than in the next Renovate bump.
 # The checks are contrib's own per-component make targets (Makefile.Common):
-# the ones its CI (build-and-test.yml) runs on every module, as CONTRIBUTING.md
-# asks of a contrib PR.
+# those of the per-module checks its CI (build-and-test.yml) runs that dataset-go
+# can affect, as CONTRIBUTING.md asks of a contrib PR, plus `benchmark`.
 #
-# Usage: scripts/test-otel-contrib.sh
+# Usage: scripts/test-otel-contrib.sh [--checkout-only]
+#   --checkout-only - only clone or reset CONTRIB_DIR (CI uses it to key its cache
+#                     on contrib's go.sum before the checks run)
 #
 # Environment:
 #   CONTRIB_DIR   - where contrib is checked out and reused between runs
@@ -35,6 +37,8 @@
 #     built from the base branch.
 #   - fmt, gci, modernize, addlicense, misspell-correction, toolchain: rewrite
 #     contrib's sources; `lint` already runs the read-only checks.
+#   - govulncheck: reports on contrib's whole dependency graph, which dataset-go
+#     does not control. `make govulncheck` checks this repo's code instead.
 #   - checklinks (Docker, markdown links), moddownload (part of tidy), help, pwd,
 #     common (= lint test).
 
@@ -44,14 +48,19 @@ usage() {
   sed -n 's/^# \(Usage: .*\)/\1/p' "$0" >&2
   exit 2
 }
-[[ $# -eq 0 ]] || usage
+checkout_only=false
+if [[ $# -eq 1 && "$1" == --checkout-only ]]; then
+  checkout_only=true
+elif [[ $# -ne 0 ]]; then
+  usage
+fi
 
 CONTRIB_DIR="${CONTRIB_DIR:-${XDG_CACHE_HOME:-${HOME}/.cache}/dataset-go/opentelemetry-collector-contrib}"
 CONTRIB_REPO="${CONTRIB_REPO:-https://github.com/open-telemetry/opentelemetry-collector-contrib.git}"
 CONTRIB_REF="${CONTRIB_REF:-main}"
 # test-no-race and benchmark find nothing in the exporter today; they are cheap
 # and pick up `//go:build !race` tests or benchmarks contrib adds later.
-DEFAULT_TARGETS="lint govulncheck test test-no-race mod-integration-test benchmark"
+DEFAULT_TARGETS="lint test test-no-race mod-integration-test benchmark"
 CONTRIB_TARGETS="${CONTRIB_TARGETS-${DEFAULT_TARGETS}}"
 export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
 EXPORTER=exporter/datasetexporter
@@ -96,8 +105,13 @@ else
   git -C "${dir}" clean --quiet -ffdx
 fi
 
+sha="$(git -C "${CONTRIB_DIR}" rev-parse HEAD)"
+if ${checkout_only}; then
+  echo "${CONTRIB_DIR} is at ${CONTRIB_REPO} ${CONTRIB_REF} ${sha}"
+  exit 0
+fi
 echo "Testing ${module} from ${root}"
-echo "against ${CONTRIB_REPO} ${CONTRIB_REF} at $(git -C "${CONTRIB_DIR}" rev-parse HEAD)"
+echo "against ${CONTRIB_REPO} ${CONTRIB_REF} at ${sha}"
 
 [[ -f "${CONTRIB_DIR}/${EXPORTER}/go.mod" ]] || die "${EXPORTER}/go.mod not found in ${CONTRIB_DIR}"
 cd "${CONTRIB_DIR}/${EXPORTER}"

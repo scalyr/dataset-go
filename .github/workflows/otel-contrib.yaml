@@ -25,8 +25,9 @@ permissions:
   contents: read
 
 jobs:
-  # Special job which automatically cancels old runs for the same branch, prevents runs for the
-  # same file set which has already passed, etc.
+  # Only cancels older runs of the same branch. Unlike the other workflows it
+  # does not skip a tree that already passed: the result also depends on
+  # contrib main, which moves.
   pre_job:
     name: Skip Duplicate Jobs Pre Job
     runs-on: ubuntu-latest
@@ -37,13 +38,14 @@ jobs:
         uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578 # v5.3.2
         with:
           cancel_others: 'true'
+          skip_after_successful_duplicate: 'false'
           github_token: ${{ github.token }}
 
   datasetexporter:
     name: OTel Contrib datasetexporter lint and tests
     runs-on: ubuntu-latest
     needs: [pre_job]
-    if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' || github.event_name != 'pull_request' }}
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
     # The first `make lint` builds contrib's tool set (golangci-lint etc.).
     timeout-minutes: 30
     env:
@@ -56,8 +58,49 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: stable
-          cache: true
-          cache-dependency-path: |
-            go.sum
+          # The module graph and tools here are contrib's, so the cache is keyed
+          # on contrib's go.sum below; setup-go can only key on files that exist
+          # before contrib is cloned.
+          cache: false
+      - name: Check out contrib
+        run: ./scripts/test-otel-contrib.sh --checkout-only
+      # REVIEW BY 2027-03 (added 2026-11 in DPDV-20147): contrib's go.sum changes
+      # almost daily, so the nightly run saves a new ~GB cache most days. Check
+      # Actions -> Caches: if otel-contrib-* entries evict the other workflows'
+      # caches, or restores rarely save time, drop restore-keys or the cache.
+      # Keyed on the exporter's go.sum (its module graph) and contrib's
+      # internal/tools/go.sum (the lint tools built by `make lint`). Our own
+      # go.sum is left out on purpose: each Dependabot bump would otherwise
+      # start a new multi-GB cache.
+      - name: Compute cache key
+        id: cache-key
+        run: |
+          sum=$(cat "${CONTRIB_DIR}/exporter/datasetexporter/go.sum" "${CONTRIB_DIR}/internal/tools/go.sum" | sha256sum | cut -d' ' -f1)
+          prefix="otel-contrib-${RUNNER_OS}-$(go env GOVERSION)-"
+          {
+            echo "prefix=${prefix}"
+            echo "key=${prefix}${sum}"
+            echo "gomodcache=$(go env GOMODCACHE)"
+            echo "gocache=$(go env GOCACHE)"
+          } >>"${GITHUB_OUTPUT}"
+      - name: Restore Go caches
+        id: restore
+        uses: actions/cache/restore@v6
+        with:
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: ${{ steps.cache-key.outputs.prefix }}
+          path: |
+            ${{ steps.cache-key.outputs.gomodcache }}
+            ${{ steps.cache-key.outputs.gocache }}
       - name: Lint and test datasetexporter against this commit
         run: make test-otel-contrib
+      # Saved from main only (push, nightly, manual), which every PR can restore;
+      # PR caches would be scoped to their own branch and only add eviction.
+      - name: Save Go caches
+        if: ${{ !cancelled() && github.event_name != 'pull_request' && steps.restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          key: ${{ steps.cache-key.outputs.key }}
+          path: |
+            ${{ steps.cache-key.outputs.gomodcache }}
+            ${{ steps.cache-key.outputs.gocache }}
