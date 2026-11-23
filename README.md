@@ -103,6 +103,27 @@ make sure that happens within a day. A new Go release can therefore turn a
 nightly run red without any code change. `make go-versions` prints the current
 values, and `make test-scripts` runs the script's tests.
 
+### Testing against the OpenTelemetry exporter
+
+`make test-otel-contrib` ([`test-otel-contrib.sh`](scripts/test-otel-contrib.sh))
+runs the tests of the contrib
+[`datasetexporter`](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/datasetexporter)
+with this checkout in place of the release contrib pins (`go mod edit -replace`,
+then `go mod tidy`). The
+[`otel-contrib`](.github/workflows/otel-contrib.yaml) workflow runs it for every
+PR, every push to `main` and nightly. `make check` runs it too.
+
+Contrib is cloned once into `CONTRIB_DIR` (default
+`~/.cache/dataset-go/opentelemetry-collector-contrib`) and reused. **Every run
+resets that clone to the latest `main` and deletes all local changes in it**, so
+do not point `CONTRIB_DIR` at a clone you work in. The script refuses a
+directory whose `origin` is not `CONTRIB_REPO`. Contrib's `go.mod` may require a
+newer Go than you have installed; `GOTOOLCHAIN` defaults to `auto`, so Go
+downloads it.
+
+The check is not required for merging: contrib `main` can break for reasons
+unrelated to this library, and that would block Dependabot auto-merge.
+
 ### Automated updates
 
 The repository is meant to keep itself current without a maintainer.

@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+#
+# Runs the tests of the OpenTelemetry Collector `datasetexporter` against this
+# checkout of dataset-go instead of the release contrib pins, so a change that
+# would break the exporter fails here rather than in the next Renovate bump.
+#
+# Usage: scripts/test-otel-contrib.sh
+#
+# Environment:
+#   CONTRIB_DIR   - where contrib is checked out and reused between runs
+#                   (default ${XDG_CACHE_HOME:-$HOME/.cache}/dataset-go/opentelemetry-collector-contrib).
+#                   EVERY RUN DISCARDS ALL LOCAL CHANGES IN IT. Do not point it at your own clone;
+#                   the script refuses a directory whose origin is not CONTRIB_REPO.
+#   CONTRIB_REPO  - contrib clone URL (default the upstream GitHub repo)
+#   CONTRIB_REF   - branch to test against (default main)
+#   GOTEST_FLAGS  - flags for `go test` (default "-race -count=1")
+#   GOTOOLCHAIN   - default auto: contrib's go.mod may need a newer Go than is installed
+
+set -euo pipefail
+
+usage() {
+  sed -n 's/^# \{0,1\}//; 7p' "$0" >&2
+  exit 2
+}
+[[ $# -eq 0 ]] || usage
+
+CONTRIB_DIR="${CONTRIB_DIR:-${XDG_CACHE_HOME:-${HOME}/.cache}/dataset-go/opentelemetry-collector-contrib}"
+CONTRIB_REPO="${CONTRIB_REPO:-https://github.com/open-telemetry/opentelemetry-collector-contrib.git}"
+CONTRIB_REF="${CONTRIB_REF:-main}"
+GOTEST_FLAGS="${GOTEST_FLAGS:--race -count=1}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
+EXPORTER=exporter/datasetexporter
+
+die() {
+  echo "test-otel-contrib: $*" >&2
+  exit 1
+}
+
+root="$(cd "$(dirname "$0")/.." && pwd -P)"
+module="$(awk '$1 == "module" { print $2; exit }' "${root}/go.mod")"
+[[ -n "${module}" ]] || die "no module line in ${root}/go.mod"
+
+# Either clone, or reset the cached clone to the latest CONTRIB_REF. An empty
+# directory counts as missing, so a pre-created CI path works.
+if [[ ! -e "${CONTRIB_DIR}" ]] || [[ -d "${CONTRIB_DIR}" && -z "$(ls -A "${CONTRIB_DIR}")" ]]; then
+  echo "Cloning ${CONTRIB_REPO} (${CONTRIB_REF}) into ${CONTRIB_DIR}"
+  mkdir -p "$(dirname "${CONTRIB_DIR}")"
+  git clone --quiet --depth 1 --branch "${CONTRIB_REF}" "${CONTRIB_REPO}" "${CONTRIB_DIR}"
+else
+  # The reset below is destructive, so check this is our clone: the top of its
+  # own work tree (not a subdirectory of some other repo) with the expected origin.
+  [[ -d "${CONTRIB_DIR}" ]] || die "${CONTRIB_DIR} exists and is not a directory"
+  dir="$(cd "${CONTRIB_DIR}" && pwd -P)"
+  top="$(git -C "${dir}" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  [[ -n "${top}" && "$(cd "${top}" && pwd -P)" == "${dir}" ]] ||
+    die "${CONTRIB_DIR} is not a git clone; refusing to touch it (remove it or set CONTRIB_DIR)"
+  # The stored URL, not `remote get-url`: that applies url.*.insteadOf, so a
+  # user rewriting https://github.com/ to ssh would never match CONTRIB_REPO.
+  origin="$(git -C "${dir}" config --get remote.origin.url)" || origin=""
+  [[ "${origin}" == "${CONTRIB_REPO}" ]] ||
+    die "${CONTRIB_DIR} has origin '${origin}', expected '${CONTRIB_REPO}'; refusing to reset it"
+  echo "Updating ${CONTRIB_DIR} to the latest ${CONTRIB_REF}"
+  git -C "${dir}" fetch --quiet --depth 1 origin "${CONTRIB_REF}"
+  git -C "${dir}" checkout --quiet --force --detach FETCH_HEAD
+  git -C "${dir}" clean --quiet -ffdx
+fi
+
+echo "Testing ${module} from ${root}"
+echo "against ${CONTRIB_REPO} ${CONTRIB_REF} at $(git -C "${CONTRIB_DIR}" rev-parse HEAD)"
+
+[[ -f "${CONTRIB_DIR}/${EXPORTER}/go.mod" ]] || die "${EXPORTER}/go.mod not found in ${CONTRIB_DIR}"
+cd "${CONTRIB_DIR}/${EXPORTER}"
+
+# A structured go.mod edit plus tidy: the same change a version bump in
+# contrib would make, with this checkout standing in for the release.
+go mod edit "-replace=${module}=${root}"
+go mod tidy
+go build ./...
+# shellcheck disable=SC2086 # GOTEST_FLAGS is a list of flags
+go test ${GOTEST_FLAGS} ./...

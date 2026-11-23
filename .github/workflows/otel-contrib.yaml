@@ -1,0 +1,61 @@
+name: OTel Contrib Tests
+
+# Runs the opentelemetry-collector-contrib datasetexporter tests against this
+# commit (scripts/test-otel-contrib.sh), so a change that breaks the exporter
+# is caught here and not in the next Renovate bump in contrib.
+#
+# Not a required check on purpose: contrib main can break for reasons
+# unrelated to dataset-go, and a required check would then block Dependabot
+# auto-merge. Nightly runs catch breakage caused by contrib moving on.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write  # Needed for skip-duplicate-jobs job
+  contents: read
+
+jobs:
+  # Special job which automatically cancels old runs for the same branch, prevents runs for the
+  # same file set which has already passed, etc.
+  pre_job:
+    name: Skip Duplicate Jobs Pre Job
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578 # v5.3.2
+        with:
+          cancel_others: 'true'
+          github_token: ${{ github.token }}
+
+  datasetexporter:
+    name: OTel Contrib datasetexporter tests
+    runs-on: ubuntu-latest
+    needs: [pre_job]
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' || github.event_name != 'pull_request' }}
+    timeout-minutes: 20
+    env:
+      # contrib's go.mod decides the Go version; auto downloads it if newer.
+      GOTOOLCHAIN: auto
+      CONTRIB_DIR: ${{ runner.temp }}/opentelemetry-collector-contrib
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: true
+          cache-dependency-path: |
+            go.sum
+      - name: Test datasetexporter against this commit
+        run: make test-otel-contrib

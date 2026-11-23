@@ -54,6 +54,8 @@ jobs:
         run: ./scripts/go-versions_test.sh
       - name: Test scripts/run-stress-test.sh
         run: ./scripts/run-stress-test_test.sh
+      - name: Test scripts/test-otel-contrib.sh
+        run: ./scripts/test-otel-contrib_test.sh
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
