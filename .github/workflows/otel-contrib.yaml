@@ -51,8 +51,11 @@ jobs:
     env:
       # contrib's go.mod decides the Go version; auto downloads it if newer.
       GOTOOLCHAIN: auto
-      CONTRIB_DIR: ${{ runner.temp }}/opentelemetry-collector-contrib
     steps:
+      # Not in the job's env: the runner context is not available there, and
+      # using it makes the whole workflow file invalid.
+      - name: Set CONTRIB_DIR
+        run: echo "CONTRIB_DIR=${RUNNER_TEMP}/opentelemetry-collector-contrib" >>"${GITHUB_ENV}"
       - uses: actions/checkout@v7
       - name: Set up Go
         uses: actions/setup-go@v7
