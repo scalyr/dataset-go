@@ -17,7 +17,7 @@
 
 SHELL = /bin/bash
 ifeq ($(shell uname -s),Windows)
-	.SHELLFLAGS = /e /o pipefile /c
+	.SHELLFLAGS = /e /o pipefail /c
 else
 	.SHELLFLAGS = -e -o pipefail -c
 endif

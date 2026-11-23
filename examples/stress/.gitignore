@@ -15,8 +15,8 @@
 vendor/
 
 # build files (`stress` from run-stress-test.sh; a manual `go build` names it after the module: client)
-stress
-client
+/stress
+/client
 
 # log files
 *.log
