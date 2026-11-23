@@ -17,7 +17,7 @@
 
 SHELL = /bin/bash
 ifeq ($(shell uname -s),Windows)
-	.SHELLFLAGS = /e /o pipefile /c
+	.SHELLFLAGS = /e /o pipefail /c
 else
 	.SHELLFLAGS = -e -o pipefail -c
 endif
@@ -32,41 +32,60 @@ GOTEST=$(GOCMD) test
 
 .DEFAULT_GOAL := pre-commit-run
 
+# Targets with a `## description` are listed by `make help`.
+.PHONY: help
+help: ## List the documented targets
+	@grep -hE '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
+
+.PHONY: check
+check: ## Everything to run before opening a PR
+	@# Sequential even under -j: pre-commit may rewrite files the other steps read.
+	$(MAKE) lint
+	$(MAKE) test-scripts
+	$(MAKE) test
+	$(MAKE) build-examples
+
 .PHONY: pre-commit-install
-pre-commit-install:
+pre-commit-install: ## Install pre-commit hooks and the Go dev tools
 	pre-commit install
 	./scripts/install-dev-tools.sh
 
 .PHONY: pre-commit-run
-pre-commit-run:
+pre-commit-run: ## Run all pre-commit hooks on all files
 	pre-commit run -a
 
+.PHONY: lint
+lint: pre-commit-run ## Lint and format checks (alias of pre-commit-run)
+
 .PHONY: go-versions
-go-versions:
+go-versions: ## Print the Go versions CI tests with
 	./scripts/go-versions.sh --json
 
 .PHONY: test-scripts
-test-scripts:
+test-scripts: ## Test the shell scripts in scripts/
 	./scripts/go-versions_test.sh
 	./scripts/next-release_test.sh
 	./scripts/bump-version_test.sh
+	./scripts/run-stress-test_test.sh
 
+.PHONY: build
 build:
 	echo "Done"
 
 .PHONY: test
-test: test-all
+test: test-all ## Alias of test-all
 
 .PHONY: test-unit
-test-unit:
+test-unit: ## Unit tests with -race, without long_running tests
 	time $(GOTEST) $(GOTEST_OPT) ./...
 
 .PHONY: test-all
-test-all:
+test-all: ## All tests with -race, including long_running ones
 	time $(GOTEST) $(GOTEST_LONG_RUNNING_OPT) ./...
 
 .PHONY: test-many-times
-test-many-times:
+test-many-times: ## Run `make test` COUNT times (default 50) to find flaky tests
 	set -e; \
 	if [ "x$(COUNT)" == "x" ]; then \
 		COUNT=50; \
@@ -83,32 +102,36 @@ test-many-times:
 	echo "Grep for FAIL - no lines should be found"; \
 	! grep -H FAIL $${prefix}-*.log;
 
-foo:
-	! false
-
 .PHONY: coverage
-coverage: coverage-all
+coverage: coverage-all ## Alias of coverage-all
 
 .PHONY: coverage-unit
-coverage-unit:
+coverage-unit: ## Coverage of unit tests into coverage.html
 	$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE) ./...
 	$(GOCMD) tool cover -html=coverage.txt -o coverage.html
 
 .PHONY: coverage-all
-coverage-all:
+coverage-all: ## Coverage of all tests into coverage.html
 	$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE_LONG_RUNNING) ./...
 	$(GOCMD) tool cover -html=coverage.txt -o coverage.html
 
 .PHONY: build-examples
-build-examples:
+build-examples: ## Build every module in examples/ (output discarded)
 	for d in examples/*; do \
-  		echo "Build example: $${d}"; \
-		(cd $${d}; go mod tidy && go build -race) || exit 1; \
+		echo "Build example: $${d}"; \
+		(cd $${d}; go mod tidy && go build -race -o /dev/null) || exit 1; \
 	done;
 
+# The two scenarios CI runs, see .github/workflows/stress-tests.yaml.
+STRESS_EVENTS ?= 10000
+.PHONY: stress-test
+stress-test: ## Stress test: every bucket used once, then max congestion
+	./scripts/run-stress-test.sh $(STRESS_EVENTS) $(STRESS_EVENTS)
+	./scripts/run-stress-test.sh $(STRESS_EVENTS) -1
+
 .PHONY: test-ssl-certificates
-test-ssl-certificates:
+test-ssl-certificates: ## Check the readme example accepts good and rejects bad TLS certs (network)
 	cd scripts; ./test-ssl-certificates.sh
 
 .PHONY: test-ci
-test-ci: test-all build-examples test-ssl-certificates
+test-ci: test-all build-examples test-ssl-certificates ## All tests, example builds and TLS checks

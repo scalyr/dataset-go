@@ -57,6 +57,9 @@ see [CHANGELOG.md](CHANGELOG.md) document.
 
 ## Developing
 
+AI coding agents: see [AGENTS.md](AGENTS.md) (also loaded by Claude Code through `CLAUDE.md`).
+`make help` lists the Make targets.
+
 ### Install Dev Tools
 
 Run following script - [install-dev-tools.sh](scripts/install-dev-tools.sh) - to install
