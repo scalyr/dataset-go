@@ -52,6 +52,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Test scripts/go-versions.sh
         run: ./scripts/go-versions_test.sh
+      - name: Test scripts/run-stress-test.sh
+        run: ./scripts/run-stress-test_test.sh
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
