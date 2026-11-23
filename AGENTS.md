@@ -16,22 +16,22 @@ Renovate updates that exporter to each new release, so:
   If a breaking change is unavoidable, say so in the PR description.
 - **The library runs inside a collector process.** Never call `Logger.Fatal`, `os.Exit` or `panic` on
   any path that input data can reach. Log the problem, count it in `statistics`, and drop or return an
-  error. The existing `Logger.Fatal` in `processEvents` is a known bug (DPDV-20058), not a pattern to
-  copy.
+  error. The existing exceptions are listed under "Known gaps". They are not patterns to copy.
 - Every release goes into the `User-Agent` (`pkg/version/version.go`), and DataSet usage is tracked by
   it.
 
-## Architecture in one paragraph
+## Architecture
 
 Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) before you change `pkg/client`, `pkg/buffer` or
-`pkg/session_manager`. Its codes (`D1`, `U2`, `C3`, `I2.2`, ...) explain why the design is what it is.
-In short, the collector calls `DataSetClient.AddEvents` in parallel. Events are grouped into sessions
-by a key built from `group_by` fields and published through `session_manager`. One goroutine per
-session (`processEvents`) packs them into a `buffer.Buffer`, which can hold at most `LimitBufferSize`
-(about 5.9 MB before compression, see `D3`). Full or expired buffers are published to a second topic.
-Its subscriber sends each one with `sendAddEventsBuffer`, one request at a time per session (`D1`),
-with retries. Errors switch the whole client into a mode that
-rejects new batches (see "Error Propagation").
+`pkg/session_manager`. Its codes (`D1`, `C3`, `I2.2`, ...) explain why the design is what it is. The
+constraints that are easiest to break:
+
+- DataSet accepts only one request at a time per session (`D1`). Never send a session's buffers in
+  parallel.
+- A payload is at most `LimitBufferSize` (about 5.9 MB before compression, `D3`). Oversized events
+  are trimmed, not split.
+- `AddEvents` is called concurrently by the collector (`U3`), and its errors are how the collector
+  learns to back off (`C5`). Do not swallow them.
 
 ## Performance is a requirement
 
@@ -46,21 +46,36 @@ allocations per event matter more than brevity or elegance. The hot path has two
   Keep the existing byte-level serialization instead of building intermediate structures.
 - Do not hold a mutex across I/O or channel sends. Do not create unbounded goroutines or channels. The
   design gives each session one goroutine (`I3`).
-- Log levels: no `Info` or `Debug` logs for each event. Guard expensive `zap` fields with
-  `Logger.Core().Enabled(...)` if you need them.
-- **Stress test every hot-path change** with `make stress-test` (the same two scenarios as CI), on
-  `main` and on your branch. Put the before and after numbers in the PR. Each run writes two files to
-  `examples/stress/`:
-  - `out-<events>-<buckets>.log` is the console log. Its final `Transfer Stats` line has
-    `processingS`, `throughputMBpS` and `successRate`.
-  - `log-<version>-<ms>.log` is a TSV written every second, with event and buffer counters
-    (`EvDropped`, `EvBroken`, ...), `HeapAlloc` and `Mallocs`.
+- Log levels: no `Info` or `Debug` logs for each event. If an expensive `zap` field is unavoidable,
+  build it only when the level is enabled (`Logger.Core().Enabled(...)`).
+- If a PR claims a speed-up, include a `testing.B` benchmark run with `-benchmem` (see "Known gaps").
 
-  Compare `processingS`, the dropped and broken counts (these must stay 0) and the peak `HeapAlloc`.
-  A green Windows stress job in CI proves nothing yet. The script does not actually run there
-  (DPDV-20231).
-- There are no Go benchmarks yet. Adding them and a `bench-compare` workflow is DPDV-20230. Until
-  then, if a PR claims a speed-up, it should include a `testing.B` benchmark run with `-benchmem`.
+### Stress testing a hot-path change
+
+Run `make stress-test` (the same two scenarios as CI) on `main` and on your branch, and put both sets
+of numbers in the PR. `make stress-test` tests whatever is checked out, so build the baseline in a
+separate worktree. Its results land in `../dataset-go-main/examples/stress/`:
+
+```bash
+git worktree add ../dataset-go-main origin/main
+(cd ../dataset-go-main && ./scripts/run-stress-test.sh 10000 10000 && ./scripts/run-stress-test.sh 10000 -1)
+make stress-test
+git worktree remove ../dataset-go-main
+```
+
+Each scenario writes two files to `examples/stress/`:
+
+- `out-<events>-<buckets>.log` is the console log. Its last `Transfer Stats:` line has `processingS`,
+  `throughputMBpS` and `successRate` (this must be 1).
+- `log-<version>-<ms>.log` is a TSV written every second. Summarize it with:
+
+  ```bash
+  for f in examples/stress/log-*.log; do LC_ALL=C awk -F'\t' 'NR==1{for(i=1;i<=NF;i++)c[$i]=i;next}
+    $c["HeapAlloc"]>m{m=$c["HeapAlloc"]} {b=$c["EvBroken"];d=$c["EvDropped"]}
+    END{printf "%s peakHeapAllocMB=%.1f EvBroken=%d EvDropped=%d\n",FILENAME,m/1048576,b,d}' "$f"; done
+  ```
+
+  `EvBroken` and `EvDropped` must stay 0. Compare the peak heap and `processingS` with the baseline.
 
 ## Commands
 
@@ -112,3 +127,14 @@ Run `make help` for the full list. These are the targets that matter:
   `scripts/go-versions.sh`. See README → "Go versions in CI".
 - Dependabot PRs are merged automatically once the required checks pass. A change that makes CI
   flaky blocks every dependency update.
+
+## Known gaps
+
+Delete an entry when its ticket is done.
+
+- DPDV-20058: `processEvents` (`pkg/client/add_events.go`) calls
+  `Logger.Fatal("Bundle was not added for second time!")`. That exits the host process when a
+  bundle's Thread or Log alone exceeds the buffer limit.
+- DPDV-20230: there are no Go benchmarks and no `bench-compare` target yet.
+- DPDV-20231: on `windows-latest` the stress steps run under `pwsh`, which does not execute the `.sh`
+  script. The step passes with no output, so a green Windows stress job proves nothing.
