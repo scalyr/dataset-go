@@ -29,6 +29,8 @@ fail() {
 export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+# The default case needs it unset; actions/setup-go exports GOTOOLCHAIN=local.
+unset GOTOOLCHAIN
 
 # Fake `go` and `make`: append "<cwd>|<tool> <args>" to CALL_LOG. `go` fails
 # with STUB_GO_FAIL set, and otherwise hands `go mod edit` to the real go (it
