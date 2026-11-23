@@ -17,8 +17,8 @@ Renovate updates that exporter to each new release, so:
 - **The library runs inside a collector process.** Never call `Logger.Fatal`, `os.Exit` or `panic` on
   any path that input data can reach. Log the problem, count it in `statistics`, and drop or return an
   error. The existing exceptions are listed under "Known gaps". They are not patterns to copy.
-- `make test-otel-contrib` (and the `OTel Contrib Tests` workflow) builds and tests contrib's
-  `exporter/datasetexporter` with this checkout `replace`d in. If it fails, your change breaks the
+- `make test-otel-contrib` (and the `OTel Contrib Tests` workflow) runs contrib's `make lint` and
+  `make test` for `exporter/datasetexporter` with this checkout `replace`d in. If it fails, your change breaks the
   consumer. The contrib clone in `CONTRIB_DIR` is reset to the latest `main` on every run.
 - Every release goes into the `User-Agent` (`pkg/version/version.go`), and DataSet usage is tracked by
   it.
@@ -92,7 +92,7 @@ Run `make help` for the full list. These are the targets that matter:
 | `make test-scripts`           | Run the tests for the shell scripts in `scripts/`                           |
 | `make stress-test`            | Stress test the library through `examples/stress` (takes a few minutes)     |
 | `make build-examples`         | Check that every module in `examples/` still builds against the library     |
-| `make test-otel-contrib`      | Run contrib's `datasetexporter` tests against this checkout (needs network) |
+| `make test-otel-contrib`      | Run contrib's `datasetexporter` lint and tests against this checkout (needs network) |
 | `make test-many-times COUNT=5`| Find flaky tests (the default `COUNT` is 50)                                |
 | `make check`                  | Run lint, script tests, all tests, the example builds and `test-otel-contrib`. **Run it before opening a PR.** |
 

@@ -106,10 +106,15 @@ values, and `make test-scripts` runs the script's tests.
 ### Testing against the OpenTelemetry exporter
 
 `make test-otel-contrib` ([`test-otel-contrib.sh`](scripts/test-otel-contrib.sh))
-runs the tests of the contrib
+runs the checks of the contrib
 [`datasetexporter`](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/datasetexporter)
-with this checkout in place of the release contrib pins (`go mod edit -replace`,
-then `go mod tidy`). The
+with this checkout in place of the release contrib pins. It runs
+`go mod edit -replace`, then contrib's own component targets from
+[`Makefile.Common`](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/Makefile.Common):
+`make tidy`, then `make lint` and `make test`, the commands
+[CONTRIBUTING.md](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md)
+asks of a contrib PR. `CONTRIB_TARGETS` picks other checks (e.g.
+`CONTRIB_TARGETS=test` to skip lint locally). The
 [`otel-contrib`](.github/workflows/otel-contrib.yaml) workflow runs it for every
 PR, every push to `main` and nightly. `make check` runs it too.
 

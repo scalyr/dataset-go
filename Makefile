@@ -134,7 +134,7 @@ stress-test: ## Stress test: every bucket used once, then max congestion
 # Clones opentelemetry-collector-contrib once (CONTRIB_DIR) and resets it to the
 # latest main on every run, see the script's header.
 .PHONY: test-otel-contrib
-test-otel-contrib: ## Run the OTel contrib datasetexporter tests against this checkout (network)
+test-otel-contrib: ## Run contrib's datasetexporter lint and tests against this checkout (network)
 	./scripts/test-otel-contrib.sh
 
 .PHONY: test-ssl-certificates

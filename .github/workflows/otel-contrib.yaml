@@ -1,8 +1,8 @@
 name: OTel Contrib Tests
 
-# Runs the opentelemetry-collector-contrib datasetexporter tests against this
-# commit (scripts/test-otel-contrib.sh), so a change that breaks the exporter
-# is caught here and not in the next Renovate bump in contrib.
+# Runs contrib's `make lint` and `make test` for the datasetexporter against
+# this commit (scripts/test-otel-contrib.sh), so a change that breaks the
+# exporter is caught here and not in the next Renovate bump in contrib.
 #
 # Not a required check on purpose: contrib main can break for reasons
 # unrelated to dataset-go, and a required check would then block Dependabot
@@ -39,11 +39,12 @@ jobs:
           github_token: ${{ github.token }}
 
   datasetexporter:
-    name: OTel Contrib datasetexporter tests
+    name: OTel Contrib datasetexporter lint and tests
     runs-on: ubuntu-latest
     needs: [pre_job]
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' || github.event_name != 'pull_request' }}
-    timeout-minutes: 20
+    # The first `make lint` builds contrib's tool set (golangci-lint etc.).
+    timeout-minutes: 30
     env:
       # contrib's go.mod decides the Go version; auto downloads it if newer.
       GOTOOLCHAIN: auto
@@ -57,5 +58,5 @@ jobs:
           cache: true
           cache-dependency-path: |
             go.sum
-      - name: Test datasetexporter against this commit
+      - name: Lint and test datasetexporter against this commit
         run: make test-otel-contrib

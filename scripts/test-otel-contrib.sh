@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
-# Runs the tests of the OpenTelemetry Collector `datasetexporter` against this
+# Runs the checks of the OpenTelemetry Collector `datasetexporter` against this
 # checkout of dataset-go instead of the release contrib pins, so a change that
 # would break the exporter fails here rather than in the next Renovate bump.
+# The checks are contrib's own per-component make targets (Makefile.Common),
+# as CONTRIBUTING.md asks of a contrib PR: `make lint` and `make test`.
 #
 # Usage: scripts/test-otel-contrib.sh
 #
@@ -13,13 +15,15 @@
 #                   the script refuses a directory whose origin is not CONTRIB_REPO.
 #   CONTRIB_REPO  - contrib clone URL (default the upstream GitHub repo)
 #   CONTRIB_REF   - branch to test against (default main)
-#   GOTEST_FLAGS  - flags for `go test` (default "-race -count=1")
+#   CONTRIB_TARGETS - contrib make targets run, in order, in the exporter directory after
+#                   `make tidy` (default "lint test"). Contrib's make variables, e.g.
+#                   GOTEST_OPT, can be overridden through the environment.
 #   GOTOOLCHAIN   - default auto: contrib's go.mod may need a newer Go than is installed
 
 set -euo pipefail
 
 usage() {
-  sed -n 's/^# \{0,1\}//; 7p' "$0" >&2
+  sed -n 's/^# \(Usage: .*\)/\1/p' "$0" >&2
   exit 2
 }
 [[ $# -eq 0 ]] || usage
@@ -27,7 +31,7 @@ usage() {
 CONTRIB_DIR="${CONTRIB_DIR:-${XDG_CACHE_HOME:-${HOME}/.cache}/dataset-go/opentelemetry-collector-contrib}"
 CONTRIB_REPO="${CONTRIB_REPO:-https://github.com/open-telemetry/opentelemetry-collector-contrib.git}"
 CONTRIB_REF="${CONTRIB_REF:-main}"
-GOTEST_FLAGS="${GOTEST_FLAGS:--race -count=1}"
+CONTRIB_TARGETS="${CONTRIB_TARGETS-lint test}"
 export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
 EXPORTER=exporter/datasetexporter
 
@@ -35,6 +39,12 @@ die() {
   echo "test-otel-contrib: $*" >&2
   exit 1
 }
+
+read -r -a targets <<<"${CONTRIB_TARGETS}"
+[[ ${#targets[@]} -gt 0 ]] || die "CONTRIB_TARGETS is empty, nothing would be checked"
+# Run from our Makefile, these would hand our command-line variables and
+# jobserver to contrib's make.
+unset MAKEFLAGS MFLAGS MAKELEVEL
 
 root="$(cd "$(dirname "$0")/.." && pwd -P)"
 module="$(awk '$1 == "module" { print $2; exit }' "${root}/go.mod")"
@@ -71,10 +81,11 @@ echo "against ${CONTRIB_REPO} ${CONTRIB_REF} at $(git -C "${CONTRIB_DIR}" rev-pa
 [[ -f "${CONTRIB_DIR}/${EXPORTER}/go.mod" ]] || die "${EXPORTER}/go.mod not found in ${CONTRIB_DIR}"
 cd "${CONTRIB_DIR}/${EXPORTER}"
 
-# A structured go.mod edit plus tidy: the same change a version bump in
-# contrib would make, with this checkout standing in for the release.
+# A structured go.mod edit, then contrib's `make tidy` regenerates go.sum: the
+# same change a version bump in contrib would make, with this checkout
+# standing in for the release.
 go mod edit "-replace=${module}=${root}"
-go mod tidy
-go build ./...
-# shellcheck disable=SC2086 # GOTEST_FLAGS is a list of flags
-go test ${GOTEST_FLAGS} ./...
+for target in tidy "${targets[@]}"; do
+  echo "make ${target}"
+  make "${target}"
+done

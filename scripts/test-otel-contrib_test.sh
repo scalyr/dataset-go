@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Tests for scripts/test-otel-contrib.sh. Runs offline: "contrib" is a local
-# bare repo reached through file://, and a fake `go` first on PATH records each
-# call (working directory and arguments) instead of building anything.
+# bare repo reached through file://, and fake `go` and `make` first on PATH
+# record each call (working directory and arguments) instead of building anything.
 #
 # Usage: scripts/test-otel-contrib_test.sh
 
@@ -30,14 +30,20 @@ export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
-# Fake `go`: appends "<cwd>|<args>" to GO_LOG; `go test` exits STUB_GO_EXIT.
+# Fake `go` and `make`: append "<cwd>|<tool> <args>" to CALL_LOG. `make` also
+# records the environment it was given, and fails for the target STUB_MAKE_FAIL.
 mkdir -p "${work}/bin"
 cat >"${work}/bin/go" <<'EOF'
 #!/usr/bin/env bash
-echo "${PWD}|$*" >>"${GO_LOG}"
-if [[ "$1" == test ]]; then exit "${STUB_GO_EXIT:-0}"; fi
+echo "${PWD}|go $*" >>"${CALL_LOG}"
 EOF
-chmod +x "${work}/bin/go"
+cat >"${work}/bin/make" <<'EOF'
+#!/usr/bin/env bash
+echo "${PWD}|make $*" >>"${CALL_LOG}"
+echo "make $*: GOTOOLCHAIN=${GOTOOLCHAIN-} MAKEFLAGS=${MAKEFLAGS-unset} MAKELEVEL=${MAKELEVEL-unset}" >>"${CALL_LOG}.env"
+[[ "$1" != "${STUB_MAKE_FAIL:-}" ]] || { echo "fake make: $1 failed" >&2; exit 2; }
+EOF
+chmod +x "${work}/bin/go" "${work}/bin/make"
 
 # The upstream "contrib" repo, and a seed clone to push new commits from.
 upstream="${work}/upstream.git"
@@ -61,15 +67,18 @@ new_tree() {
   echo "${dir}"
 }
 
-# run TREE CONTRIB_DIR [ARGS...] : runs the script; sets out, rc and calls (the go log).
+# run TREE CONTRIB_DIR [ARGS...] : runs the script; sets out, rc, calls (the
+# go/make log) and envs (what each make saw).
 run() {
   local tree="$1" dir="$2"
   shift 2
-  : >"${work}/go.log"
-  out=$(PATH="${work}/bin:${PATH}" GO_LOG="${work}/go.log" CONTRIB_REPO="${CONTRIB_REPO:-${repo_url}}" \
+  : >"${work}/calls.log"
+  : >"${work}/calls.log.env"
+  out=$(PATH="${work}/bin:${PATH}" CALL_LOG="${work}/calls.log" CONTRIB_REPO="${CONTRIB_REPO:-${repo_url}}" \
     CONTRIB_DIR="${dir}" "${tree}/scripts/test-otel-contrib.sh" "$@" 2>&1)
   rc=$?
-  calls=$(cat "${work}/go.log")
+  calls=$(cat "${work}/calls.log")
+  envs=$(cat "${work}/calls.log.env")
 }
 
 head_of() { git -C "$1" rev-parse HEAD; }
@@ -77,18 +86,18 @@ head_of() { git -C "$1" rev-parse HEAD; }
 tree=$(new_tree "dataset go")
 tree_real="$(cd "${tree}" && pwd -P)"
 
-# --- happy path: fresh clone, go called in the exporter dir, in order ---
+# --- happy path: fresh clone, then contrib's make targets in the exporter dir ---
 dir="${work}/cache dir/contrib"
 run "${tree}" "${dir}"
 exp="${dir}/exporter/datasetexporter"
-expected="${exp}|mod edit -replace=github.com/scalyr/dataset-go=${tree_real}
-${exp}|mod tidy
-${exp}|build ./...
-${exp}|test -race -count=1 ./..."
+expected="${exp}|go mod edit -replace=github.com/scalyr/dataset-go=${tree_real}
+${exp}|make tidy
+${exp}|make lint
+${exp}|make test"
 if [[ ${rc} -eq 0 && "${calls}" == "${expected}" ]]; then
-  pass "fresh clone runs mod edit, tidy, build and test in the exporter dir"
+  pass "fresh clone runs go mod edit, then make tidy, lint and test in the exporter dir"
 else
-  fail "fresh clone runs mod edit, tidy, build and test in the exporter dir" "rc=${rc} out=${out} calls=${calls}"
+  fail "fresh clone runs go mod edit, then make tidy, lint and test in the exporter dir" "rc=${rc} out=${out} calls=${calls}"
 fi
 sha1=$(git -C "${seed}" rev-parse HEAD)
 if [[ "$(head_of "${dir}")" == "${sha1}" && "${out}" == *"at ${sha1}"* ]]; then
@@ -175,12 +184,49 @@ else
   fail "refuses a CONTRIB_DIR that is a file" "rc=${rc} out=${out}"
 fi
 
-# --- sad: failing contrib tests fail the script ---
-STUB_GO_EXIT=1 run "${tree}" "${dir}"
-if [[ ${rc} -ne 0 && "${calls}" == *"|test "* ]]; then
-  pass "a failing go test fails the script"
+# --- sad: a failing contrib target fails the script and stops later ones ---
+STUB_MAKE_FAIL=lint run "${tree}" "${dir}"
+if [[ ${rc} -ne 0 && "${out}" == *"lint failed"* && "${calls}" == *"|make lint" && "${calls}" != *"make test"* ]]; then
+  pass "a failing make lint fails the script and make test does not run"
 else
-  fail "a failing go test fails the script" "rc=${rc} out=${out}"
+  fail "a failing make lint fails the script and make test does not run" "rc=${rc} out=${out} calls=${calls}"
+fi
+STUB_MAKE_FAIL="test" run "${tree}" "${dir}"
+if [[ ${rc} -ne 0 && "${calls}" == *"|make test" ]]; then
+  pass "a failing make test fails the script"
+else
+  fail "a failing make test fails the script" "rc=${rc} out=${out}"
+fi
+STUB_MAKE_FAIL=tidy run "${tree}" "${dir}"
+if [[ ${rc} -ne 0 && "${calls}" != *"make lint"* ]]; then
+  pass "a failing make tidy fails the script before any check"
+else
+  fail "a failing make tidy fails the script before any check" "rc=${rc} calls=${calls}"
+fi
+
+# --- edge: CONTRIB_TARGETS picks the checks, tidy always runs first ---
+CONTRIB_TARGETS="test-twice" run "${tree}" "${dir}"
+if [[ ${rc} -eq 0 && "$(grep -o 'make .*' <<<"${calls}")" == "make tidy
+make test-twice" ]]; then
+  pass "CONTRIB_TARGETS replaces the default checks, after make tidy"
+else
+  fail "CONTRIB_TARGETS replaces the default checks, after make tidy" "rc=${rc} calls=${calls}"
+fi
+
+# --- sad: an empty CONTRIB_TARGETS is rejected rather than passing vacuously ---
+CONTRIB_TARGETS="  " run "${tree}" "${dir}"
+if [[ ${rc} -ne 0 && "${out}" == *"CONTRIB_TARGETS is empty"* && -z "${calls}" ]]; then
+  pass "rejects an empty CONTRIB_TARGETS"
+else
+  fail "rejects an empty CONTRIB_TARGETS" "rc=${rc} out=${out} calls=${calls}"
+fi
+
+# --- seam: our make's flags and variables do not leak into contrib's make ---
+MAKEFLAGS="-j4 -- COUNT=5" MAKELEVEL=1 MFLAGS=-j4 run "${tree}" "${dir}"
+if [[ ${rc} -eq 0 && "${envs}" == *"MAKEFLAGS=unset MAKELEVEL=unset"* && "${envs}" != *COUNT* ]]; then
+  pass "MAKEFLAGS and MAKELEVEL from a parent make are not passed on"
+else
+  fail "MAKEFLAGS and MAKELEVEL from a parent make are not passed on" "envs=${envs}"
 fi
 
 # --- sad: an unreachable upstream fails before any go call ---
@@ -232,26 +278,22 @@ else
   fail "an empty CONTRIB_DIR is cloned into" "rc=${rc} out=${out}"
 fi
 
-# --- edge: GOTEST_FLAGS reaches go test, GOTOOLCHAIN defaults to auto ---
-cat >"${work}/bin/go" <<'EOF'
-#!/usr/bin/env bash
-echo "${PWD}|$*|GOTOOLCHAIN=${GOTOOLCHAIN}" >>"${GO_LOG}"
-EOF
-GOTEST_FLAGS="-run TestX -v" run "${tree}" "${dir}"
-if [[ ${rc} -eq 0 && "${calls}" == *"|test -run TestX -v ./...|GOTOOLCHAIN=auto"* ]]; then
-  pass "GOTEST_FLAGS reaches go test and GOTOOLCHAIN defaults to auto"
+# --- edge: GOTOOLCHAIN defaults to auto, an explicit value is kept ---
+run "${tree}" "${dir}"
+if [[ ${rc} -eq 0 && "${envs}" == *"make test: GOTOOLCHAIN=auto"* ]]; then
+  pass "GOTOOLCHAIN defaults to auto"
 else
-  fail "GOTEST_FLAGS reaches go test and GOTOOLCHAIN defaults to auto" "rc=${rc} calls=${calls}"
+  fail "GOTOOLCHAIN defaults to auto" "rc=${rc} envs=${envs}"
 fi
 GOTOOLCHAIN=local run "${tree}" "${dir}"
-if [[ ${rc} -eq 0 && "${calls}" == *"GOTOOLCHAIN=local"* && "${calls}" != *"GOTOOLCHAIN=auto"* ]]; then
+if [[ ${rc} -eq 0 && "${envs}" == *"GOTOOLCHAIN=local"* && "${envs}" != *"GOTOOLCHAIN=auto"* ]]; then
   pass "an explicit GOTOOLCHAIN is kept"
 else
-  fail "an explicit GOTOOLCHAIN is kept" "rc=${rc} calls=${calls}"
+  fail "an explicit GOTOOLCHAIN is kept" "rc=${rc} envs=${envs}"
 fi
 
 # --- conformance: the replace target is absolute and declares the module ---
-replace=$(grep -o 'mod edit -replace=[^|]*' <<<"${calls}" | head -1)
+replace=$(grep -o 'go mod edit -replace=.*' <<<"${calls}" | head -1)
 target="${replace#*-replace=github.com/scalyr/dataset-go=}"
 if [[ "${target}" == /* ]] && grep -qx 'module github.com/scalyr/dataset-go' "${target}/go.mod"; then
   pass "the replace target is an absolute path whose go.mod declares the module"
