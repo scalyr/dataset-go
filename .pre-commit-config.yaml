@@ -13,9 +13,11 @@ repos:
     hooks:
       # File hygiene, from the pre-commit-hooks package. `types` and `stages`
       # copy upstream's .pre-commit-hooks.yaml.
+      # --enforce-all: without it only files added in the commit are checked,
+      # so `pre-commit run -a` in CI would check nothing.
       - id: check-added-large-files
         name: check for added large files
-        entry: uv run --frozen check-added-large-files
+        entry: uv run --frozen check-added-large-files --enforce-all
         language: system
         stages: [pre-commit, pre-push, manual]
       - id: check-case-conflict
@@ -91,6 +93,38 @@ repos:
         language: system
         types: [text]
         stages: [pre-commit, pre-push, manual]
+      # Unit tests run on windows-latest, which cannot check these out.
+      - id: check-illegal-windows-names
+        name: check illegal windows names
+        entry: Illegal Windows filenames detected
+        language: fail
+        files: '(?i)((^|/)(CON|PRN|AUX|NUL|COM[\d¹²³]|LPT[\d¹²³])(\.|/|$)|[<>:\"\\|?*\x00-\x1F]|/[^/]*[\.\s]/|[^/]*[\.\s]$)'
+      - id: fix-byte-order-marker
+        name: fix utf-8 byte order marker
+        entry: uv run --frozen fix-byte-order-marker
+        language: system
+        types: [text]
+      - id: check-vcs-permalinks
+        name: check vcs permalinks
+        entry: uv run --frozen check-vcs-permalinks
+        language: system
+        types: [text]
+      # Like no-commit-to-branch below, this only sees what a commit adds, so
+      # it guards local commits; `run -a` in CI has nothing to check.
+      - id: forbid-new-submodules
+        name: forbid new submodules
+        entry: uv run --frozen forbid-new-submodules
+        language: system
+        types: [directory]
+      # Only on a real `git commit` (main and master by default). `make lint`
+      # and CI run the manual stage, so they still pass on main.
+      - id: no-commit-to-branch
+        name: don't commit to branch
+        entry: uv run --frozen no-commit-to-branch
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
 
       # Shell scripts and GitHub configuration.
       - id: shellcheck

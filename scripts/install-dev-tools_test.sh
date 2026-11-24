@@ -222,8 +222,21 @@ for tool in ${go_hook_tools}; do
   fi
 done
 
-unpinned=$(grep -nE '^ *(entry|repo):' "${repo_root}/.pre-commit-config.yaml" |
-  grep -vE 'repo: *local$|entry: *uv run --frozen |entry: *scripts/go-tool.sh ')
+# Per hook block: the entry must run a pinned tool, unless the hook is
+# `language: fail` (it runs nothing; its entry is the error message).
+unpinned=$( {
+  grep -nE '^ *repo:' "${repo_root}/.pre-commit-config.yaml" | grep -vE 'repo: *local$'
+  awk '
+    function check() {
+      if (id != "" && lang != "fail" && entry !~ /^(uv run --frozen |scripts\/go-tool\.sh )/)
+        print "hook " id ": entry: " entry
+    }
+    /^ *- id:/ { check(); id = $3; entry = ""; lang = "" }
+    /^ *entry:/ { sub(/^ *entry: */, ""); entry = $0 }
+    /^ *language:/ { lang = $2 }
+    END { check() }
+  ' "${repo_root}/.pre-commit-config.yaml"
+} )
 if [[ -z "${unpinned}" ]]; then
   pass "every hook is local and runs a pinned tool"
 else

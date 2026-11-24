@@ -54,7 +54,8 @@ pre-commit-install: ## Install the pinned dev tools (needs uv and go) and the gi
 
 .PHONY: pre-commit-run
 pre-commit-run: ## Run all pre-commit hooks on all files
-	uv run --frozen pre-commit run -a
+	@# manual stage: every hook except no-commit-to-branch, which only guards real commits.
+	uv run --frozen pre-commit run -a --hook-stage manual
 
 .PHONY: dev-tools-update
 dev-tools-update: ## Upgrade the pinned Python and Go dev tools (Dependabot does this weekly)
