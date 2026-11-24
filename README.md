@@ -60,29 +60,29 @@ see [CHANGELOG.md](CHANGELOG.md) document.
 AI coding agents: see [AGENTS.md](AGENTS.md) (also loaded by Claude Code through `CLAUDE.md`).
 `make help` lists the Make targets.
 
-### Install Dev Tools
+### Dev tools and pre-commit hooks
 
-Run following script - [install-dev-tools.sh](scripts/install-dev-tools.sh) - to install
-tools needed by `pre-commit`.
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and Go. uv installs the
+Python version in [`.python-version`](.python-version) if you do not have it. Then run:
 
-### Pre-Commit Hooks
+```bash
+make pre-commit-install   # scripts/install-dev-tools.sh: pinned tools + git hook
+make lint                 # run every hook on every file
+```
 
-[Pre-commit](https://pre-commit.com) is used to automatically run checks including Black formatting
-prior to a git commit.
+[Pre-commit](https://pre-commit.com) runs the formatters and linters before each commit
+([`.pre-commit-config.yaml`](.pre-commit-config.yaml)). Every hook is local and runs a pinned
+tool, so your run and CI's run are identical:
 
-To use pre-commit:
+- pre-commit itself and the Python tools (pre-commit-hooks, shellcheck, actionlint, zizmor,
+  check-jsonschema) are pinned, with hashes, in [`uv.lock`](uv.lock). You declare them in
+  [`pyproject.toml`](pyproject.toml). Hooks call them with `uv run --frozen`.
+- The Go tools (goimports, gofumpt, golangci-lint, errcheck, staticcheck) are pinned in
+  [`tools/go.mod`](tools/go.mod). Hooks call them with [`scripts/go-tool.sh`](scripts/go-tool.sh).
 
-- Use one of the [Installation Methods](https://pre-commit.com/#install) from the documentation.
-- Install the hooks with `pre-commit install`.
-- To manually execute the pre-commit hooks (including black), run `pre-commit run --all-files` (
-  run it on all the files) or ``pre-commit run`` (run it only on staged files).
-
-#### Pre-commit Configuration
-
-- `.pre-commit-config.yaml` configures the scripts run by pre-commit
-
-To update the Pre-commit hooks , run `pre-commit autoupdate`. This will update
-`.pre-commit-config.yaml` and will need to be committed to the repository.
+Dependabot bumps both every week (see "Automated updates"). To bump them by hand, run
+`make dev-tools-update`. Do not run `pre-commit autoupdate`: there are no remote hook repos to
+update.
 
 ### Go versions in CI
 
@@ -140,8 +140,11 @@ unrelated to this library, and that would block Dependabot auto-merge.
 ### Automated updates
 
 The repository is meant to keep itself current without a maintainer.
-[Dependabot](.github/dependabot.yml) opens one grouped PR per module, and one
-for GitHub Actions, every week. The
+[Dependabot](.github/dependabot.yml) opens one grouped PR per module, one for
+GitHub Actions, one for the Go dev tools (`tools/`) and one for the Python dev
+tools (`uv.lock`), every week. Each waits a 7-day cooldown after a release.
+Actions are pinned to commit SHAs. Dependabot updates the SHA and its
+`# vX.Y.Z` comment together. The
 [`auto-merge`](.github/workflows/auto-merge.yaml) workflow approves each one and
 enables squash auto-merge, so GitHub merges it once the required checks pass.
 
