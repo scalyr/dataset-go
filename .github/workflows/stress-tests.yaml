@@ -11,7 +11,6 @@ on:
     - cron: '0 6 * * *'
 
 permissions:
-  actions: write  # Needed for skip-duplicate-jobs job
   contents: read
 
 jobs:
@@ -20,6 +19,9 @@ jobs:
   pre_job:
     name: Skip Duplicate Jobs Pre Job
     runs-on: ubuntu-latest
+    permissions:
+      actions: write  # cancels superseded runs of this workflow
+      contents: read
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
@@ -38,7 +40,9 @@ jobs:
       primary: ${{ steps.read.outputs.primary }}
       matrix: ${{ steps.read.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: read
         shell: bash  # adds -o pipefail, so a script failure is not masked by tee
         run: ./scripts/go-versions.sh | tee -a "$GITHUB_OUTPUT"
@@ -54,9 +58,11 @@ jobs:
     if: ${{ needs.pre_job.outputs.should_skip != 'true' || github.ref_name == 'main' }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: ${{ matrix.go }}
           cache: true
@@ -66,7 +72,7 @@ jobs:
       - name: Run Stress Test - Max congestion
         run: |
           ./scripts/run-stress-test.sh 10000 -1
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: logs-${{ matrix.os }}-${{ matrix.go }}
           path: examples/stress/*.log

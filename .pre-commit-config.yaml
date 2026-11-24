@@ -1,37 +1,195 @@
+# Every hook is local and runs a pinned tool, so a run is reproducible:
+# - Python tools through `uv run --frozen`, pinned with hashes in uv.lock
+#   (declared in pyproject.toml).
+# - Go tools through scripts/go-tool.sh, pinned in tools/go.mod and
+#   tools/go.sum (the script explains why not `go tool -modfile`).
+# Dependabot bumps both (`uv` and `gomod` ecosystems). Run hooks with
+# `make lint`; `make pre-commit-install` installs the git hook.
+# scripts/install-dev-tools_test.sh checks that every entry uses a pinned tool.
+minimum_pre_commit_version: "4.3.0"
+
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+  - repo: local
     hooks:
+      # File hygiene, from the pre-commit-hooks package. `types` and `stages`
+      # copy upstream's .pre-commit-hooks.yaml.
+      # --enforce-all: without it only files added in the commit are checked,
+      # so `pre-commit run -a` in CI would check nothing.
       - id: check-added-large-files
+        name: check for added large files
+        entry: uv run --frozen check-added-large-files --enforce-all
+        language: system
+        stages: [pre-commit, pre-push, manual]
       - id: check-case-conflict
+        name: check for case conflicts
+        entry: uv run --frozen check-case-conflict
+        language: system
       - id: check-json
-        exclude: demo-doordash/charts/fluent-bit/dashboards/fluent-bit.json
+        name: check json
+        entry: uv run --frozen check-json
+        language: system
+        types: [json]
       - id: check-executables-have-shebangs
+        name: check that executables have shebangs
+        entry: uv run --frozen check-executables-have-shebangs
+        language: system
+        types: [text, executable]
+        stages: [pre-commit, pre-push, manual]
       - id: check-merge-conflict
+        name: check for merge conflicts
+        entry: uv run --frozen check-merge-conflict
+        language: system
+        types: [text]
       - id: check-shebang-scripts-are-executable
+        name: check that scripts with shebangs are executable
+        entry: uv run --frozen check-shebang-scripts-are-executable
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
       - id: check-toml
+        name: check toml
+        entry: uv run --frozen check-toml
+        language: system
+        types: [toml]
       - id: check-xml
+        name: check xml
+        entry: uv run --frozen check-xml
+        language: system
+        types: [xml]
       - id: check-yaml
+        name: check yaml
+        entry: uv run --frozen check-yaml
+        language: system
+        types: [yaml]
       - id: detect-private-key
+        name: detect private key
+        entry: uv run --frozen detect-private-key
+        language: system
+        types: [text]
       - id: end-of-file-fixer
+        name: fix end of files
+        entry: uv run --frozen end-of-file-fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
       - id: mixed-line-ending
+        name: mixed line ending
+        entry: uv run --frozen mixed-line-ending
+        language: system
+        types: [text]
       - id: pretty-format-json
+        name: pretty format json
+        entry: uv run --frozen pretty-format-json --autofix
+        language: system
+        types: [json]
         exclude: |
           (?x)^(
             test/testdata/buffer_test_payload_injection.json|
             test/testdata/buffer_test_payload_full.json
           )
       - id: trailing-whitespace
+        name: trim trailing whitespace
+        entry: uv run --frozen trailing-whitespace-fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
+      # Unit tests run on windows-latest, which cannot check these out.
+      - id: check-illegal-windows-names
+        name: check illegal windows names
+        entry: Illegal Windows filenames detected
+        language: fail
+        files: '(?i)((^|/)(CON|PRN|AUX|NUL|COM[\d¹²³]|LPT[\d¹²³])(\.|/|$)|[<>:\"\\|?*\x00-\x1F]|/[^/]*[\.\s]/|[^/]*[\.\s]$)'
+      - id: fix-byte-order-marker
+        name: fix utf-8 byte order marker
+        entry: uv run --frozen fix-byte-order-marker
+        language: system
+        types: [text]
+      - id: check-vcs-permalinks
+        name: check vcs permalinks
+        entry: uv run --frozen check-vcs-permalinks
+        language: system
+        types: [text]
+      # Like no-commit-to-branch below, this only sees what a commit adds, so
+      # it guards local commits; `run -a` in CI has nothing to check.
+      - id: forbid-new-submodules
+        name: forbid new submodules
+        entry: uv run --frozen forbid-new-submodules
+        language: system
+        types: [directory]
+      # Only on a real `git commit` (main and master by default). `make lint`
+      # and CI run the manual stage, so they still pass on main.
+      - id: no-commit-to-branch
+        name: don't commit to branch
+        entry: uv run --frozen no-commit-to-branch
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
 
-  - repo: https://github.com/Bahjat/pre-commit-golang
-    rev: v1.0.3
-    hooks:
-      - id: go-fmt-import
-      - id: go-lint
+      # Shell scripts and GitHub configuration.
+      - id: shellcheck
+        name: shellcheck
+        entry: uv run --frozen shellcheck
+        language: system
+        types: [shell]
+      # Also shellchecks `run:` blocks, using the shellcheck from uv.lock.
+      - id: actionlint
+        name: actionlint
+        entry: uv run --frozen actionlint
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+      # --fix=safe: zizmor's unsafe fixes (e.g. persist-credentials: false) can
+      # break a workflow that pushes, so they stay a reported finding.
+      # --offline: the same result locally and in CI, without a GitHub token.
+      # The online-only audits (e.g. impostor commits behind a SHA pin) are
+      # therefore off; Dependabot is what moves the pins.
+      - id: zizmor
+        name: zizmor (GitHub Actions security)
+        entry: uv run --frozen zizmor --offline --fix=safe .github
+        language: system
+        files: ^\.github/
+        pass_filenames: false
+      - id: check-github-workflows
+        name: validate GitHub workflows against their schema
+        entry: uv run --frozen check-jsonschema --builtin-schema vendor.github-workflows
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+      - id: check-dependabot
+        name: validate dependabot.yml against its schema
+        entry: uv run --frozen check-jsonschema --builtin-schema vendor.dependabot
+        language: system
+        files: ^\.github/dependabot\.ya?ml$
+
+      # Go. goimports, gofumpt and golangci-lint --fix rewrite files in place;
+      # pre-commit fails the run when a hook modifies a file, so locally the fix
+      # only needs staging, and CI still fails on unfixed code. The package-level linters check the
+      # root module (examples/* are built by `make build-examples`).
+      - id: goimports
+        name: goimports
+        entry: scripts/go-tool.sh goimports -w
+        language: system
+        types: [go]
       - id: gofumpt
-      - id: go-err-check
+        name: gofumpt
+        entry: scripts/go-tool.sh gofumpt -w
+        language: system
+        types: [go]
       - id: golangci-lint
-        args: [--config=.golangci.yml]
-      - id: go-static-check
-      # - id: go-ruleguard # requires https://github.com/quasilyte/go-ruleguard
-      #    args: [rules/rules.go] # required
+        name: golangci-lint
+        entry: scripts/go-tool.sh golangci-lint run --fix --config=.golangci.yml ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+      # Unlike golangci-lint (`run.tests: false`), these two also check tests.
+      - id: errcheck
+        name: errcheck
+        entry: scripts/go-tool.sh errcheck ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+      - id: staticcheck
+        name: staticcheck
+        entry: scripts/go-tool.sh staticcheck ./...
+        language: system
+        types: [go]
+        pass_filenames: false

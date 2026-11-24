@@ -90,7 +90,7 @@ Run `make help` for the full list. These are the targets that matter:
 | ----------------------------- | --------------------------------------------------------------------------- |
 | `make test-unit`              | Run the fast feedback loop: all packages, `-race`, no `long_running` tests  |
 | `make test`                   | Run all tests, including the `long_running` ones (as CI does)               |
-| `make lint`                   | Run the pre-commit hooks: gofumpt, goimports, golangci-lint, staticcheck, errcheck |
+| `make lint`                   | Run the pre-commit hooks: Go linters and formatters, shellcheck, actionlint, zizmor, schema checks |
 | `make test-scripts`           | Run the tests for the shell scripts in `scripts/`                           |
 | `make stress-test`            | Stress test the library through `examples/stress` (takes a few minutes)     |
 | `make build-examples`         | Check that every module in `examples/` still builds against the library     |
@@ -99,7 +99,11 @@ Run `make help` for the full list. These are the targets that matter:
 | `make govulncheck`            | Check this module's code and dependencies for known vulnerabilities (needs network) |
 | `make check`                  | Run lint, govulncheck, script tests, all tests, the example builds and `test-otel-contrib`. **Run it before opening a PR.** |
 
-`make pre-commit-install` installs the hooks and the Go tools they need (`scripts/install-dev-tools.sh`).
+`make pre-commit-install` (`scripts/install-dev-tools.sh`, needs `uv` and `go`) installs the git hook
+and the pinned tools. Every hook runs a pinned tool: Python tools from `uv.lock` (`uv run --frozen`)
+and Go tools from `tools/go.mod` (`scripts/go-tool.sh`). Add a new tool the same way, not
+as a remote hook repo or a binary from `PATH`. `scripts/install-dev-tools_test.sh` enforces this.
+GitHub Actions are pinned to commit SHAs with a `# vX.Y.Z` comment, and `zizmor` rejects tag pins.
 
 ## Tests
 

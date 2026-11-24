@@ -14,6 +14,6 @@ run:
   allow-parallel-runners: true
 
 output:
-  # The pre-commit hook (Bahjat/pre-commit-golang run-golangci-lint.sh) fails on
-  # any output, and v2 otherwise prints an "N issues." summary even when clean.
+  # The pre-commit hook fails on the exit status, so a clean run should print
+  # nothing; v2 otherwise prints an "N issues." summary even when clean.
   show-stats: false

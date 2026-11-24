@@ -49,13 +49,18 @@ check: ## Everything to run before opening a PR
 	$(MAKE) test-otel-contrib
 
 .PHONY: pre-commit-install
-pre-commit-install: ## Install pre-commit hooks and the Go dev tools
-	pre-commit install
+pre-commit-install: ## Install the pinned dev tools (needs uv and go) and the git hook
 	./scripts/install-dev-tools.sh
 
 .PHONY: pre-commit-run
 pre-commit-run: ## Run all pre-commit hooks on all files
-	pre-commit run -a
+	@# manual stage: every hook except no-commit-to-branch, which only guards real commits.
+	uv run --frozen pre-commit run -a --hook-stage manual
+
+.PHONY: dev-tools-update
+dev-tools-update: ## Upgrade the pinned Python and Go dev tools (Dependabot does this weekly)
+	uv lock --upgrade
+	cd tools && go get -u tool && go mod tidy
 
 .PHONY: lint
 lint: pre-commit-run ## Lint and format checks (alias of pre-commit-run)
@@ -71,6 +76,8 @@ test-scripts: ## Test the shell scripts in scripts/
 	./scripts/bump-version_test.sh
 	./scripts/run-stress-test_test.sh
 	./scripts/test-otel-contrib_test.sh
+	./scripts/install-dev-tools_test.sh
+	./scripts/go-tool_test.sh
 
 .PHONY: build
 build:

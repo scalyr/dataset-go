@@ -1,12 +1,43 @@
 #!/usr/bin/env bash
+# Copyright 2026 SentinelOne, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Installs the pinned dev tools and the pre-commit git hook. Used by
+# `make pre-commit-install` and by the Code Quality workflow.
+#
+# - Python tools (pre-commit and the tools its hooks run) come from uv.lock.
+# - Go tools come from tools/go.mod; building them here only warms the cache
+#   for scripts/go-tool.sh; nothing is put on PATH.
+#
+# Usage: scripts/install-dev-tools.sh
 
-go install -v golang.org/x/tools/cmd/goimports@latest
-go install -v github.com/fzipp/gocyclo/cmd/gocyclo@latest
-# v2 module path: @latest on the pre-v2 path resolves to the last v1 release, which cannot load packages built by current Go.
-go install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-go install -v github.com/go-critic/go-critic/cmd/gocritic@latest
-go install -v github.com/BurntSushi/toml/cmd/tomlv@latest
-go install -v mvdan.cc/gofumpt@latest
-go install -v github.com/kisielk/errcheck@latest
-# go install -v github.com/quasilyte/go-ruleguard/cmd/ruleguard@latest
-go install -v honnef.co/go/tools/cmd/staticcheck@latest
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${root}"
+
+if ! command -v uv >/dev/null; then
+  echo "uv is required: https://docs.astral.sh/uv/getting-started/installation/" >&2
+  exit 1
+fi
+if ! command -v go >/dev/null; then
+  echo "go is required: https://go.dev/doc/install" >&2
+  exit 1
+fi
+
+uv sync --frozen
+# Writes .git/hooks/pre-commit pointing at the .venv interpreter, so `git
+# commit` also runs the locked pre-commit.
+uv run --frozen pre-commit install
+go -C "${root}/tools" build tool
