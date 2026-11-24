@@ -52,11 +52,19 @@ func TestEmptyPayloadShouldFail(t *testing.T) {
 	assert.EqualError(t, err, "there is no event")
 }
 
-func TestEmptyTokenShouldFail(t *testing.T) {
+// The token travels in the Authorization header (DPDV-20057), so a buffer
+// without one still builds a payload; a missing token fails in the request.
+func TestEmptyTokenBuildsPayloadWithoutToken(t *testing.T) {
 	buffer, err := NewBuffer("id", "", nil)
 	assert.Nil(t, err)
-	_, err = buffer.Payload()
-	assert.EqualError(t, err, "token is missing")
+	bundle := createTestBundle()
+	added, err := buffer.AddBundle(&bundle)
+	assert.Nil(t, err)
+	assert.Equal(t, Added, added)
+
+	payload, err := buffer.Payload()
+	assert.Nil(t, err)
+	assert.NotContains(t, string(payload), `"token"`)
 }
 
 func TestEmptySessionShouldFail(t *testing.T) {
@@ -271,7 +279,7 @@ func TestPayloadFull(t *testing.T) {
 	err = json.Unmarshal(payload, &params)
 	assert.Nil(t, err)
 	assert.Equal(t, params.Session, buffer.Session)
-	assert.Equal(t, params.Token, buffer.Token)
+	assert.Empty(t, params.Token, "token travels in the Authorization header, not the body")
 	assert.Equal(t, params.SessionInfo, buffer.sessionInfo)
 
 	expected := loadJson("buffer_test_payload_full.json")
@@ -338,7 +346,8 @@ func TestPayloadInjection(t *testing.T) {
 	err = json.Unmarshal(payload, &params)
 	assert.Nil(t, err)
 	assert.Equal(t, params.Session, session)
-	assert.Equal(t, params.Token, token)
+	assert.Empty(t, params.Token)
+	assert.NotContains(t, string(payload), "token", "neither the key nor the injected token may appear in the body")
 	assert.Equal(t, len(params.Events), 1)
 
 	expected := loadJson("buffer_test_payload_injection.json")

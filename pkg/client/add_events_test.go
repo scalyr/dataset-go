@@ -666,9 +666,9 @@ func TestAddEventsLargeEvent(t *testing.T) {
 	assert.Equal(t, 1.0, stats.Buffers.SuccessRate())
 	assert.Equal(t, 1.0, stats.Transfer.SuccessRate())
 	assert.Equal(t, uint64(1), stats.Transfer.BuffersProcessed())
-	assert.Equal(t, uint64(0x5f0073), stats.Transfer.BytesSent())
-	assert.Equal(t, uint64(0x5f0073), stats.Transfer.BytesAccepted())
-	assert.Equal(t, 6226035.0, stats.Transfer.AvgBufferBytes())
+	assert.Equal(t, uint64(0x5f0064), stats.Transfer.BytesSent())
+	assert.Equal(t, uint64(0x5f0064), stats.Transfer.BytesAccepted())
+	assert.Equal(t, 6226020.0, stats.Transfer.AvgBufferBytes())
 }
 
 func TestAddEventsLargeEventThatNeedEscaping(t *testing.T) {

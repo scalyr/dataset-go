@@ -23,8 +23,6 @@ import (
 
 	"github.com/scalyr/dataset-go/pkg/buffer_config"
 
-	"github.com/scalyr/dataset-go/pkg/api/request"
-
 	"github.com/scalyr/dataset-go/pkg/api/add_events"
 
 	"github.com/google/uuid"
@@ -54,7 +52,10 @@ func (s AddStatus) String() string {
 type Buffer struct {
 	Id      uuid.UUID
 	Session string
-	Token   string
+	// Deprecated: Token is neither sent nor checked. The request carries
+	// Config.Tokens.WriteLog in the Authorization header instead (DPDV-20057),
+	// and a missing token fails there. Kept so that existing callers compile.
+	Token string
 
 	createdAt time.Time
 	updatedAt time.Time
@@ -330,10 +331,6 @@ func (buffer *Buffer) CountEvents() int32 {
 }
 
 func (buffer *Buffer) Payload() ([]byte, error) {
-	if len(buffer.Token) == 0 {
-		return nil, fmt.Errorf("token is missing")
-	}
-
 	if len(buffer.Session) == 0 {
 		return nil, fmt.Errorf("session is missing")
 	}
@@ -353,9 +350,6 @@ func (buffer *Buffer) Payload() ([]byte, error) {
 	}
 
 	reqObject := add_events.AddEventsRequest{
-		AuthParams: request.AuthParams{
-			Token: buffer.Token,
-		},
 		AddEventsRequestParams: add_events.AddEventsRequestParams{
 			Session:     buffer.Session,
 			SessionInfo: buffer.sessionInfo,

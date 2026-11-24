@@ -21,7 +21,9 @@ Renovate updates that exporter to each new release, so:
   (`make lint`, `test`, `mod-integration-test`, ...) for `exporter/datasetexporter` with this
   checkout `replace`d in. A failure means your change breaks the consumer, or contrib `main` is
   broken on its own: rerun on `main`, or check the contrib SHA the script prints. The contrib clone
-  in `CONTRIB_DIR` is reset to the latest `main` on every run.
+  in `CONTRIB_DIR` is reset to the latest `main` on every run. If your change intentionally
+  breaks a contrib test, add a patch to [`scripts/otel-contrib-patches/`](scripts/otel-contrib-patches/README.md)
+  that updates the test, and put the same change in contrib's Renovate PR.
 - Every release goes into the `User-Agent` (`pkg/version/version.go`), and DataSet usage is tracked by
   it.
 
@@ -95,6 +97,7 @@ Run `make help` for the full list. These are the targets that matter:
 | `make stress-test`            | Stress test the library through `examples/stress` (takes a few minutes)     |
 | `make build-examples`         | Check that every module in `examples/` still builds against the library     |
 | `make test-otel-contrib`      | Run contrib's `datasetexporter` lint and tests against this checkout (needs network) |
+| `scripts/run-example-client.sh` | Send events through `examples/client` to a real DataSet and query them back (needs `SCALYR_SERVER`, `SCALYR_WRITELOG_TOKEN`, `SCALYR_READLOG_TOKEN`) |
 | `make test-many-times COUNT=5`| Find flaky tests (the default `COUNT` is 50)                                |
 | `make govulncheck`            | Check this module's code and dependencies for known vulnerabilities (needs network) |
 | `make check`                  | Run lint, govulncheck, script tests, all tests, the example builds and `test-otel-contrib`. **Run it before opening a PR.** |
