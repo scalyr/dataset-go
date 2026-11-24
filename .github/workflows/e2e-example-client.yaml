@@ -1,0 +1,66 @@
+name: DataSet E2E
+
+# Sends events through examples/client to a real DataSet and reads them back
+# with the query API (scripts/run-example-client.sh).
+#
+# Needs the repository secrets SCALYR_SERVER, SCALYR_WRITELOG_TOKEN and
+# SCALYR_READLOG_TOKEN. GitHub does not pass secrets to pull requests from
+# forks or from Dependabot, so there the job is skipped with a notice instead
+# of failing.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  example-client:
+    name: Example client sends events that can be queried
+    runs-on: ubuntu-latest
+    # The client sends 10000 events in batches one second apart (~2 minutes),
+    # and the script waits up to QUERY_TIMEOUT for them to be queryable.
+    timeout-minutes: 15
+    steps:
+      - name: Check secrets
+        id: secrets
+        env:
+          SCALYR_SERVER: ${{ secrets.SCALYR_SERVER }}
+          SCALYR_WRITELOG_TOKEN: ${{ secrets.SCALYR_WRITELOG_TOKEN }}
+          SCALYR_READLOG_TOKEN: ${{ secrets.SCALYR_READLOG_TOKEN }}
+        run: |
+          if [[ -n "${SCALYR_SERVER}" && -n "${SCALYR_WRITELOG_TOKEN}" && -n "${SCALYR_READLOG_TOKEN}" ]]; then
+            echo "available=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "::notice::SCALYR_* secrets are not available to this run (fork or Dependabot PR); skipping the DataSet E2E test"
+            echo "available=false" >>"${GITHUB_OUTPUT}"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ steps.secrets.outputs.available == 'true' }}
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        if: ${{ steps.secrets.outputs.available == 'true' }}
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: examples/client/go.sum
+      - name: Send events and query them back
+        if: ${{ steps.secrets.outputs.available == 'true' }}
+        env:
+          SCALYR_SERVER: ${{ secrets.SCALYR_SERVER }}
+          SCALYR_WRITELOG_TOKEN: ${{ secrets.SCALYR_WRITELOG_TOKEN }}
+          SCALYR_READLOG_TOKEN: ${{ secrets.SCALYR_READLOG_TOKEN }}
+        run: ./scripts/run-example-client.sh

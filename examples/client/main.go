@@ -17,6 +17,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	"time"
@@ -42,6 +43,11 @@ const (
 )
 
 func main() {
+	// optional value stored in every event under the "param" attribute, so the
+	// events of one run can be found again (scripts/run-example-client.sh)
+	param := flag.String("param", "", `if set, added to every event as attribute "param"`)
+	flag.Parse()
+
 	// read configuration from env variables
 	cfg, err := config.New(config.FromEnv())
 	if err != nil {
@@ -82,7 +88,7 @@ func main() {
 			Thread: "T",
 			Log:    "L",
 			Sev:    3,
-			Ts:     fmt.Sprintf("%d", time.Now().Nanosecond()),
+			Ts:     fmt.Sprintf("%d", time.Now().UnixNano()),
 			Attrs: map[string]interface{}{
 				"message": fmt.Sprintf(
 					"dataset-go library - test message - %d",
@@ -90,6 +96,9 @@ func main() {
 				),
 				"attribute": i,
 			},
+		}
+		if *param != "" {
+			event.Attrs["param"] = *param
 		}
 		thread := &add_events.Thread{Id: "T", Name: "thread-1"}
 		log := &add_events.Log{

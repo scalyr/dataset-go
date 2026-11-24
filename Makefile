@@ -76,6 +76,7 @@ test-scripts: ## Test the shell scripts in scripts/
 	./scripts/bump-version_test.sh
 	./scripts/run-stress-test_test.sh
 	./scripts/test-otel-contrib_test.sh
+	./scripts/run-example-client_test.sh
 	./scripts/install-dev-tools_test.sh
 	./scripts/go-tool_test.sh
 

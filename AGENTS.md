@@ -97,6 +97,7 @@ Run `make help` for the full list. These are the targets that matter:
 | `make stress-test`            | Stress test the library through `examples/stress` (takes a few minutes)     |
 | `make build-examples`         | Check that every module in `examples/` still builds against the library     |
 | `make test-otel-contrib`      | Run contrib's `datasetexporter` lint and tests against this checkout (needs network) |
+| `scripts/run-example-client.sh` | Send events through `examples/client` to a real DataSet and query them back (needs `SCALYR_SERVER`, `SCALYR_WRITELOG_TOKEN`, `SCALYR_READLOG_TOKEN`) |
 | `make test-many-times COUNT=5`| Find flaky tests (the default `COUNT` is 50)                                |
 | `make govulncheck`            | Check this module's code and dependencies for known vulnerabilities (needs network) |
 | `make check`                  | Run lint, govulncheck, script tests, all tests, the example builds and `test-otel-contrib`. **Run it before opening a PR.** |
