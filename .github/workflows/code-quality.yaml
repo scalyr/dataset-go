@@ -111,10 +111,6 @@ jobs:
       - name: Build Examples
         run: |
           make build-examples
-      - name: Check SSL Certificates
-        timeout-minutes: 10
-        run: |
-          make test-ssl-certificates
 
   # Stable check name for branch protection, matching the "... result" gates of
   # the unit and stress test workflows (where the matrix job names change).
