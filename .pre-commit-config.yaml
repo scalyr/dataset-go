@@ -79,7 +79,7 @@ repos:
         types: [text]
       - id: pretty-format-json
         name: pretty format json
-        entry: uv run --frozen pretty-format-json
+        entry: uv run --frozen pretty-format-json --autofix
         language: system
         types: [json]
         exclude: |
@@ -138,12 +138,14 @@ repos:
         entry: uv run --frozen actionlint
         language: system
         files: ^\.github/workflows/.*\.ya?ml$
+      # --fix=safe: zizmor's unsafe fixes (e.g. persist-credentials: false) can
+      # break a workflow that pushes, so they stay a reported finding.
       # --offline: the same result locally and in CI, without a GitHub token.
       # The online-only audits (e.g. impostor commits behind a SHA pin) are
       # therefore off; Dependabot is what moves the pins.
       - id: zizmor
         name: zizmor (GitHub Actions security)
-        entry: uv run --frozen zizmor --offline .github
+        entry: uv run --frozen zizmor --offline --fix=safe .github
         language: system
         files: ^\.github/
         pass_filenames: false
@@ -158,8 +160,9 @@ repos:
         language: system
         files: ^\.github/dependabot\.ya?ml$
 
-      # Go. goimports and gofumpt rewrite files in place; pre-commit fails the
-      # run when a hook modifies a file. The package-level linters check the
+      # Go. goimports, gofumpt and golangci-lint --fix rewrite files in place;
+      # pre-commit fails the run when a hook modifies a file, so locally the fix
+      # only needs staging, and CI still fails on unfixed code. The package-level linters check the
       # root module (examples/* are built by `make build-examples`).
       - id: goimports
         name: goimports
@@ -173,7 +176,7 @@ repos:
         types: [go]
       - id: golangci-lint
         name: golangci-lint
-        entry: scripts/go-tool.sh golangci-lint run --config=.golangci.yml ./...
+        entry: scripts/go-tool.sh golangci-lint run --fix --config=.golangci.yml ./...
         language: system
         types: [go]
         pass_filenames: false
