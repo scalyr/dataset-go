@@ -127,8 +127,6 @@ func (r *ApiRequest) HttpRequest() (*http.Request, error) {
 
 	if r.apiKey == "" && len(r.supportedKeys) > 0 {
 		return nil, fmt.Errorf("no API Key Found - Supported Tokens for %v are %v", r.uri, r.supportedKeys)
-	} else if r.request != nil {
-		r.request.(TokenSetter).setToken(r.apiKey)
 	}
 
 	var err error
@@ -151,6 +149,12 @@ func (r *ApiRequest) HttpRequest() (*http.Request, error) {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Content-Encoding", "gzip")
 	req.Header.Add("User-Agent", r.userAgent)
+	// The token goes in the header, never in the body (DPDV-20057): net/http
+	// strips Authorization when a redirect leaves the host, but replays the
+	// body of a 307/308 to wherever Location points.
+	if r.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+r.apiKey)
+	}
 
 	return req, nil
 }

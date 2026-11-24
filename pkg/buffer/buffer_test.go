@@ -271,7 +271,7 @@ func TestPayloadFull(t *testing.T) {
 	err = json.Unmarshal(payload, &params)
 	assert.Nil(t, err)
 	assert.Equal(t, params.Session, buffer.Session)
-	assert.Equal(t, params.Token, buffer.Token)
+	assert.Empty(t, params.Token, "token travels in the Authorization header, not the body")
 	assert.Equal(t, params.SessionInfo, buffer.sessionInfo)
 
 	expected := loadJson("buffer_test_payload_full.json")
@@ -338,7 +338,8 @@ func TestPayloadInjection(t *testing.T) {
 	err = json.Unmarshal(payload, &params)
 	assert.Nil(t, err)
 	assert.Equal(t, params.Session, session)
-	assert.Equal(t, params.Token, token)
+	assert.Empty(t, params.Token)
+	assert.NotContains(t, string(payload), "token", "neither the key nor the injected token may appear in the body")
 	assert.Equal(t, len(params.Events), 1)
 
 	expected := loadJson("buffer_test_payload_injection.json")

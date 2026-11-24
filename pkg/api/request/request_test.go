@@ -17,6 +17,8 @@
 package request
 
 import (
+	"compress/gzip"
+	"io"
 	"net/http"
 	"testing"
 
@@ -66,4 +68,47 @@ func TestNewRequest(t *testing.T) {
 	assert.Equal(t, "GET", r.Method)
 	assert.Equal(t, uri, r.URL.Path)
 	assert.Equal(t, userAgent, r.Header.Get("User-Agent"))
+}
+
+func TestHttpRequestSendsTokenAsBearerHeader(t *testing.T) {
+	tokens := config.DataSetTokens{WriteLog: "AAAA"}
+	payload := []byte(`{"session":"s","events":[]}`)
+	r, err := NewApiRequest(http.MethodPost, "/api/addEvents").WithWriteLog(tokens).WithPayload(payload).HttpRequest()
+	assert.Nil(t, err)
+
+	assert.Equal(t, []string{"Bearer AAAA"}, r.Header.Values("Authorization"))
+	assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+	assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+
+	// The payload is sent exactly as given: the token is not added to it.
+	gz, err := gzip.NewReader(r.Body)
+	assert.Nil(t, err)
+	body, err := io.ReadAll(gz)
+	assert.Nil(t, err)
+	assert.Equal(t, payload, body)
+}
+
+func TestHttpRequestEmptyBodyHasNoToken(t *testing.T) {
+	tokens := config.DataSetTokens{ReadLog: "readLog"}
+	r, err := NewApiRequest(http.MethodGet, "/meh").WithReadLog(tokens).HttpRequest()
+	assert.Nil(t, err)
+	assert.Equal(t, "Bearer readLog", r.Header.Get("Authorization"))
+
+	gz, err := gzip.NewReader(r.Body)
+	assert.Nil(t, err)
+	body, err := io.ReadAll(gz)
+	assert.Nil(t, err)
+	assert.Equal(t, "{}", string(body))
+}
+
+func TestHttpRequestWithoutKeyHasNoAuthorizationHeader(t *testing.T) {
+	r, err := NewApiRequest(http.MethodGet, "/meh").HttpRequest()
+	assert.Nil(t, err)
+	assert.Empty(t, r.Header.Values("Authorization"))
+}
+
+func TestHttpRequestMissingKeyFailsWithoutRequest(t *testing.T) {
+	r, err := NewApiRequest(http.MethodPost, "/api/addEvents").WithWriteLog(config.DataSetTokens{ReadLog: "readLog"}).HttpRequest()
+	assert.Nil(t, r)
+	assert.EqualError(t, err, "no API Key Found - Supported Tokens for /api/addEvents are [WriteLog]")
 }
