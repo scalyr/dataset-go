@@ -390,6 +390,179 @@ else
   fail "the repo's go.mod declares github.com/scalyr/dataset-go"
 fi
 
+# --- contrib patches (scripts/otel-contrib-patches) ---
+# Upstream gets files the patches edit. Each patch is made with git diff in
+# the seed clone, the way a real one is made in a contrib checkout.
+printf 'one\ntwo\nthree\n' >"${seed}/exporter/datasetexporter/target.txt"
+printf 'alpha\n' >"${seed}/other.txt"
+git -C "${seed}" add -A
+git -C "${seed}" commit --quiet -m "patch target"
+git -C "${seed}" push --quiet "${upstream}" main
+patch_sha=$(git -C "${seed}" rev-parse HEAD)
+target="exporter/datasetexporter/target.txt"
+
+# make_patch FILE SEDEXPR [FILE SEDEXPR...] : prints a git diff of those edits
+# to the seed, with a description header like the real patches, and undoes them.
+make_patch() {
+  printf 'TICKET-1: why this patch exists.\n\n'
+  while [[ $# -gt 0 ]]; do
+    sed -i.bak "$2" "${seed}/$1" && rm "${seed}/$1.bak"
+    shift 2
+  done
+  git -C "${seed}" diff
+  git -C "${seed}" checkout --quiet -- .
+}
+
+ptree=$(new_tree "patch tree")
+pdir="${ptree}/scripts/otel-contrib-patches"
+mkdir -p "${pdir}"
+pcontrib="${work}/patch contrib"
+
+# --- edge: no patches at all is logged, and the checks run ---
+run "${ptree}" "${pcontrib}"
+if [[ ${rc} -eq 0 && "${out}" == *"No contrib patches in ${pdir}"* && "${calls}" == *"make benchmark"* ]]; then
+  pass "an empty patches directory is logged and the checks still run"
+else
+  fail "an empty patches directory is logged and the checks still run" "rc=${rc} out=${out}"
+fi
+rmdir "${pdir}"
+run "${ptree}" "${pcontrib}"
+if [[ ${rc} -eq 0 && "${out}" == *"No contrib patches"* ]]; then
+  pass "a missing patches directory is logged, not an error"
+else
+  fail "a missing patches directory is logged, not an error" "rc=${rc} out=${out}"
+fi
+mkdir -p "${pdir}"
+
+# --- happy: a patch that applies is applied before the checks and logged ---
+make_patch "${target}" 's/two/TWO/' >"${pdir}/10-applies.patch"
+echo "not a patch" >"${pdir}/README.md"
+run "${ptree}" "${pcontrib}"
+if [[ ${rc} -eq 0 && "${out}" == *"contrib patch 10-applies.patch: applied"* &&
+  "$(cat "${pcontrib}/${target}")" == $'one\nTWO\nthree' && "${calls}" == *"make benchmark"* ]]; then
+  pass "a patch that applies is applied to the checkout and logged"
+else
+  fail "a patch that applies is applied to the checkout and logged" "rc=${rc} out=${out}"
+fi
+if [[ "${out}" != *README* ]]; then
+  pass "files other than *.patch are ignored"
+else
+  fail "files other than *.patch are ignored" "out=${out}"
+fi
+# The script echoes "make <target>" before each one, so the output order shows
+# the patch went in before contrib's first make.
+if [[ "${out%%make tidy*}" == *"10-applies.patch: applied"* ]]; then
+  pass "patches are applied before contrib's make targets"
+else
+  fail "patches are applied before contrib's make targets" "out=${out}"
+fi
+
+# --- seam: the next run resets the patched file and applies the patch again ---
+run "${ptree}" "${pcontrib}"
+if [[ ${rc} -eq 0 && "${out}" == *"10-applies.patch: applied"* && "$(cat "${pcontrib}/${target}")" == $'one\nTWO\nthree' ]]; then
+  pass "a reused checkout is reset, so the patch applies again on the next run"
+else
+  fail "a reused checkout is reset, so the patch applies again on the next run" "rc=${rc} out=${out}"
+fi
+rm "${pdir}/10-applies.patch"
+
+# --- sad: a patch that does not apply is skipped, logged, and not fatal ---
+make_patch "${target}" 's/three/THREE/' >"${work}/conflict.patch"
+sed -e 's/^-three$/-gone/' "${work}/conflict.patch" >"${pdir}/20-conflicts.patch"
+run "${ptree}" "${pcontrib}"
+if [[ ${rc} -eq 0 && "${out}" == *"contrib patch 20-conflicts.patch: skipped, does not apply to ${patch_sha}"* &&
+  "${calls}" == *"make benchmark"* ]]; then
+  pass "a patch that does not apply is skipped with its contrib SHA and the checks still run"
+else
+  fail "a patch that does not apply is skipped with its contrib SHA and the checks still run" "rc=${rc} out=${out}"
+fi
+rm "${pdir}/20-conflicts.patch"
+
+# --- edge: a patch with one good and one bad file changes nothing ---
+make_patch "${target}" 's/one/ONE/' other.txt 's/alpha/ALPHA/' >"${work}/two-files.patch"
+sed 's/^-alpha$/-beta/' "${work}/two-files.patch" >"${pdir}/30-partial.patch"
+run "${ptree}" "${pcontrib}"
+if [[ ${rc} -eq 0 && "${out}" == *"30-partial.patch: skipped, does not apply"* &&
+  "$(cat "${pcontrib}/${target}")" == $'one\ntwo\nthree' && "$(cat "${pcontrib}/other.txt")" == alpha ]]; then
+  pass "a patch that only partly applies is skipped and leaves the checkout untouched"
+else
+  fail "a patch that only partly applies is skipped and leaves the checkout untouched" "rc=${rc} out=${out}"
+fi
+rm "${pdir}/30-partial.patch"
+
+# --- sad: an empty or corrupt patch file is skipped, not fatal ---
+: >"${pdir}/40-empty.patch"
+echo "garbage" >"${pdir}/41-garbage.patch"
+run "${ptree}" "${pcontrib}"
+if [[ ${rc} -eq 0 && "${out}" == *"40-empty.patch: skipped"* && "${out}" == *"41-garbage.patch: skipped"* &&
+  "${calls}" == *"make benchmark"* ]]; then
+  pass "empty and corrupt patch files are skipped"
+else
+  fail "empty and corrupt patch files are skipped" "rc=${rc} out=${out}"
+fi
+rm "${pdir}/40-empty.patch" "${pdir}/41-garbage.patch"
+
+# --- happy: several patches run in name order, each logged ---
+make_patch "${target}" 's/one/ONE/' >"${pdir}/b-second.patch"
+make_patch other.txt 's/alpha/ALPHA/' >"${pdir}/a-first.patch"
+sed -e 's/^-three$/-gone/' "${work}/conflict.patch" >"${pdir}/c-third.patch"
+run "${ptree}" "${pcontrib}"
+order=$(grep -o 'contrib patch [^:]*: [a-z]*' <<<"${out}")
+if [[ ${rc} -eq 0 && "${order}" == "contrib patch a-first.patch: applied
+contrib patch b-second.patch: applied
+contrib patch c-third.patch: skipped" && "$(cat "${pcontrib}/other.txt")" == ALPHA &&
+  "$(head -1 "${pcontrib}/${target}")" == ONE ]]; then
+  pass "patches are applied in name order and each one is logged"
+else
+  fail "patches are applied in name order and each one is logged" "rc=${rc} order=${order}"
+fi
+rm "${pdir}"/*.patch
+
+# --- edge: a patch contrib has already merged is reported as obsolete ---
+make_patch "${target}" 's/two/TWO/' >"${pdir}/merged.patch"
+sed -i.bak 's/two/TWO/' "${seed}/${target}" && rm "${seed}/${target}.bak"
+git -C "${seed}" commit --quiet -am "contrib merged the change"
+git -C "${seed}" push --quiet "${upstream}" main
+run "${ptree}" "${pcontrib}"
+if [[ ${rc} -eq 0 && "${out}" == *"contrib patch merged.patch: skipped, contrib already contains it; delete the patch"* ]]; then
+  pass "a patch already in contrib is skipped and flagged for deletion"
+else
+  fail "a patch already in contrib is skipped and flagged for deletion" "rc=${rc} out=${out}"
+fi
+
+# --- edge: --checkout-only applies no patches ---
+sed -i.bak 's/TWO/two/' "${seed}/${target}" && rm "${seed}/${target}.bak"
+git -C "${seed}" commit --quiet -am "contrib reverted"
+git -C "${seed}" push --quiet "${upstream}" main
+run "${ptree}" "${pcontrib}" --checkout-only
+if [[ ${rc} -eq 0 && "${out}" != *"contrib patch"* && -z "$(git -C "${pcontrib}" status --porcelain)" ]]; then
+  pass "--checkout-only applies no patches"
+else
+  fail "--checkout-only applies no patches" "rc=${rc} out=${out}"
+fi
+
+# --- sad: an applied patch does not hide a failing check ---
+STUB_MAKE_FAIL="test" run "${ptree}" "${pcontrib}"
+if [[ ${rc} -ne 0 && "${out}" == *"merged.patch: applied"* ]]; then
+  pass "a failing check still fails the run when patches were applied"
+else
+  fail "a failing check still fails the run when patches were applied" "rc=${rc} out=${out}"
+fi
+
+# --- conformance: the repo's own patches are named, described git patches ---
+shopt -s nullglob
+repo_patches=("$(cd "$(dirname "$0")" && pwd)"/otel-contrib-patches/*.patch)
+shopt -u nullglob
+for p in "${repo_patches[@]}"; do
+  n="$(basename "${p}")"
+  if [[ "${n}" =~ ^[A-Z]+-[0-9]+-.+\.patch$ ]] && head -1 "${p}" | grep -qE '^[A-Z]+-[0-9]+: ' &&
+    grep -q '^diff --git ' "${p}" && git apply --stat "${p}" >/dev/null 2>&1; then
+    pass "repo patch ${n} is a named, described git patch"
+  else
+    fail "repo patch ${n} is a named, described git patch" "want <JIRA-KEY>-<what>.patch, first line '<JIRA-KEY>: ...', then a git diff"
+  fi
+done
+
 echo
 echo "${passed} passed, ${failed} failed"
 [[ ${failed} -eq 0 ]]

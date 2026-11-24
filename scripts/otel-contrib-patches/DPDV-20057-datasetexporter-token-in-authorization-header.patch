@@ -1,0 +1,67 @@
+DPDV-20057: dataset-go sends the API token in the Authorization header, not in
+the addEvents body, so TestConsumeLogsShouldSucceed must stop expecting
+AuthParams.Token in the decoded body and check the header instead.
+
+Upstream: not opened yet; it belongs in the Renovate PR that bumps dataset-go
+to the release containing DPDV-20057. Delete this file once that is merged.
+
+diff --git a/exporter/datasetexporter/logs_exporter_test.go b/exporter/datasetexporter/logs_exporter_test.go
+index 535b974a..9068e970 100644
+--- a/exporter/datasetexporter/logs_exporter_test.go
++++ b/exporter/datasetexporter/logs_exporter_test.go
+@@ -18,7 +18,6 @@ import (
+ 	"time"
+ 
+ 	"github.com/scalyr/dataset-go/pkg/api/add_events"
+-	"github.com/scalyr/dataset-go/pkg/api/request"
+ 	"github.com/stretchr/testify/assert"
+ 	"go.opentelemetry.io/collector/component/componenttest"
+ 	"go.opentelemetry.io/collector/config/configoptional"
+@@ -769,6 +768,7 @@ func TestConsumeLogsShouldSucceed(t *testing.T) {
+ 
+ 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+ 		attempt.Add(1)
++		assert.Equal(t, "Bearer key-lib", req.Header.Get("Authorization"))
+ 		cer, err := extract(req)
+ 		lock.Lock()
+ 		addRequests = append(addRequests, cer)
+@@ -883,9 +883,6 @@ func TestConsumeLogsShouldSucceed(t *testing.T) {
+ 	assert.Equal(t,
+ 		[]add_events.AddEventsRequest{
+ 			{
+-				AuthParams: request.AuthParams{
+-					Token: "key-lib",
+-				},
+ 				AddEventsRequestParams: add_events.AddEventsRequestParams{
+ 					Session: addRequests[0].Session,
+ 					SessionInfo: &add_events.SessionInfo{
+@@ -917,9 +914,6 @@ func TestConsumeLogsShouldSucceed(t *testing.T) {
+ 				},
+ 			},
+ 			{
+-				AuthParams: request.AuthParams{
+-					Token: "key-lib",
+-				},
+ 				AddEventsRequestParams: add_events.AddEventsRequestParams{
+ 					Session: addRequests[1].Session,
+ 					SessionInfo: &add_events.SessionInfo{
+@@ -950,9 +944,6 @@ func TestConsumeLogsShouldSucceed(t *testing.T) {
+ 				},
+ 			},
+ 			{
+-				AuthParams: request.AuthParams{
+-					Token: "key-lib",
+-				},
+ 				AddEventsRequestParams: add_events.AddEventsRequestParams{
+ 					Session: addRequests[2].Session,
+ 					SessionInfo: &add_events.SessionInfo{
+@@ -984,9 +975,6 @@ func TestConsumeLogsShouldSucceed(t *testing.T) {
+ 				},
+ 			},
+ 			{
+-				AuthParams: request.AuthParams{
+-					Token: "key-lib",
+-				},
+ 				AddEventsRequestParams: add_events.AddEventsRequestParams{
+ 					Session: addRequests[3].Session,
+ 					SessionInfo: &add_events.SessionInfo{

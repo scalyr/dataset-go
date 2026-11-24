@@ -93,6 +93,8 @@ repos:
         language: system
         types: [text]
         stages: [pre-commit, pre-push, manual]
+        # A blank context line in a diff is a single space; stripping it breaks the patch.
+        exclude: ^scripts/otel-contrib-patches/.*\.patch$
       # Unit tests run on windows-latest, which cannot check these out.
       - id: check-illegal-windows-names
         name: check illegal windows names

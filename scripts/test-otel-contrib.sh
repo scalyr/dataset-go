@@ -9,7 +9,14 @@
 #
 # Usage: scripts/test-otel-contrib.sh [--checkout-only]
 #   --checkout-only - only clone or reset CONTRIB_DIR (CI uses it to key its cache
-#                     on contrib's go.sum before the checks run)
+#                     on contrib's go.sum before the checks run); no patches are applied
+#
+# Before the checks, every scripts/otel-contrib-patches/*.patch is applied to the
+# contrib checkout, in name order. A patch adapts contrib to a dataset-go change
+# that contrib has not caught up with yet (see that directory's README.md). One
+# that does not apply is skipped, not fatal: contrib main moves, and the patch
+# is obsolete once the matching contrib PR is merged. Each patch is logged as
+# applied or skipped, and why.
 #
 # Environment:
 #   CONTRIB_DIR   - where contrib is checked out and reused between runs
@@ -114,6 +121,27 @@ echo "Testing ${module} from ${root}"
 echo "against ${CONTRIB_REPO} ${CONTRIB_REF} at ${sha}"
 
 [[ -f "${CONTRIB_DIR}/${EXPORTER}/go.mod" ]] || die "${EXPORTER}/go.mod not found in ${CONTRIB_DIR}"
+
+patches_dir="${root}/scripts/otel-contrib-patches"
+shopt -s nullglob
+patches=("${patches_dir}"/*.patch)
+shopt -u nullglob
+if [[ ${#patches[@]} -eq 0 ]]; then
+  echo "No contrib patches in ${patches_dir}"
+fi
+# The ${a[@]+...} form: bash 3.2 (macOS) treats an empty array as unbound under set -u.
+for patch in ${patches[@]+"${patches[@]}"}; do
+  name="$(basename "${patch}")"
+  # git apply is all-or-nothing, so a failed --check leaves the tree untouched.
+  if git -C "${CONTRIB_DIR}" apply --check "${patch}" 2>/dev/null; then
+    git -C "${CONTRIB_DIR}" apply "${patch}"
+    echo "contrib patch ${name}: applied"
+  elif git -C "${CONTRIB_DIR}" apply --check --reverse "${patch}" 2>/dev/null; then
+    echo "contrib patch ${name}: skipped, contrib already contains it; delete the patch"
+  else
+    echo "contrib patch ${name}: skipped, does not apply to ${sha}"
+  fi
+done
 cd "${CONTRIB_DIR}/${EXPORTER}"
 
 # A structured go.mod edit, then contrib's `make tidy` regenerates go.sum: the
