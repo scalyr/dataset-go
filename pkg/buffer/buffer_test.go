@@ -52,11 +52,19 @@ func TestEmptyPayloadShouldFail(t *testing.T) {
 	assert.EqualError(t, err, "there is no event")
 }
 
-func TestEmptyTokenShouldFail(t *testing.T) {
+// The token travels in the Authorization header (DPDV-20057), so a buffer
+// without one still builds a payload; a missing token fails in the request.
+func TestEmptyTokenBuildsPayloadWithoutToken(t *testing.T) {
 	buffer, err := NewBuffer("id", "", nil)
 	assert.Nil(t, err)
-	_, err = buffer.Payload()
-	assert.EqualError(t, err, "token is missing")
+	bundle := createTestBundle()
+	added, err := buffer.AddBundle(&bundle)
+	assert.Nil(t, err)
+	assert.Equal(t, Added, added)
+
+	payload, err := buffer.Payload()
+	assert.Nil(t, err)
+	assert.NotContains(t, string(payload), `"token"`)
 }
 
 func TestEmptySessionShouldFail(t *testing.T) {

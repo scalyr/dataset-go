@@ -284,6 +284,11 @@ func (client *DataSetClient) sendBufferWithRetryPolicy(buf *buffer.Buffer) bool 
 	retryNum := int64(0)
 	for {
 		response, payloadLen, err := client.sendAddEventsBuffer(buf)
+		if response == nil {
+			// The payload or request could not be built (e.g. no WriteLog
+			// token), so nothing was sent; the error below says why.
+			response = &add_events.AddEventsResponse{}
+		}
 		client.setLastError(err)
 		lastHttpStatus := uint32(0)
 		if err != nil {

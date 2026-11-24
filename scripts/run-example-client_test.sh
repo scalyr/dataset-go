@@ -243,6 +243,28 @@ QUERY_TIMEOUT=0 run
 [[ ${rc} -eq 1 && "${out}" == *"only 2 of 3 events were queryable after 0s"* ]]
 check "too few events fail after QUERY_TIMEOUT with the count" "rc=${rc} out=${out}"
 
+# --- sad: an unreachable query API is reported as such, not as missing events ---
+responses 503 '{"status":"error/server"}'
+QUERY_TIMEOUT=0 run
+[[ ${rc} -eq 1 && "${out}" == *"no query succeeded within 0s; the last one failed with HTTP 503"* ]]
+check "a query API that never answers is reported as failing queries" "rc=${rc} out=${out}"
+
+responses 200 "$(matches 2)" 503 '{"status":"error/server"}'
+QUERY_TIMEOUT=2 run
+[[ ${rc} -eq 1 && "${out}" == *"only 2 of 3 events were queryable after 2s; the last query failed with HTTP 503"* ]]
+check "a timeout after a failed last query gives the last count and the failure" "rc=${rc} out=${out}"
+
+responses 503 '{"status":"error/server"}' 200 "$(matches 2)"
+QUERY_TIMEOUT=2 run
+[[ ${rc} -eq 1 && "${out}" == *"only 2 of 3 events were queryable after 2s" && "${out}" != *"last query failed"* ]]
+check "an earlier failure is not reported once a later query succeeded" "rc=${rc} out=${out}"
+
+# --- conformance: the phases run and are logged in order ---
+responses 200 "$(matches 3)"
+run
+[[ "${out}" == *"== Phase 1/4: building"*"== Phase 2/4: sending events"*"== Phase 3/4: preparing queries"*"== Phase 4/4: waiting"*"OK: all 3"* ]]
+check "the phases are logged in order: build, send, wait and query" "out=${out}"
+
 # --- sad: the client or its build failing stops before any query ---
 responses 200 "$(matches 3)"
 STUB_CLIENT_EXIT=3 run

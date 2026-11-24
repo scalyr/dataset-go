@@ -52,9 +52,9 @@ func (s AddStatus) String() string {
 type Buffer struct {
 	Id      uuid.UUID
 	Session string
-	// Deprecated: Token is no longer sent in the payload. The request carries
-	// Config.Tokens.WriteLog in the Authorization header instead (DPDV-20057).
-	// It is kept so that existing callers still compile.
+	// Deprecated: Token is neither sent nor checked. The request carries
+	// Config.Tokens.WriteLog in the Authorization header instead (DPDV-20057),
+	// and a missing token fails there. Kept so that existing callers compile.
 	Token string
 
 	createdAt time.Time
@@ -331,10 +331,6 @@ func (buffer *Buffer) CountEvents() int32 {
 }
 
 func (buffer *Buffer) Payload() ([]byte, error) {
-	if len(buffer.Token) == 0 {
-		return nil, fmt.Errorf("token is missing")
-	}
-
 	if len(buffer.Session) == 0 {
 		return nil, fmt.Errorf("session is missing")
 	}

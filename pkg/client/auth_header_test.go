@@ -181,6 +181,27 @@ func TestAddEventsTokenWithNewlineIsRejected(t *testing.T) {
 	assert.Equal(t, int32(0), hits.Load(), "request with an invalid header must not be sent")
 	require.Error(t, sc.LastError())
 	assert.Contains(t, sc.LastError().Error(), "invalid header field value")
+	// The error must not echo the token, nor the header it would have injected.
+	assert.NotContains(t, sc.LastError().Error(), "X-Injected")
+	assert.NotContains(t, sc.LastError().Error(), "token\r\n")
+	assert.Equal(t, uint64(1), sc.Statistics().Buffers.Dropped())
+}
+
+// Without a WriteLog token nothing is sent: the buffer no longer checks the
+// token, so the request is where a missing one has to fail, loudly.
+func TestAddEventsWithoutTokenSendsNothing(t *testing.T) {
+	hits := atomic.Int32{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		hits.Add(1)
+		writeSuccess(t, w)
+	}))
+	defer server.Close()
+
+	sc := sendOneEventWithToken(t, server.URL, "")
+
+	assert.Equal(t, int32(0), hits.Load())
+	require.Error(t, sc.LastError())
+	assert.Contains(t, sc.LastError().Error(), "no API Key Found")
 	assert.Equal(t, uint64(1), sc.Statistics().Buffers.Dropped())
 }
 

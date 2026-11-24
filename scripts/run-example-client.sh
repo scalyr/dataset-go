@@ -32,6 +32,10 @@ die() {
   exit 2
 }
 
+# ============================================================================
+# Phase 0: check the environment and settings
+# ============================================================================
+
 for var in SCALYR_SERVER SCALYR_WRITELOG_TOKEN SCALYR_READLOG_TOKEN; do
   [[ -n "${!var:-}" ]] || die "${var} is not set"
 done
@@ -52,14 +56,29 @@ server="${SCALYR_SERVER%/}"
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
-echo "Running examples/client against ${server} with param=${PARAM}"
+# ============================================================================
+# Phase 1: build examples/client
+# ============================================================================
+
+echo "== Phase 1/4: building examples/client"
 (
   cd "$(dirname "$0")/../examples/client"
   go build -o "${work}/client" .
 )
+
+# ============================================================================
+# Phase 2: run the client, which sends the events
+# ============================================================================
+
+echo "== Phase 2/4: sending events to ${server} with param=${PARAM}"
 # The client reads SCALYR_SERVER and SCALYR_WRITELOG_TOKEN itself.
 "${work}/client" -param "${PARAM}" || die "examples/client failed"
 
+# ============================================================================
+# Phase 3: query API helpers (https://app.scalyr.com/help/api#query)
+# ============================================================================
+
+echo "== Phase 3/4: preparing queries to ${server}/api/query"
 # The query API takes the token as a Bearer header, like addEvents.
 (
   umask 077
@@ -67,6 +86,7 @@ echo "Running examples/client against ${server} with param=${PARAM}"
 )
 
 page_size=5000 # the query API's maximum maxCount
+last_error=""  # why the latest poll failed transiently; empty after a good one
 
 # query_page [CONTINUATION_TOKEN] : one query API call; the response is in
 # ${work}/resp. Returns 0 on success, 1 on a transient failure worth retrying
@@ -81,6 +101,7 @@ query_page() {
   case "${code}" in
     200) ;;
     000 | 5??)
+      last_error="HTTP ${code}"
       echo "query: HTTP ${code}, will retry"
       return 1
       ;;
@@ -96,7 +117,7 @@ query_page() {
 # count_events : sets `found` to how many events match, following continuation
 # tokens. Returns 1 if a page failed transiently. Not run in $(...): a die in
 # query_page must end the script, not just a subshell.
-found=0
+found=-1 # no query has succeeded yet
 count_events() {
   local total=0 token="" n
   while :; do
@@ -107,8 +128,14 @@ count_events() {
     [[ ${n} -eq ${page_size} && -n "${token}" ]] || break
   done
   found=${total}
+  last_error=""
 }
 
+# ============================================================================
+# Phase 4: wait until all events can be queried
+# ============================================================================
+
+echo "== Phase 4/4: waiting up to ${QUERY_TIMEOUT}s for ${EXPECTED_EVENTS} events to be queryable"
 deadline=$((SECONDS + QUERY_TIMEOUT))
 while :; do
   if count_events; then
@@ -118,6 +145,15 @@ while :; do
       exit 0
     fi
   fi
-  [[ ${SECONDS} -lt ${deadline} ]] || die "only ${found} of ${EXPECTED_EVENTS} events were queryable after ${QUERY_TIMEOUT}s"
+  if [[ ${SECONDS} -ge ${deadline} ]]; then
+    # Say whether the query API itself was failing, so an outage does not
+    # look like events that were never stored.
+    if [[ ${found} -lt 0 ]]; then
+      die "no query succeeded within ${QUERY_TIMEOUT}s; the last one failed with ${last_error}"
+    elif [[ -n "${last_error}" ]]; then
+      die "only ${found} of ${EXPECTED_EVENTS} events were queryable after ${QUERY_TIMEOUT}s; the last query failed with ${last_error}"
+    fi
+    die "only ${found} of ${EXPECTED_EVENTS} events were queryable after ${QUERY_TIMEOUT}s"
+  fi
   sleep "${QUERY_INTERVAL}"
 done

@@ -15,6 +15,9 @@ func (ap *AuthParams) setToken(token string) {
 }
 
 type AuthParams struct {
+	// Token must stay empty in requests this library sends: the API key goes
+	// in the Authorization header, because a 307/308 redirect replays the body
+	// to another host and net/http strips only the header (DPDV-20057).
 	Token   string `json:"token,omitempty"`
 	Message string `json:"message,omitempty"`
 }
