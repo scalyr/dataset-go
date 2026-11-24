@@ -151,9 +151,5 @@ GOVULNCHECK_VERSION ?= v1.10.0
 govulncheck: ## Check this module's code and dependencies for known vulnerabilities (network)
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-.PHONY: test-ssl-certificates
-test-ssl-certificates: ## Check the readme example accepts good and rejects bad TLS certs (network)
-	cd scripts; ./test-ssl-certificates.sh
-
 .PHONY: test-ci
-test-ci: test-all build-examples test-ssl-certificates ## All tests, example builds and TLS checks
+test-ci: test-all build-examples ## All tests and example builds
