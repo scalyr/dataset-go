@@ -1,0 +1,42 @@
+# Copyright 2026 SentinelOne, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Python dev tools only: this is not a Python package. Every tool that
+# pre-commit runs is pinned here (and, with hashes, in uv.lock) so that local
+# runs and CI use identical versions and Dependabot's `uv` ecosystem bumps them.
+# Go tools are pinned the same way in tools/go.mod.
+[project]
+name = "dataset-go-dev-tools"
+version = "0"
+requires-python = ">=3.15"
+
+[dependency-groups]
+dev = [
+  "actionlint-py>=1.7",
+  "check-jsonschema>=0.33",
+  "pre-commit>=4.3",
+  "pre-commit-hooks>=6.0",
+  "shellcheck-py>=0.11",
+  "zizmor>=1.16",
+]
+
+[tool.uv]
+package = false
+
+# The repo is public: lock against PyPI, never a private mirror from a
+# developer's own uv config, or CI and contributors could not install it.
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true

@@ -21,7 +21,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write  # Needed for skip-duplicate-jobs job
   contents: read
 
 jobs:
@@ -31,6 +30,9 @@ jobs:
   pre_job:
     name: Skip Duplicate Jobs Pre Job
     runs-on: ubuntu-latest
+    permissions:
+      actions: write  # cancels superseded runs of this workflow
+      contents: read
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
@@ -56,9 +58,11 @@ jobs:
       # using it makes the whole workflow file invalid.
       - name: Set CONTRIB_DIR
         run: echo "CONTRIB_DIR=${RUNNER_TEMP}/opentelemetry-collector-contrib" >>"${GITHUB_ENV}"
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
           # The module graph and tools here are contrib's, so the cache is keyed
@@ -88,7 +92,7 @@ jobs:
           } >>"${GITHUB_OUTPUT}"
       - name: Restore Go caches
         id: restore
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ steps.cache-key.outputs.key }}
           restore-keys: ${{ steps.cache-key.outputs.prefix }}
@@ -101,7 +105,7 @@ jobs:
       # PR caches would be scoped to their own branch and only add eviction.
       - name: Save Go caches
         if: ${{ !cancelled() && github.event_name != 'pull_request' && steps.restore.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ steps.cache-key.outputs.key }}
           path: |

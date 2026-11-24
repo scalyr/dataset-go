@@ -16,7 +16,7 @@ name: Release tag
 # cannot push past the required review.
 
 on:
-  workflow_run:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] only acts on push/schedule runs of main (see `if:` below); nothing from a PR is checked out
     workflows: ["Unit Tests"]
     types: [completed]
     branches: [main]
@@ -57,14 +57,14 @@ jobs:
 
       # Default token, not persisted: RELEASE_TOKEN is only needed (and only
       # checked) when there is something to release, see the push step.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.SHA }}
           fetch-depth: 0  # all history and tags: the diff is taken from the latest tag
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: true

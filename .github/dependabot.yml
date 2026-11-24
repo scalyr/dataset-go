@@ -4,7 +4,9 @@
 # https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
 
 # Each directory's updates are grouped into one weekly PR, so the auto-merge
-# workflow lands one PR per module instead of a stream of them.
+# workflow lands one PR per module instead of a stream of them. The cooldown
+# leaves a week for a compromised or broken release to be pulled before it is
+# auto-merged.
 
 version: 2
 updates:
@@ -12,6 +14,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       all:
         patterns: ["*"]
@@ -19,6 +23,8 @@ updates:
     directory: "/examples/client/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       all:
         patterns: ["*"]
@@ -26,6 +32,8 @@ updates:
     directory: "/examples/readme/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       all:
         patterns: ["*"]
@@ -33,6 +41,8 @@ updates:
     directory: "/examples/stress/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       all:
         patterns: ["*"]
@@ -41,6 +51,30 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      all:
+        patterns: ["*"]
+
+  # The Go dev tools run by pre-commit (scripts/go-tool.sh).
+  - package-ecosystem: "gomod"
+    directory: "/tools/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      all:
+        patterns: ["*"]
+
+  # pre-commit and the Python tools its hooks run (pyproject.toml, uv.lock).
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       all:
         patterns: ["*"]

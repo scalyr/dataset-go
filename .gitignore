@@ -19,3 +19,6 @@ out*.log
 
 .idea
 coverage*
+
+# uv-managed dev tools (pyproject.toml)
+.venv/
